@@ -1,0 +1,44 @@
+# Python standard
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+.venv/
+env/
+ENV/
+
+# Logs
+*.log
+pip-log.txt
+
+# IDE
+.vscode/
+.idea/
+
+# ContextFlow Data (Local only)
+data/
+# Exception: keep the folder structure if needed, but here we ignore content.
+# !data/.gitkeep
+
+# Local DB
+*.db
+*.sqlite3
+
+# Thumbnails cache
+thumbs/
+
+# Exports
+exports/
+
+# OS
+.DS_Store
+Thumbs.db
