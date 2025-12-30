@@ -1,0 +1,5 @@
+wxPython>=4.2.0
+yt_dlp>=2023.0.0
+youtube-transcript-api
+tiktoken
+requests

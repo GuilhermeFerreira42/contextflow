@@ -27,6 +27,7 @@ class DatabaseHandler:
                 id TEXT PRIMARY KEY,
                 url TEXT NOT NULL,
                 title TEXT,
+                channel_name TEXT,
                 duration INTEGER,
                 upload_date TEXT,
                 thumbnail_path TEXT, 
@@ -66,6 +67,10 @@ class DatabaseHandler:
             if 'playlist_title' not in columns:
                 print("Migrando DB: Adicionando playlist_title...")
                 cursor.execute("ALTER TABLE videos ADD COLUMN playlist_title TEXT")
+
+            if 'channel_name' not in columns:
+                print("Migrando DB: Adicionando channel_name...")
+                cursor.execute("ALTER TABLE videos ADD COLUMN channel_name TEXT")
                 
             conn.commit()
         except Exception as e:
@@ -79,10 +84,11 @@ class DatabaseHandler:
         cursor = conn.cursor()
         try:
             cursor.execute('''
-                INSERT INTO videos (id, url, title, duration, upload_date, thumbnail_path, playlist_id, playlist_title, status, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO videos (id, url, title, channel_name, duration, upload_date, thumbnail_path, playlist_id, playlist_title, status, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     title=excluded.title,
+                    channel_name=excluded.channel_name,
                     playlist_id=excluded.playlist_id,
                     playlist_title=excluded.playlist_title,
                     status=excluded.status,
@@ -91,6 +97,7 @@ class DatabaseHandler:
                 video_data['id'],
                 video_data['url'],
                 video_data.get('title', 'Unknown'),
+                video_data.get('channel_name', video_data.get('channel', '')), # Handle both keys
                 video_data.get('duration', 0),
                 video_data.get('upload_date', ''),
                 video_data.get('thumbnail_path', ''),
@@ -137,7 +144,18 @@ class DatabaseHandler:
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         try:
-            cursor.execute('SELECT * FROM videos ORDER BY created_at DESC')
+            # JOIN para pegar metadados + snippet da transcrição + resumo
+            # Usando LEFT JOIN para garantir que videos sem transcrição apareçam
+            query = '''
+                SELECT 
+                    v.*, 
+                    substr(t.full_text, 1, 100) as transcript_snippet,
+                    t.summary as summary_text
+                FROM videos v
+                LEFT JOIN transcripts t ON v.id = t.video_id
+                ORDER BY v.created_at DESC
+            '''
+            cursor.execute(query)
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
         finally:

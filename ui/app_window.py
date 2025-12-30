@@ -11,6 +11,7 @@ from ui.panel_grid import GridPanel
 from ui.panel_detail import DetailPanel
 from ui.panel_console import ConsolePanel
 from ui.sidebar import Sidebar
+from ui.panel_table import PanelTable
 from storage.db_handler import DatabaseHandler
 
 class AppWindow(wx.Frame):
@@ -48,10 +49,14 @@ class AppWindow(wx.Frame):
                                     on_data_changed=self.on_grid_data_changed,
                                     log_callback=self.log_to_console)
         
-        # Aba 2: Detalhes / Conteúdo
+        # Aba 2: Tabela: Vídeos (Nova Aba)
+        self.panel_table = PanelTable(self.notebook, on_selection_callback=self.on_table_selection)
+        
+        # Aba 3: Detalhes / Conteúdo
         self.panel_detail = DetailPanel(self.notebook)
         
         self.notebook.AddPage(self.panel_grid, "Dados (Batch)")
+        self.notebook.AddPage(self.panel_table, "Tabela: Vídeos")
         self.notebook.AddPage(self.panel_detail, "Conteúdo (Leitura)")
 
         # Configurar Splitters
@@ -77,7 +82,25 @@ class AppWindow(wx.Frame):
         self.Bind(wx.EVT_MENU, self.on_exit, id=wx.ID_EXIT)
         self.Bind(wx.EVT_CLOSE, self.on_close)
 
+        # View Menu
+        view_menu = wx.Menu()
+        self.item_view_logs = view_menu.AppendCheckItem(2001, "Exibir Logs/Console")
+        self.item_view_logs.Check(True) # Default True
+        menubar.Append(view_menu, "&Exibir")
+        
+        self.Bind(wx.EVT_MENU, self.on_toggle_logs, id=2001)
+
     # --- Callbacks e Lógica ---
+
+    def on_toggle_logs(self, event):
+        show = self.item_view_logs.IsChecked()
+        if show:
+            self.panel_console.Show()
+            self.right_splitter.SplitHorizontally(self.notebook, self.panel_console, -150)
+        else:
+            self.panel_console.Hide()
+            self.right_splitter.Unsplit(self.panel_console)
+        self.right_splitter.Layout()
 
     def log_to_console(self, msg, level="INFO"):
         self.panel_console.log(msg, level)
@@ -103,6 +126,11 @@ class AppWindow(wx.Frame):
     def on_grid_data_changed(self):
         """Chamado quando o GridPanel recebe novos dados/processamento."""
         self.sidebar.load_history()
+        self.panel_table.load_data() # Update table as well
+
+    def on_table_selection(self, video_id):
+        # Reuse logic
+        self.on_sidebar_selection(video_id)
 
     def on_exit(self, event):
         self.Close()

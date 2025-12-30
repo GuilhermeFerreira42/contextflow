@@ -43,6 +43,9 @@ class DetailPanel(wx.Panel):
             main_sizer.Add(self.browser, 1, wx.EXPAND | wx.ALL, 0)
         else:
             self.txt_content = wx.TextCtrl(self, style=wx.TE_MULTILINE | wx.TE_READONLY)
+            # Fix Low Contrast (Dark Theme Friendly)
+            self.txt_content.SetBackgroundColour(wx.Colour(30, 30, 30)) # Dark Gray BG
+            self.txt_content.SetForegroundColour(wx.Colour(240, 240, 240)) # Light Gray Text
             main_sizer.Add(self.txt_content, 1, wx.EXPAND | wx.ALL, 0)
             self.browser = None
             
@@ -99,7 +102,7 @@ class DetailPanel(wx.Panel):
         if self.browser:
             html_content = f"""
             <html>
-            <body style='font-family: sans-serif; line-height: 1.6; padding: 10px;'>
+            <body style='font-family: sans-serif; line-height: 1.6; padding: 10px; background-color: #1e1e1e; color: #f0f0f0;'>
             <h3>Transcrição</h3>
             <p>{transcript_text.replace(chr(10), '<br>')}</p>
             </body>
@@ -111,6 +114,4 @@ class DetailPanel(wx.Panel):
 
         # Update Stats
         t_count = video_data.get('token_count', 0)
-        # Estimativa grosseira GPT-4o input pricing ($5.00 / 1M tokens) -> 0.000005 per token
-        cost = t_count * 0.000005
-        self.lbl_stats.SetLabel(f"Tokens: {t_count} | Custo Est. (GPT-4o): ${cost:.4f}")
+        self.lbl_stats.SetLabel(f"Tokens: {t_count} (Estimado)")

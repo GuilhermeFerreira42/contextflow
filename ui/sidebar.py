@@ -25,18 +25,22 @@ class Sidebar(wx.Panel):
         header.SetFont(font)
         sizer.Add(header, 0, wx.ALL, 5)
 
+        # Search Bar
+        self.search_ctrl = wx.SearchCtrl(self, style=wx.TE_PROCESS_ENTER)
+        self.search_ctrl.ShowCancelButton(True)
+        self.search_ctrl.SetDescriptiveText("🔍 Pesquisar nos títulos...")
+        self.search_ctrl.Bind(wx.EVT_TEXT, self.on_search_text)
+        self.search_ctrl.Bind(wx.EVT_SEARCHCTRL_CANCEL_BTN, self.on_search_cancel)
+        sizer.Add(self.search_ctrl, 0, wx.EXPAND | wx.ALL, 5)
+        
         # Tree
         self.tree = wx.TreeCtrl(self, style=wx.TR_DEFAULT_STYLE | wx.TR_HIDE_ROOT)
         self.root = self.tree.AddRoot("Root")
         
         sizer.Add(self.tree, 1, wx.EXPAND | wx.ALL, 0)
         
-        # Refresh Button
-        btn_refresh = wx.Button(self, label="Atualizar")
-        btn_refresh.Bind(wx.EVT_BUTTON, lambda e: self.load_history())
-        sizer.Add(btn_refresh, 0, wx.EXPAND | wx.ALL, 2)
-        
         self.SetSizer(sizer)
+
         self.Bind(wx.EVT_TREE_SEL_CHANGED, self.on_tree_selection, self.tree)
         # Right Click
         self.tree.Bind(wx.EVT_TREE_ITEM_MENU, self.on_right_click)
@@ -85,10 +89,23 @@ class Sidebar(wx.Panel):
         pass # Placeholder until load_history refactor
 
 
-    def load_history(self):
+    def on_search_text(self, event):
+        text = self.search_ctrl.GetValue()
+        self.load_history(filter_text=text)
+
+    def on_search_cancel(self, event):
+        self.search_ctrl.SetValue("")
+        self.load_history()
+
+    def load_history(self, filter_text=""):
         self.tree.DeleteChildren(self.root)
         videos = self.db_handler.get_all_videos()
         
+        # Filter if needed
+        if filter_text:
+            ft = filter_text.lower()
+            videos = [v for v in videos if ft in (v.get('title') or "").lower()]
+
         # Agrupar por Playlist
         playlists = collections.defaultdict(list)
         single_videos = []
@@ -106,8 +123,7 @@ class Sidebar(wx.Panel):
             ptitle = v_list[0].get('playlist_title') or f"Playlist {pid}"
             
             pl_node = self.tree.AppendItem(self.root, ptitle)
-            # Salva ID da playlist (prefixo 'PL:' para distinguir de Video ID se necessário, mas aqui pid é string)
-            # Para evitar conflito se um vídeoid for igual a um playlistid (improvável), podemos usar uma tupla
+            # Salva ID da playlist
             self.tree.SetItemData(pl_node, {"type": "playlist", "id": pid}) 
             
             for v in v_list:
