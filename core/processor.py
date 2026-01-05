@@ -5,6 +5,8 @@ import queue
 import time
 import wx
 import os
+import uuid
+import random
 from typing import List, Callable, Dict, Any, Optional
 
 from services.youtube_manager import YouTubeManager
@@ -14,6 +16,7 @@ from constants import THUMBNAILS_DIR, EXPORTS_DIR
 
 class ProcessingTask:
     def __init__(self, url: str, playlist_id: str = None, playlist_title: str = None):
+        self.uuid = str(uuid.uuid4())
         self.url = url
         self.status = "pending" # pending, downloading, transcribing, completed, error
         self.video_id = None
@@ -42,6 +45,11 @@ class Processor:
         self.on_task_update: Callable[[str, str], None] = None 
         self.on_task_complete: Callable[[Dict[str, Any]], None] = None 
         self.on_error: Callable[[str, str], None] = None
+        
+        # Novos callbacks granulares
+        self.on_task_queued: Callable[[str, str], None] = None # (uuid, url)
+        self.on_task_started: Callable[[str], None] = None # (uuid)
+        self.on_metadata_fetched: Callable[[str, str, str], None] = None # (uuid, video_id, title)
 
     def start_processing(self):
         if not self.active:
@@ -53,25 +61,38 @@ class Processor:
         self.active = False
 
     def add_urls(self, raw_text: str):
-        """Recebe texto bruto com várias URLs/Playlists e enfileira."""
+        """Recebe texto bruto e inicia processamento em background (não bloqueante)."""
+        threading.Thread(target=self._async_resolve_urls, args=(raw_text,), daemon=True).start()
+
+    def _async_resolve_urls(self, raw_text: str):
+        """Expande playlists e valida URLs em background."""
         lines = [l.strip() for l in raw_text.split('\n') if l.strip()]
         
         for line in lines:
-            if "list=" in line:
-                # É playlist
-                pl_info = self.yt_manager.get_playlist_info(line)
-                if pl_info and pl_info.get('videos'):
-                    pl_id = pl_info['id']
-                    pl_title = pl_info['title']
-                    for vid_info in pl_info['videos']:
-                        v_url = vid_info.get('url') or f"https://www.youtube.com/watch?v={vid_info['id']}"
-                        self._enqueue_video(v_url, pl_id, pl_title)
-            else:
-                self._enqueue_video(line)
+            try:
+                if "list=" in line:
+                    # É playlist
+                    pl_info = self.yt_manager.get_playlist_info(line)
+                    if pl_info and pl_info.get('videos'):
+                        pl_id = pl_info['id']
+                        pl_title = pl_info['title']
+                        for vid_info in pl_info['videos']:
+                            v_url = vid_info.get('url') or f"https://www.youtube.com/watch?v={vid_info['id']}"
+                            # Verifica cancelamento ou status aqui se necessário
+                            self._enqueue_video(v_url, pl_id, pl_title)
+                else:
+                    self._enqueue_video(line)
+            except Exception as e:
+                print(f"Erro ao resolver URL {line}: {e}")
 
     def _enqueue_video(self, url: str, pl_id: str = None, pl_title: str = None):
         if self.yt_manager.validate_url(url):
-            self.task_queue.put(ProcessingTask(url, pl_id, pl_title))
+            task = ProcessingTask(url, pl_id, pl_title)
+            self.task_queue.put(task)
+            
+            # Notifica UI que entrou na fila
+            if self.on_task_queued:
+                wx.CallAfter(self.on_task_queued, task.uuid, task.url)
 
     def _worker_loop(self):
         while self.active:
@@ -82,17 +103,29 @@ class Processor:
 
             self._process_task(task)
             self.task_queue.task_done()
+            
+            # Jitter Anti-Blocking: Pausa aleatória entre vídeos
+            time.sleep(random.uniform(2.0, 5.0))
 
     def _process_task(self, task: ProcessingTask):
         try:
+            # 0. Notifica Início (Task Started)
+            if self.on_task_started:
+                wx.CallAfter(self.on_task_started, task.uuid)
+
             # 1. Metadados
             meta = self.yt_manager.get_video_metadata(task.url)
-            task.video_id = meta.get('id')
-            task.title = meta.get('title')
             
             if meta['status'] == 'error':
                 raise Exception("Falha ao obter metadados")
 
+            task.video_id = meta.get('id')
+            task.title = meta.get('title')
+
+            # Notifica ID real descoberto
+            if self.on_metadata_fetched:
+                wx.CallAfter(self.on_metadata_fetched, task.uuid, task.video_id, task.title)
+            
             self._notify_update(task.video_id, "Baixando Thumbnail...")
             
             # Download Thumbnail
