@@ -5,9 +5,10 @@ from storage.db_handler import DatabaseHandler
 import collections
 
 class Sidebar(wx.Panel):
-    def __init__(self, parent, on_selection_callback):
+    def __init__(self, parent, on_selection_callback, on_data_changed_callback=None):
         super().__init__(parent)
         self.on_selection = on_selection_callback
+        self.on_data_changed = on_data_changed_callback
         self.db_handler = DatabaseHandler()
         self._init_ui()
         self.load_history()
@@ -77,16 +78,22 @@ class Sidebar(wx.Panel):
             if dlg.ShowModal() == wx.ID_YES:
                 self.db_handler.delete_video(video_id)
                 self.load_history() 
+                if self.on_data_changed:
+                    self.on_data_changed()
             dlg.Destroy()
 
     def on_delete_playlist(self, event):
         item = self._action_item
-        # Precisamos descobrir o Playlist ID
-        # No load_history, a gente não salvou o playlist ID no ItemData (salvou None).
-        # Vamos ter que mudar o load_history para salvar o Playlist ID no ItemData.
-        # OU buscamos pelo texto (frágil).
-        # O melhor é refatorar load_history para salvar dados na pasta.
-        pass # Placeholder until load_history refactor
+        data = self.tree.GetItemData(item)
+        if data and data.get("type") == "playlist":
+            pid = data["id"]
+            dlg = wx.MessageDialog(self, "Tem certeza que deseja excluir esta Playlist e TODOS os seus vídeos?", "Confirmar Exclusão em Massa", wx.YES_NO | wx.ICON_WARNING)
+            if dlg.ShowModal() == wx.ID_YES:
+                self.db_handler.delete_playlist(pid)
+                self.load_history()
+                if self.on_data_changed:
+                    self.on_data_changed()
+            dlg.Destroy()
 
 
     def on_search_text(self, event):
@@ -144,17 +151,6 @@ class Sidebar(wx.Panel):
     def refresh(self):
         """Alias para load_history, compatibilidade com interface de refresh."""
         self.load_history()
-
-    def on_delete_playlist(self, event):
-        item = self._action_item
-        data = self.tree.GetItemData(item)
-        if data and data.get("type") == "playlist":
-            pid = data["id"]
-            dlg = wx.MessageDialog(self, "Tem certeza que deseja excluir esta Playlist e TODOS os seus vídeos?", "Confirmar Exclusão em Massa", wx.YES_NO | wx.ICON_WARNING)
-            if dlg.ShowModal() == wx.ID_YES:
-                self.db_handler.delete_playlist(pid)
-                self.load_history()
-            dlg.Destroy()
 
     def on_tree_selection(self, event):
         item = event.GetItem()

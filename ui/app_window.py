@@ -31,7 +31,7 @@ class AppWindow(wx.Frame):
         self.main_splitter = wx.SplitterWindow(self, style=wx.SP_BORDER | wx.SP_LIVE_UPDATE)
         
         # 1.1 Sidebar (Left)
-        self.sidebar = Sidebar(self.main_splitter, self.on_sidebar_selection)
+        self.sidebar = Sidebar(self.main_splitter, self.on_sidebar_selection, self.on_sidebar_data_changed)
 
         # 1.2 Right Area Container (will be a Splitter too)
         self.right_splitter = wx.SplitterWindow(self.main_splitter, style=wx.SP_BORDER | wx.SP_LIVE_UPDATE)
@@ -131,6 +131,11 @@ class AppWindow(wx.Frame):
     def on_table_selection(self, video_id):
         # Reuse logic
         self.on_sidebar_selection(video_id)
+
+    def on_sidebar_data_changed(self):
+        """Called when data is deleted from Sidebar."""
+        self.panel_grid.load_data()
+        self.panel_table.load_data()
 
     def on_exit(self, event):
         self.Close()
