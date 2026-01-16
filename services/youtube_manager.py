@@ -78,50 +78,95 @@ class YouTubeManager:
             return {'id': video_id, 'url': url, 'title': 'Metadata Error', 'status': 'error'}
 
     def get_transcript(self, video_id: str) -> Tuple[Optional[str], str]:
-        """Tenta obter transcrição via API e depois via yt-dlp (fallback)."""
-        # 1. Tentativa via YouTubeTranscriptApi
+        """
+        Tenta obter transcrição na seguinte ordem:
+        1. API (Manual - PT)
+        2. API (Manual - EN)
+        3. yt-dlp (Auto - PT)
+        4. yt-dlp (Auto - EN)
+        """
+        
+        # 1. API - Tentativa Manual
         try:
-            transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=['pt', 'pt-BR', 'en'])
-            raw_text = " ".join([t['text'] for t in transcript_list])
-            clean_text = self._clean_text(raw_text)
-            return clean_text, "api"
-        except Exception:
-            pass # Silently fail to fallback
+            # Tenta pegar lista de transcrições disponíveis
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            
+            # Tenta encontrar manual created em PT
+            try:
+                t = transcript_list.find_manually_created_transcript(['pt', 'pt-BR'])
+                return self._clean_text(" ".join([i['text'] for i in t.fetch()])), "api_manual_pt"
+            except:
+                pass
 
-        # 2. Fallback via yt-dlp (legendas automáticas)
-        return self._download_subtitles_fallback(video_id)
+            # Tenta manual EN e traduz? Não, por enquanto só pega original
+            try:
+                 t = transcript_list.find_manually_created_transcript(['en'])
+                 return self._clean_text(" ".join([i['text'] for i in t.fetch()])), "api_manual_en"
+            except:
+                pass
+                
+            # Fallback para generated se não achou manual (via API)
+            try:
+                t = transcript_list.find_generated_transcript(['pt', 'pt-BR'])
+                return self._clean_text(" ".join([i['text'] for i in t.fetch()])), "api_auto_pt"
+            except:
+                pass
+                
+        except Exception as e:
+            logger.warning(f"YouTubeTranscriptApi initial check failed: {e}")
 
-    def _download_subtitles_fallback(self, video_id: str) -> Tuple[Optional[str], str]:
+        # 2. Fallback via yt-dlp (Heavy methods)
+        # Tenta Auto PT
+        res, method = self._download_subtitles_fallback(video_id, langs=['pt', 'pt-BR'])
+        if res: return res, f"ytdlp_{method}"
+        
+        # Tenta Auto EN
+        res, method = self._download_subtitles_fallback(video_id, langs=['en'])
+        if res: return res, f"ytdlp_{method}"
+
+        return None, "failed"
+
+    def _download_subtitles_fallback(self, video_id: str, langs: List[str] = None) -> Tuple[Optional[str], str]:
+        if langs is None: langs = ["pt", "pt-BR", "en"]
+        
         url = f"https://www.youtube.com/watch?v={video_id}"
         ydl_opts = {
             'skip_download': True,
             'writesubtitles': True,
             'writeautomaticsub': True,
-            'subtitleslangs': ["pt", "pt-BR", "en"],
+            'subtitleslangs': langs,
             'subformat': 'json3',
             'quiet': True
         }
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
-                requested_langs = ["pt", "pt-BR", "en"]
-                subs = info.get('subtitles', {}) or info.get('automatic_captions', {})
+                # Check standard subtitles first
+                subs = info.get('subtitles', {}) 
+                # Then auto captions
+                auto_subs = info.get('automatic_captions', {})
+                
                 target_url = None
-                for lang in requested_langs:
-                    if lang in subs:
-                        formats = subs[lang]
-                        for fmt in formats:
-                            if fmt.get('ext') in ['json3', 'srv3', 'vtt', 'ttml']: 
-                                target_url = fmt['url']
-                                break
-                    if target_url: break
+                
+                # Helper to find url in dict
+                def find_url(source, lang_list):
+                    for lang in lang_list:
+                         if lang in source:
+                            for fmt in source[lang]:
+                                if fmt.get('ext') in ['json3', 'srv3', 'vtt', 'ttml']:
+                                    return fmt['url']
+                    return None
+
+                target_url = find_url(subs, langs)
+                if not target_url:
+                    target_url = find_url(auto_subs, langs)
                 
                 if target_url:
                     resp = requests.get(target_url, headers=self.headers)
                     if resp.status_code == 200:
                         return self._clean_downloaded_subs(resp.text), "fallback_ytdlp"
         except Exception as e:
-            logger.error(f"Fallback download failed for {video_id}: {e}")
+            logger.error(f"Fallback download failed for {video_id} with langs {langs}: {e}")
         return None, "failed"
 
     def _clean_text(self, text: str) -> str:

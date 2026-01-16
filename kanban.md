@@ -69,89 +69,62 @@ Esses prompts foram desenhados incorporando as **correções de segurança** (ar
 
 * * *
 
-### 📦 Fase 3: Dados & Metadados (Médio Prazo)
+### 📦 Fase 3: Dados, Sincronização e Anti-Bloqueio
 
-**Objetivo:** Expandir o banco de dados sem quebrar versões antigas e capturar mais informações (Canal, Datas).
+**Objetivo:** Resolver os erros de download (cookies/transcrição), sincronizar a Sidebar com a Grid e exibir os novos metadados.
 
 > **Copie e envie este prompt:**
-> 
-> "Vamos evoluir a camada de dados e extração. Trabalhe em `storage/db_handler.py` e `services/youtube_manager.py`.
-> 
+> "Estamos na **Fase 3** do projeto. O motor já é assíncrono, mas precisamos resolver erros de download e sincronização de UI. Trabalhe nos arquivos `services/youtube_manager.py`, `ui/panel_grid.py`, `ui/panel_tree.py` e `ui/main_frame.py`.
 > **Requisitos de Implementação:**
+> 1. **Anti-Bloqueio com Cookies:** No `youtube_manager.py`, implemente o uso de `cookiesfrombrowser('chrome')` (ou seu navegador padrão) na configuração do `yt-dlp`. Isso é essencial para evitar o erro 'Transcrição indisponível' e acessar vídeos de membros.
+> 2. **Melhoria na Transcrição:** Se a legenda manual em PT falhar, tente capturar as legendas geradas automaticamente ou em inglês antes de retornar erro.
+> 3. **Sincronização Sidebar -> Grid:** No `main_frame.py`, crie uma função de callback `on_data_changed` que chame o `load_data()` da Grid. Passe essa função para o `TreePanel` (Sidebar). Quando um item for deletado ou alterado na Sidebar, ela deve disparar esse callback para atualizar a Grid central automaticamente.
+> 4. **Exibição de Metadados:** Adicione as colunas visuais 'Canal' e 'Publicado em' na Grid do `panel_grid.py`. Garanta que elas busquem os dados `channel_name` e `published_at` que já estão sendo salvos no banco.
+> 5. **Menu Ferramentas:** Adicione um menu superior chamado '&Ferramentas'. Inclua a opção 'Reprocessar Erros', que deve identificar vídeos com status de erro no banco e reinseri-los na fila de processamento."
 > 
-> 1.  **Migração Robusta de Schema:** No `db_handler.py`, melhore o método `_check_and_migrate_db`.
->     
->     -   Verifique se as colunas `channel_name`, `published_at` e `added_at` existem.
->         
->     -   Se não existirem, execute `ALTER TABLE` adicionando-as com valores `DEFAULT` seguros (ex: NULL ou string vazia) para não corromper dados existentes.
->         
-> 2.  **Extração de Metadados:** No `youtube_manager.py`, atualize `get_video_metadata` para extrair:
->     
->     -   `uploader` (para channel\_name).
->         
->     -   `upload_date` (formatar para YYYY-MM-DD se possível).
->         
-> 3.  **Persistência:** Atualize o método `add_video_entry` no DB Handler para salvar esses novos campos.
->     
-> 4.  **Atualização da Tabela:** No `ui/panel_table.py` (ou onde os dados são exibidos), adicione as colunas visuais para 'Canal' e 'Data'. Garanta que o renderizador trate valores `None` (de vídeos antigos) exibindo um traço '-' para evitar erros de string.
->     
 > 
-> Forneça as classes atualizadas focando na integridade dos dados."
 
-* * *
+---
 
-### 📦 Fase 4: Recursos Avançados & Exportação (Médio/Longo Prazo)
+### 📦 Fase 4: Recursos Avançados de Exportação
 
-**Objetivo:** Permitir downloads complexos sem estourar a memória RAM (Exportação em Streaming).
+**Objetivo:** Implementar downloads em lote (ZIP) e unificação de arquivos sem travar o sistema.
 
 > **Copie e envie este prompt:**
-> 
-> "Implemente funcionalidades avançadas de exportação e menu de contexto. Arquivos: `ui/sidebar.py`, `core/processor.py` e `ui/panel_grid.py`.
-> 
+> "Vamos implementar as funcionalidades de exportação da **Fase 4**. Foco em `ui/panel_tree.py` e no gerenciamento de arquivos.
 > **Requisitos:**
+> 1. **Menu de Contexto (Sidebar):** Adicione ao clique direito nas playlists e vídeos as opções: 'Exportar para ZIP' e 'Exportar como Markdown Único'.
+> 2. **Exportação em Streaming:** Ao gerar um Markdown único com muitos vídeos, o sistema deve escrever no arquivo linha por linha (modo append) em vez de carregar tudo na memória RAM.
+> 3. **Feedback de Progresso:** Use um `wx.ProgressDialog` para mostrar o avanço da exportação, garantindo que o processo ocorra em uma thread separada para não congelar a interface."
 > 
-> 1.  **Menu de Contexto:** Na `Sidebar`, adicione opções ao clicar com botão direito em um vídeo ou playlist:
->     
->     -   'Baixar ZIP'
->         
->     -   'Exportar Markdown Unificado'
->         
-> 2.  **Exportação Otimizada (Streaming):** No `Processor` (ou numa nova classe `ExportManager`), reescreva a lógica de exportação 'Unificada'.
->     
->     -   **NÃO** carregue todo o conteúdo na RAM.
->         
->     -   Abra o arquivo de destino `.md` e escreva vídeo por vídeo iterativamente (append), limpando a memória a cada iteração. Isso previne crash por falta de memória em grandes listas.
->         
-> 3.  **Thread de Exportação:** A exportação deve rodar em uma `threading.Thread` separada para não congelar a interface enquanto gera o ZIP ou MD. Mostre um `wx.ProgressDialog` indeterminado enquanto processa.
->     
 > 
-> Gere o código necessário para essas funcionalidades."
 
-* * *
+---
 
-### 📦 Fase 5: Refinamento Visual & Mídia (Longo Prazo)
+### 📦 Fase 5: Refinamento de Mídia e Visualização
 
-**Objetivo:** Tratamento profissional de imagens e visualização de texto.
+**Objetivo:** Melhorar a leitura de textos longos e o tratamento de imagens.
 
 > **Copie e envie este prompt:**
-> 
-> "Para finalizar, vamos refinar o tratamento de mídia e usabilidade visual.
-> 
+> "Para a **Fase 5**, vamos focar no refinamento da experiência do usuário.
 > **Requisitos:**
+> 1. **Preview de Transcrição:** Na Grid, ao clicar duas vezes na célula de transcrição, abra um Diálogo (Popup) com scroll para leitura integral do texto, já que a célula da grid é limitada.
+> 2. **Tratamento de Imagens (Pillow):** No `youtube_manager.py`, se uma miniatura for baixada em formato `.webp` incompatível, converta-a automaticamente para `.png` usando a biblioteca Pillow para garantir a exibição na interface.
+> 3. **Zoom de Miniatura:** Ao clicar em uma miniatura na Grid, abra uma janela flutuante simples exibindo a imagem em tamanho real."
 > 
-> 1.  **Visualização Rápida (Preview):** Na Grid de dados, implemente um 'Tooltip' rico ou um evento de clique duplo na célula de Transcrição.
->     
->     -   Ao acionar, abra uma janela `wx.PopupTransientWindow` ou um `Dialog` simples mostrando o texto completo (com scroll), já que a célula da grid não suporta textos longos.
->         
-> 2.  **Validação de Imagens (Robustez):** No `YouTubeManager` (download de thumb) e na UI (carregamento):
->     
->     -   Adicione validação usando a biblioteca `Pillow` (se disponível).
->         
->     -   Se a imagem baixada for `.webp` ou estiver corrompida, tente convertê-la para `.png` antes de salvar.
->         
->     -   Na UI, se `wx.Image` falhar ao carregar, capture a exceção silenciosamente e exiba um placeholder cinza, evitando crashes.
->         
-> 3.  **Zoom de Imagem:** Ao clicar na miniatura na tabela, abra um `wx.Frame` flutuante sem bordas exibindo a imagem em tamanho real. O frame deve fechar ao perder o foco.
->     
 > 
-> Forneça as modificações para `ui/panel_detail.py` e `services/youtube_manager.py`."
+
+---
+
+### 📦 Fase 6: Estilização e Polimento Final (Opcional)
+
+**Objetivo:** Consistência visual e usabilidade refinada.
+
+> **Copie e envie este prompt:**
+> "Esta é a fase final de polimento.
+> **Requisitos:**
+> 1. **Customização de Cursor:** Altere o cursor do mouse para o tipo 'Mão' (Hand) ao passar sobre colunas que possuem links clicáveis.
+> 2. **Cores de Status:** Pinte o texto da coluna 'Status' de acordo com o resultado (Verde para Sucesso, Vermelho para Erro, Amarelo para Na Fila).
+> 3. **Logs de Sistema:** Garanta que a aba de Logs no rodapé capture todas as exceções do `yt-dlp` para facilitar o suporte técnico futuro."
+> 
+>

@@ -90,6 +90,13 @@ class AppWindow(wx.Frame):
         
         self.Bind(wx.EVT_MENU, self.on_toggle_logs, id=2001)
 
+        # Tools Menu
+        tools_menu = wx.Menu()
+        tools_menu.Append(3001, "Reprocessar Erros", "Tenta baixar novamente vídeos com status de erro")
+        menubar.Append(tools_menu, "&Ferramentas")
+        
+        self.Bind(wx.EVT_MENU, self.on_reprocess_errors, id=3001)
+
     # --- Callbacks e Lógica ---
 
     def on_toggle_logs(self, event):
@@ -144,3 +151,27 @@ class AppWindow(wx.Frame):
         if hasattr(self.panel_grid, 'processor') and self.panel_grid.processor:
             self.panel_grid.processor.stop_processing()
         event.Skip()
+
+    def on_reprocess_errors(self, event):
+        """Busca vídeos com erro no DB e re-enfileira."""
+        # Obter IDs com erro
+        conn = self.db_handler._get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT url FROM videos WHERE status='ERROR'")
+        rows = cursor.fetchall()
+        conn.close()
+        
+        if not rows:
+            wx.MessageBox("Nenhum vídeo com erro encontrado.", "Info")
+            return
+            
+        urls = [r[0] for r in rows]
+        confirm = wx.MessageBox(f"Encontrados {len(urls)} vídeos com erro. Deseja tentar novamente?", "Confirmação", wx.YES_NO | wx.ICON_QUESTION)
+        
+        if confirm == wx.YES:
+            # Join URLs
+            text_block = "\n".join(urls)
+            # Envia para o processador (via GridPanel que tem a instância)
+            self.panel_grid.txt_input.SetValue(text_block)
+            self.panel_grid.on_click_process(None)
+            self.log_to_console(f"Reiniciando processamento de {len(urls)} itens.", "SYSTEM")
