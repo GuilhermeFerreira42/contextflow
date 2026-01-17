@@ -111,74 +111,172 @@ class GridPanel(wx.Panel):
         self.SetSizer(main_sizer)
 
     def load_data(self):
-        """Carrega dados iniciais do banco. CUIDADO: Limpa a grid."""
-        # Limpar grid
-        if self.grid.GetNumberRows() > 0:
-            self.grid.DeleteRows(0, self.grid.GetNumberRows())
-            
-        videos = self.db_handler.get_all_videos()
-        # Ordenar por data desc
-        videos.sort(key=lambda x: x['created_at'], reverse=True)
+        """Carrega dados do banco de forma NÃO-DESTRUTIVA (Life Raft Strategy)."""
+        
+        # 1. Life Raft: Salvar tarefas ativas (que não estão no DB ainda)
+        active_tasks = []
+        rows = self.grid.GetNumberRows()
+        
+        for i in range(rows):
+            # Identificar status
+            status = self.grid.GetCellValue(i, 10)
+            if status in ["Na Fila", "Baixando...", "Processando", "Aguardando..."]:
+                # Capturar dados vitais para restaurar
+                # Assumimos que row_map guarda o UUID/ID desta linha
+                uuid = self.row_map.get(i)
+                if uuid:
+                     task_data = {
+                         'uuid': uuid,
+                         'url': self.grid.GetCellValue(i, 2),
+                         'title': self.grid.GetCellValue(i, 3),
+                         'status': status,
+                         'channel': self.grid.GetCellValue(i, 4),
+                         # Se precisar de outros campos, adicione aqui
+                     }
+                     active_tasks.append(task_data)
+        
+        # 2. Limpar Grid
+        if rows > 0:
+            self.grid.DeleteRows(0, rows)
         
         self.row_map = {}
-        self.grid.AppendRows(len(videos))
+            
+        # 3. Carregar do Banco
+        videos = self.db_handler.get_all_videos()
+        videos.sort(key=lambda x: x['created_at'], reverse=True)
         
-        for i, v in enumerate(videos):
-            self.row_map[i] = v['id']
+        # 4. Combinar: Ativas primeiro (Topo) ou Último?
+        # Usuário pediu para manter. Vamos colocar no topo para visibilidade.
+        
+        total_rows = len(active_tasks) + len(videos)
+        self.grid.AppendRows(total_rows)
+        
+        current_row = 0
+        
+        # 4.1 Reinsere Ativas
+        for task in active_tasks:
+            self.row_map[current_row] = task['uuid']
             
-            # 0: Check
-            self.grid.SetCellValue(i, 0, "0")
-            
-            # 1: ID
-            self.grid.SetCellValue(i, 1, str(v['id']))
-
-            # 2: Link
-            url = v.get('url', '')
-            self.grid.SetCellValue(i, 2, url)
-            if url:
-                 self.grid.SetCellTextColour(i, 2, wx.BLUE) # Blue Link
-            
-            # 3: Title
-            self.grid.SetCellValue(i, 3, v['title'] or "Sem Título")
-            
-            # 4: Channel
-            self.grid.SetCellValue(i, 4, v.get('channel_name') or "-")
-
-            # 5: Published
-            raw_date = v.get('upload_date') or ""
-            # Format YYYYMMDD -> DD/MM/YYYY
-            if len(raw_date) == 8 and raw_date.isdigit():
-                formatted_date = f"{raw_date[6:8]}/{raw_date[4:6]}/{raw_date[0:4]}"
-                self.grid.SetCellValue(i, 5, formatted_date)
-            else:
-                self.grid.SetCellValue(i, 5, raw_date)
-
-            # 6: Playlist
-            self.grid.SetCellValue(i, 6, v.get('playlist_title') or "-")
-            
-            # 7: Duration
-            d = v.get('duration')
-            self.grid.SetCellValue(i, 7, str(d) if d else "0")
-            
-            # 8: Tokens
-            t = v.get('token_count') or 0
-            self.grid.SetCellValue(i, 8, str(t))
-            
-            # 9: Custo
-            cost = t * 0.000005
-            self.grid.SetCellValue(i, 9, f"{cost:.4f}")
-            
-            # 10: Status
-            status = v.get('status', 'pending')
-            self.grid.SetCellValue(i, 10, status)
-            if status == "ERROR":
-                 self.grid.SetCellTextColour(i, 10, wx.RED)
-            else:
-                 self.grid.SetCellTextColour(i, 10, wx.BLACK)
+            self.grid.SetCellValue(current_row, 0, "0")
+            self.grid.SetCellValue(current_row, 1, "...")
+            self.grid.SetCellValue(current_row, 2, task['url'])
+            self.grid.SetCellTextColour(current_row, 2, wx.BLUE)
+            self.grid.SetCellValue(current_row, 3, task['title'])
+            self.grid.SetCellValue(current_row, 4, task.get('channel', '-'))
+            self.grid.SetCellValue(current_row, 10, task['status'])
             
             # ReadOnly
             for c in range(1, 11):
-                self.grid.SetReadOnly(i, c, True)
+                self.grid.SetReadOnly(current_row, c, True)
+                
+            current_row += 1
+            
+        # 4.2 Insere DB
+        for v in videos:
+            self.row_map[current_row] = v['id']
+            
+            self.grid.SetCellValue(current_row, 0, "0")
+            self.grid.SetCellValue(current_row, 1, str(v['id']))
+            
+            url = v.get('url', '')
+            self.grid.SetCellValue(current_row, 2, url)
+            if url: self.grid.SetCellTextColour(current_row, 2, wx.BLUE)
+            
+            self.grid.SetCellValue(current_row, 3, v['title'] or "Sem Título")
+            self.grid.SetCellValue(current_row, 4, v.get('channel_name') or "-")
+
+            raw_date = v.get('upload_date') or ""
+            if len(raw_date) == 8 and raw_date.isdigit():
+                formatted_date = f"{raw_date[6:8]}/{raw_date[4:6]}/{raw_date[0:4]}"
+                self.grid.SetCellValue(current_row, 5, formatted_date)
+            else:
+                self.grid.SetCellValue(current_row, 5, raw_date)
+
+            self.grid.SetCellValue(current_row, 6, v.get('playlist_title') or "-")
+            
+            d = v.get('duration')
+            self.grid.SetCellValue(current_row, 7, str(d) if d else "0")
+            
+            t = v.get('token_count') or 0
+            self.grid.SetCellValue(current_row, 8, str(t))
+            
+            cost = t * 0.000005
+            self.grid.SetCellValue(current_row, 9, f"{cost:.4f}")
+            
+            status = v.get('status', 'pending')
+            self.grid.SetCellValue(current_row, 10, status)
+            if status == "ERROR":
+                 self.grid.SetCellTextColour(current_row, 10, wx.RED)
+            else:
+                 self.grid.SetCellTextColour(current_row, 10, wx.BLACK)
+            
+            for c in range(1, 11):
+                self.grid.SetReadOnly(current_row, c, True)
+            
+            current_row += 1
+
+    def _rebuild_row_map(self):
+        """Reconstrói o mapa de linhas baseado no estado atual da grid.
+           Nota: Isso assume que o ID não está na grid visível, o que é um problema.
+           MELHOR: Não deletar row_map, mas ajustá-lo.
+           OU: Apenas confiar que remove_items faz o trabalho sujo corretamente.
+           
+           Na verdade, o row_map mapeia INDICE -> ID. Se deletarmos linhas, os índices mudam.
+           Portanto, PRECISAMOS reconstruir. Mas como saber o ID da linha 5 se o mapa diz que ele era da linha 6?
+           
+           Solução: O mapa deve ser ajustado no momento da deleção.
+        """
+        pass # Implementado dentro de remove_items
+
+    def remove_items(self, ids_to_remove):
+        """Remove itens da grid de forma cirúrgica, sem reload."""
+        if not ids_to_remove: return
+        
+        # Encontrar linhas para remover
+        rows_to_delete = []
+        for row, vid in self.row_map.items():
+            if str(vid) in [str(x) for x in ids_to_remove]:
+                rows_to_delete.append(row)
+        
+        # Importante: Deletar de baixo para cima
+        rows_to_delete.sort(reverse=True)
+        
+        for r in rows_to_delete:
+            self.grid.DeleteRows(r, 1)
+            
+        # CRITICAL: Rebuild Map because indices shifted
+        # Como as linhas mudaram de lugar, o row_map antigo está inválido.
+        # Estrategia:
+        # 1. Antes de apagar, criar uma lista ordenada de (ID) que SOBRARAM
+        remaining_ids = []
+        
+        # A ordem das linhas não muda, apenas "sobe".
+        # Então podemos iterar pelos INDICES antigos ordenados.
+        MAX_ROWS_BEFORE = self.grid.GetNumberRows() + len(rows_to_delete)
+        
+        # Vamos fazer diferente: vamos salvar a lista de IDs na ordem visual atual
+        # Exceto os que vamos apagar.
+        
+        final_list = []
+        for r in range(MAX_ROWS_BEFORE):
+            # Se r estava no map
+            vid = self.row_map.get(r)
+            if vid:
+                # Se não é para deletar
+                should_delete = False
+                if str(vid) in [str(x) for x in ids_to_remove]:
+                     should_delete = True
+                
+                if not should_delete:
+                    final_list.append(vid)
+        
+        # Agora o final_list tem os IDs na ordem que a grid ficou.
+        # Atualizamos o map
+        self.row_map = {}
+        for i, vid in enumerate(final_list):
+            self.row_map[i] = vid
+
+        self.grid.ForceRefresh()
 
     def on_cell_click(self, event):
         row = event.GetRow()
@@ -290,6 +388,25 @@ class GridPanel(wx.Panel):
 
     def on_metadata_fetched(self, task_uuid, video_id, title):
         row = self._find_row_by_id(task_uuid)
+        
+        if row is None:
+             # Self-Healing: Create row if missing
+             self.grid.AppendRows(1)
+             row = self.grid.GetNumberRows() - 1
+             # We need to map it
+             self.row_map[row] = task_uuid
+             
+             # Fill basic info we have
+             self.grid.SetCellValue(row, 0, "0")
+             self.grid.SetCellValue(row, 1, str(video_id))
+             self.grid.SetCellValue(row, 3, title)
+             self.grid.SetCellValue(row, 10, "Baixando...") # Assoc with active
+             
+             for c in range(1, 11):
+                 self.grid.SetReadOnly(row, c, True)
+                 
+             if self.log_callback: self.log_callback(f"Grid Self-Healed: Row recreated for {video_id}", "WARN")
+
         if row is not None:
             self.grid.SetCellValue(row, 1, str(video_id))
             self.grid.SetCellValue(row, 3, title)

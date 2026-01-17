@@ -199,6 +199,17 @@ class DatabaseHandler:
         finally:
             conn.close()
 
+    def get_video_ids_for_playlist(self, playlist_id: str) -> List[str]:
+        """Retorna lista de IDs de vídeo para uma dada playlist."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute('SELECT id FROM videos WHERE playlist_id = ?', (playlist_id,))
+            rows = cursor.fetchall()
+            return [r[0] for r in rows]
+        finally:
+            conn.close()
+
     def delete_playlist(self, playlist_id: str):
         import os
         conn = self._get_connection()

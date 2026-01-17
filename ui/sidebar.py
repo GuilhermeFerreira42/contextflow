@@ -79,7 +79,8 @@ class Sidebar(wx.Panel):
                 self.db_handler.delete_video(video_id)
                 self.load_history() 
                 if self.on_data_changed:
-                    self.on_data_changed()
+                    # Passa action e affected_ids
+                    self.on_data_changed("delete_video", [video_id])
             dlg.Destroy()
 
     def on_delete_playlist(self, event):
@@ -87,12 +88,17 @@ class Sidebar(wx.Panel):
         data = self.tree.GetItemData(item)
         if data and data.get("type") == "playlist":
             pid = data["id"]
+            
+            # Fetch affected videos BEFORE deletion
+            affected_ids = self.db_handler.get_video_ids_for_playlist(pid)
+            
             dlg = wx.MessageDialog(self, "Tem certeza que deseja excluir esta Playlist e TODOS os seus vídeos?", "Confirmar Exclusão em Massa", wx.YES_NO | wx.ICON_WARNING)
             if dlg.ShowModal() == wx.ID_YES:
                 self.db_handler.delete_playlist(pid)
                 self.load_history()
                 if self.on_data_changed:
-                    self.on_data_changed()
+                    # Passa action e affected_ids
+                    self.on_data_changed("delete_playlist", affected_ids)
             dlg.Destroy()
 
 

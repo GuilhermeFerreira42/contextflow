@@ -139,9 +139,22 @@ class AppWindow(wx.Frame):
         # Reuse logic
         self.on_sidebar_selection(video_id)
 
-    def on_sidebar_data_changed(self):
+    def on_sidebar_data_changed(self, action=None, affected_ids=None):
         """Called when data is deleted from Sidebar."""
-        self.panel_grid.load_data()
+        
+        # Grid Update Strategy
+        if action in ["delete_video", "delete_playlist"] and affected_ids:
+            # Surgical update
+            if hasattr(self.panel_grid, "remove_items"):
+                self.panel_grid.remove_items(affected_ids)
+            else:
+                # Fallback if method not exists yet
+                self.panel_grid.load_data()
+        else:
+            # Fallback global reload
+            self.panel_grid.load_data()
+            
+        # Table always reloads for now (it's fast)
         self.panel_table.load_data()
 
     def on_exit(self, event):
