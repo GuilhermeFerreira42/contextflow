@@ -30,13 +30,13 @@ class BatchTab(wx.Panel):
         input_sizer.Add(self.txt_input, 1, wx.EXPAND | wx.ALL, 5)
         
         btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        self.btn_process = wx.Button(self, label="Adicionar à Fila e Processar")
+        self.btn_process = wx.Button(self, label="Adicionar à Fila e Processar", size=(180, 40))
         self.btn_process.Bind(wx.EVT_BUTTON, self.on_click_process)
         
-        self.btn_clear_input = wx.Button(self, label="Limpar Input")
+        self.btn_clear_input = wx.Button(self, label="Limpar Input", size=(180, 40))
         self.btn_clear_input.Bind(wx.EVT_BUTTON, lambda e: self.txt_input.Clear())
 
-        btn_sizer.Add(self.btn_process, 1, wx.RIGHT, 5)
+        btn_sizer.Add(self.btn_process, 0, wx.RIGHT, 5)
         btn_sizer.Add(self.btn_clear_input, 0)
         
         input_sizer.Add(btn_sizer, 0, wx.EXPAND | wx.ALL, 5)

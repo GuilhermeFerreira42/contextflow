@@ -71,6 +71,10 @@ class DatabaseHandler:
             if 'channel_name' not in columns:
                 print("Migrando DB: Adicionando channel_name...")
                 cursor.execute("ALTER TABLE videos ADD COLUMN channel_name TEXT")
+
+            if 'added_at' not in columns:
+                print("Migrando DB: Adicionando added_at...")
+                cursor.execute("ALTER TABLE videos ADD COLUMN added_at TEXT")
                 
             conn.commit()
         except Exception as e:
@@ -84,15 +88,16 @@ class DatabaseHandler:
         cursor = conn.cursor()
         try:
             cursor.execute('''
-                INSERT INTO videos (id, url, title, channel_name, duration, upload_date, thumbnail_path, playlist_id, playlist_title, status, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO videos (id, url, title, channel_name, duration, upload_date, thumbnail_path, playlist_id, playlist_title, status, created_at, added_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     title=excluded.title,
                     channel_name=excluded.channel_name,
                     playlist_id=excluded.playlist_id,
                     playlist_title=excluded.playlist_title,
                     status=excluded.status,
-                    thumbnail_path=excluded.thumbnail_path
+                    thumbnail_path=excluded.thumbnail_path,
+                    duration=excluded.duration
             ''', (
                 video_data['id'],
                 video_data['url'],
@@ -104,7 +109,8 @@ class DatabaseHandler:
                 video_data.get('playlist_id'),
                 video_data.get('playlist_title'),
                 video_data.get('status', 'pending'),
-                datetime.datetime.now().isoformat()
+                datetime.datetime.now().isoformat(),
+                video_data.get('added_at', '')
             ))
             conn.commit()
         except Exception as e:

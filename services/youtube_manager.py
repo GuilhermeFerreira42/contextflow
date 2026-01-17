@@ -62,20 +62,38 @@ class YouTubeManager:
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
+                
+                duration_sec = info.get('duration', 0)
+                formatted_duration = self._format_duration(duration_sec)
+                
+                # Timestamp atual
+                import datetime
+                now_str = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+
                 return {
                     'id': info.get('id'),
                     'title': info.get('title', 'Unknown'),
                     'url': url,
-                    'duration': info.get('duration', 0),
+                    'duration': formatted_duration, # Agora formatado HH:MM:SS
+                    'duration_seconds': duration_sec, # Mantemos o raw se precisar
                     'upload_date': info.get('upload_date', ''),
                     'thumbnail': info.get('thumbnail', ''),
                     'uploader': info.get('uploader', ''),
+                    'channel_name': info.get('uploader') or info.get('channel') or info.get('channel_id') or 'Desconhecido',
+                    'added_at': now_str,
                     'status': 'fetched'
                 }
         except Exception as e:
             logger.error(f"Metadata extraction failed for {url}: {e}")
             video_id = self.extract_video_id(url)
             return {'id': video_id, 'url': url, 'title': 'Metadata Error', 'status': 'error'}
+
+    def _format_duration(self, seconds: int) -> str:
+        """Converte segundos para HH:MM:SS"""
+        if not seconds: return "00:00:00"
+        m, s = divmod(seconds, 60)
+        h, m = divmod(m, 60)
+        return f"{h:02d}:{m:02d}:{s:02d}"
 
     def get_transcript(self, video_id: str) -> Tuple[Optional[str], str]:
         """

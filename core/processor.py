@@ -151,6 +151,8 @@ class Processor:
                 'thumbnail_path': final_thumb_path,
                 'playlist_id': task.playlist_id,
                 'playlist_title': task.playlist_title,
+                'channel_name': meta.get('channel_name'),
+                'added_at': meta.get('added_at'),
                 'status': 'processing'
             })
 
