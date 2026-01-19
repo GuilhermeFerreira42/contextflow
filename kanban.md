@@ -101,30 +101,68 @@ Esses prompts foram desenhados incorporando as **correções de segurança** (ar
 
 ---
 
-### 📦 Fase 5: Refinamento de Mídia e Visualização
+### 📦 Fase 5: UX Avançada de Planilha (Aba Batch/Dados)
 
-**Objetivo:** Melhorar a leitura de textos longos e o tratamento de imagens.
+**Objetivo:** Transformar a Aba 2 em uma grade interativa e profissional, com foco em manipulação de colunas e leitura de dados.
 
-> **Copie e envie este prompt:**
-> "Para a **Fase 5**, vamos focar no refinamento da experiência do usuário.
-> **Requisitos:**
-> 1. **Preview de Transcrição:** Na Grid, ao clicar duas vezes na célula de transcrição, abra um Diálogo (Popup) com scroll para leitura integral do texto, já que a célula da grid é limitada.
-> 2. **Tratamento de Imagens (Pillow):** No `youtube_manager.py`, se uma miniatura for baixada em formato `.webp` incompatível, converta-a automaticamente para `.png` usando a biblioteca Pillow para garantir a exibição na interface.
-> 3. **Zoom de Miniatura:** Ao clicar em uma miniatura na Grid, abra uma janela flutuante simples exibindo a imagem em tamanho real."
-> 
-> 
+**Passos de Implementação:**
+
+1. **Células Expansíveis (Resumo/Transcrição):** Implementar o evento de clique duplo para abrir um `RichTextCtrl` ou `TextCtrl` flutuante para leitura de textos longos.
+2. **Sistema de Ordenação (Sorting):** Ativar a ordenação por clique no cabeçalho (alfabética, data e duração).
+3. **Reordenação por Drag & Drop:** Permitir que o usuário arraste as colunas para mudar sua posição.
+4. **Seleção e Cópia Estilo Excel:** Garantir que o `Ctrl+C` capture o conteúdo das células selecionadas mantendo a tabulação.
+
+> **Prompt Sugerido para a IA:**
+> "Inicie a **Fase 5: UX Avançada de Planilha**. Foco no arquivo `ui/panel_grid.py`.
+> **Requisitos:** > 1. Implemente `EVT_GRID_COL_SORT` para que o clique no cabeçalho ordene os vídeos por título, canal ou data.
+> 2. Ative `EnableDragColMove(True)` e garanta que a nova ordem das colunas seja respeitada ao atualizar a grade.
+> 3. No evento de clique duplo em células de 'Resumo' ou 'Transcrição', abra um `wx.Dialog` com um campo de texto multilinha para leitura completa.
+> 4. Adicione suporte a `Ctrl+C` para copiar os dados selecionados na Grid para a área de transferência."
 
 ---
 
-### 📦 Fase 6: Estilização e Polimento Final (Opcional)
+### 📦 Fase 6: Personalização e Persistência
 
-**Objetivo:** Consistência visual e usabilidade refinada.
+**Objetivo:** Permitir que o sistema "lembre" das preferências do usuário e ofereça controle total sobre a interface.
 
-> **Copie e envie este prompt:**
-> "Esta é a fase final de polimento.
-> **Requisitos:**
-> 1. **Customização de Cursor:** Altere o cursor do mouse para o tipo 'Mão' (Hand) ao passar sobre colunas que possuem links clicáveis.
-> 2. **Cores de Status:** Pinte o texto da coluna 'Status' de acordo com o resultado (Verde para Sucesso, Vermelho para Erro, Amarelo para Na Fila).
-> 3. **Logs de Sistema:** Garanta que a aba de Logs no rodapé capture todas as exceções do `yt-dlp` para facilitar o suporte técnico futuro."
-> 
->
+**Passos de Implementação:**
+
+1. **Menu "Exibir > Personalizar Colunas":** Criar um diálogo com checklist para mostrar/ocultar colunas em tempo real.
+2. **Persistência (config.json):** Criar um sistema de salvamento para gravar: largura das colunas, ordem das colunas, colunas visíveis e tema (Dark/Light).
+3. **Refinamento de Mídia:** Adicionar o fallback de thumbnails e o modal de zoom (Pillow).
+
+> **Prompt Sugerido para a IA:**
+> "Implemente a **Fase 6: Personalização e Persistência**.
+> **Requisitos:** > 1. Crie um arquivo `storage/config_manager.py` para salvar e carregar preferências em um `config.json`.
+> 2. No menu superior, adicione a opção 'Personalizar Colunas' que abre um checklist; a Grid deve atualizar sua visibilidade instantaneamente.
+> 3. Garanta que, ao fechar o programa, a largura e a ordem das colunas sejam salvas para a próxima sessão.
+> 4. No `youtube_manager.py`, use a biblioteca `Pillow` para converter thumbnails `.webp` para `.png` caso o wxPython falhe no carregamento original."
+
+---
+
+### 📦 Fase 7: Identidade Visual e Dark Mode Global
+
+**Objetivo:** Estética "Productivity Tool" e suporte total a temas escuros.
+
+**Passos de Implementação:**
+
+1. **Motor de Temas:** Criar um dicionário de cores centralizado para Dark e Light mode.
+2. **Toggle de Tema:** Adicionar no menu a opção de trocar o tema manualmente ou seguir o sistema operacional.
+3. **Simetria de Interface:** Ajustar o padding e o tamanho dos botões da Aba 1 (Dashboard) para que fiquem idênticos aos da Aba 2 (Batch).
+
+> **Prompt Sugerido para a IA:**
+> "Finalize com a **Fase 7: Dark Mode e Estilização**.
+> **Requisitos:** > 1. Implemente um sistema de temas que altere `COLOR_BG` e `COLOR_FG` em todos os painéis e widgets.
+> 2. Padronize os botões 'Processar' e 'Limpar' para o tamanho exato de `(140, 32)`.
+> 3. Adicione Tooltips (balões de ajuda) em todos os ícones e botões principais.
+> 4. Use `wx.SystemSettings` para detectar se o Windows/Mac está em Dark Mode e aplicar o tema automaticamente na inicialização."
+
+---
+
+### 🛠️ Por que este roteiro funciona?
+
+* **Fase 5** resolve o problema de "leitura" de dados, que é a função principal da sua Aba 2.
+* **Fase 6** dá autonomia ao usuário, permitindo que ele configure o software como preferir (especialmente para quem trabalha com muitas colunas).
+* **Fase 7** remove o aspecto de "ferramenta técnica" e entrega um produto final polido, pronto para uso profissional.
+
+**Como quer começar?** Recomendo iniciar pela **Fase 5**, pois ela traz o maior ganho de utilidade imediata para quem analisa os dados dos vídeos.
