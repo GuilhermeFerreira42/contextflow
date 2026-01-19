@@ -87,6 +87,7 @@ class DatabaseHandler:
         conn = self._get_connection()
         cursor = conn.cursor()
         try:
+            # created_at is NOT updated on conflict regarding requirement
             cursor.execute('''
                 INSERT INTO videos (id, url, title, channel_name, duration, upload_date, thumbnail_path, playlist_id, playlist_title, status, created_at, added_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -239,9 +240,40 @@ class DatabaseHandler:
                 placeholders = ','.join(['?'] * len(vids))
                 cursor.execute(f'DELETE FROM transcripts WHERE video_id IN ({placeholders})', vids)
                 
-            cursor.execute('DELETE FROM videos WHERE playlist_id = ?', (playlist_id,))
             conn.commit()
         except Exception as e:
             print(f"Erro ao deletar playlist {playlist_id}: {e}")
+        finally:
+            conn.close()
+
+    def delete_orphaned_videos(self):
+        """Remove todos os vídeos que NÃO pertencem a uma playlist."""
+        import os
+        conn = self._get_connection()
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        try:
+            # 1. Pegar IDs e Thumbs
+            cursor.execute('SELECT id, thumbnail_path FROM videos WHERE playlist_id IS NULL OR playlist_id = ""')
+            rows = cursor.fetchall()
+            
+            vids = []
+            for r in rows:
+                vids.append(r['id'])
+                t_path = r['thumbnail_path']
+                if t_path and os.path.exists(t_path):
+                    try:
+                        os.remove(t_path)
+                    except: pass
+            
+            if vids:
+                placeholders = ','.join(['?'] * len(vids))
+                cursor.execute(f'DELETE FROM transcripts WHERE video_id IN ({placeholders})', vids)
+                cursor.execute(f'DELETE FROM videos WHERE id IN ({placeholders})', vids)
+                conn.commit()
+            return vids
+        except Exception as e:
+            print(f"Erro ao deletar orfãos: {e}")
+            return []
         finally:
             conn.close()

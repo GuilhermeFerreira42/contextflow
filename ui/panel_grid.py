@@ -2,6 +2,7 @@
 import wx
 import wx.grid
 import webbrowser
+import time
 from core.processor import Processor
 from storage.db_handler import DatabaseHandler
 
@@ -48,10 +49,11 @@ class GridPanel(wx.Panel):
         input_sizer.Add(self.txt_input, 1, wx.EXPAND | wx.ALL, 5)
         
         btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        self.btn_process = wx.Button(self, label="Processar Fila", size=(200, 40))
+        self.btn_process = wx.Button(self, label="Processar Fila", size=(140, 32))
         self.btn_process.Bind(wx.EVT_BUTTON, self.on_click_process)
         
-        self.btn_clear_input = wx.Button(self, label="Limpar")
+        self.btn_clear_input = wx.Button(self, label="Limpar Fila", size=(140, 32))
+        # Changed label to "Limpar Fila" and size as well for symmetry
         self.btn_clear_input.Bind(wx.EVT_BUTTON, lambda e: self.txt_input.Clear())
 
         btn_sizer.Add(self.btn_process, 0, wx.RIGHT, 5) 
@@ -100,6 +102,9 @@ class GridPanel(wx.Panel):
         self.btn_delete = wx.Button(self, label="Excluir Selecionados")
         self.btn_delete.Bind(wx.EVT_BUTTON, self.on_delete_selected)
         
+        self.btn_unify = wx.Button(self, label="Unificar Selecionados (.md)")
+        self.btn_unify.Bind(wx.EVT_BUTTON, self.on_unify_selected)
+
         self.btn_export = wx.Button(self, label="Exportar Selecionados (ZIP)")
         self.btn_export.Bind(wx.EVT_BUTTON, self.on_export)
         
@@ -107,6 +112,7 @@ class GridPanel(wx.Panel):
         
         action_sizer.Add(self.lbl_status, 1, wx.ALIGN_CENTER_VERTICAL)
         action_sizer.Add(self.btn_delete, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
+        action_sizer.Add(self.btn_unify, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
         action_sizer.Add(self.btn_export, 0, wx.ALIGN_CENTER_VERTICAL)
         
         main_sizer.Add(action_sizer, 0, wx.EXPAND | wx.ALL, 5)
@@ -535,16 +541,44 @@ class GridPanel(wx.Panel):
         if self.on_data_changed:
             self.on_data_changed()
 
+    def on_unify_selected(self, event):
+        ids = self.get_selected_ids()
+        if not ids:
+            wx.MessageBox("Selecione itens usando as caixas de seleção [ ] na primeira coluna.", "Aviso")
+            return
+
+        with wx.FileDialog(self, "Salvar Unificado", wildcard="Markdown files (*.md)|*.md",
+                           style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT, defaultFile=f"unificado_{int(time.time())}.md") as fileDialog:
+            if fileDialog.ShowModal() == wx.ID_CANCEL:
+                return
+            path = fileDialog.GetPath()
+            self.run_export_thread(ids, "markdown_single", path)
+
     def on_export(self, event):
         ids = self.get_selected_ids()
         if not ids:
             wx.MessageBox("Selecione itens usando as caixas de seleção [ ] na primeira coluna.", "Aviso")
             return
         
-        zip_path = self.processor.export_data(ids, "markdown")
-        if zip_path:
-            msg = f"Exportação salva em: {zip_path}"
-            wx.MessageBox(msg, "Sucesso")
-            if self.log_callback: self.log_callback(msg, "INFO")
-            import subprocess
-            subprocess.Popen(f'explorer /select,"{zip_path}"')
+        with wx.FileDialog(self, "Salvar Exportação", wildcard="ZIP files (*.zip)|*.zip",
+                           style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT, defaultFile=f"export_{int(time.time())}.zip") as fileDialog:
+            if fileDialog.ShowModal() == wx.ID_CANCEL:
+                return
+            path = fileDialog.GetPath()
+            self.run_export_thread(ids, "zip", path)
+
+    def run_export_thread(self, ids, fmt, path):
+        pd = wx.ProgressDialog("Exportando...", "Iniciando...", maximum=len(ids), parent=self, style=wx.PD_APP_MODAL | wx.PD_AUTO_HIDE)
+        
+        def update_progress(current, total, msg):
+            if pd:
+                try:
+                    pd.Update(current, msg)
+                    if current >= total:
+                        wx.MessageBox(f"Exportação salva em:\n{path}", "Sucesso")
+                except:
+                    pass
+        
+        import threading
+        t = threading.Thread(target=self.processor.export_batch, args=(ids, fmt, path, update_progress), daemon=True)
+        t.start()

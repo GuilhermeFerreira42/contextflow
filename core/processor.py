@@ -190,32 +190,58 @@ class Processor:
         if self.on_error:
             wx.CallAfter(self.on_error, video_id, error_msg)
 
-    def export_data(self, video_ids: List[str], format_type: str = "markdown") -> str:
+    def export_batch(self, video_ids: List[str], format_type: str, output_path: str, progress_callback: Callable[[int, int, str], None] = None):
         """
-        Gera arquivos de exportação.
+        Executa exportação em lote. Deve ser chamado em Thread separada.
+        progress_callback signature: (current_index, total, current_item_name)
         """
         import zipfile
         
-        os.makedirs(EXPORTS_DIR, exist_ok=True)
-        timestamp = int(time.time())
+        total = len(video_ids)
         
-        if format_type == "markdown":
-            zip_name = f"export_contextflow_{timestamp}.zip"
-            zip_path = os.path.join(EXPORTS_DIR, zip_name)
-            
-            with zipfile.ZipFile(zip_path, 'w') as zf:
-                for vid in video_ids:
-                    data = self.db_handler.get_transcript(vid)
-                    meta = next((v for v in self.db_handler.get_all_videos() if v['id'] == vid), None)
+        try:
+            if format_type == "markdown_single":
+                # Single MD File Stream
+                with open(output_path, 'w', encoding='utf-8') as f:
+                    # Write Header
+                    f.write(f"# Exportação ContextFlow\nData: {time.strftime('%Y-%m-%d %H:%M')}\n\n")
                     
-                    if data and meta:
-                        safe_title = "".join([c for c in meta['title'] if c.isalnum() or c in (' ', '-', '_')]).strip()
-                        pl_info = f"\n**Playlist:** {meta['playlist_title']}" if meta.get('playlist_title') else ""
-                        
-                        content = f"# {meta['title']}\n\n**URL:** {meta['url']}\n**Tokens:** {meta['token_count']}{pl_info}\n\n## Transcrição\n\n{data['full_text']}"
-                        
-                        zf.writestr(f"{safe_title}.md", content)
+                    for i, vid in enumerate(video_ids):
+                        meta = next((v for v in self.db_handler.get_all_videos() if v['id'] == vid), None)
+                        if meta:
+                            if progress_callback:
+                                wx.CallAfter(progress_callback, i, total, f"Exportando: {meta['title']}")
+                            
+                            data = self.db_handler.get_transcript(vid)
+                            
+                            f.write(f"---\n\n# {meta['title']}\n")
+                            f.write(f"**URL:** {meta['url']}\n")
+                            f.write(f"**Canal:** {meta.get('channel_name', '-')}\n")
+                            f.write(f"**Tokens:** {meta.get('token_count', 0)}\n\n")
+                            f.write(f"## Transcrição\n\n")
+                            f.write(data['full_text'] if data else "(Sem transcrição)\n")
+                            f.write("\n\n")
+                            
+            elif format_type == "zip":
+                 with zipfile.ZipFile(output_path, 'w') as zf:
+                    for i, vid in enumerate(video_ids):
+                        meta = next((v for v in self.db_handler.get_all_videos() if v['id'] == vid), None)
+                        if meta:
+                            if progress_callback:
+                                wx.CallAfter(progress_callback, i, total, f"Compactando: {meta['title']}")
+                                
+                            data = self.db_handler.get_transcript(vid)
+                            
+                            safe_title = "".join([c for c in meta['title'] if c.isalnum() or c in (' ', '-', '_')]).strip()
+                            content = f"# {meta['title']}\n\n**URL:** {meta['url']}\n**Canal:** {meta.get('channel_name', '-')}\n\n## Transcrição\n\n{data['full_text'] if data else '(Sem transcrição)'}"
+                            
+                            zf.writestr(f"{safe_title}.md", content)
             
-            return zip_path
-        
-        return ""
+            # Finish
+            if progress_callback:
+                wx.CallAfter(progress_callback, total, total, "Concluído!")
+                
+        except Exception as e:
+            print(f"Export Error: {e}")
+            if progress_callback:
+                wx.CallAfter(progress_callback, total, total, f"Erro: {str(e)}")
