@@ -10,9 +10,10 @@ import random
 from typing import List, Callable, Dict, Any, Optional
 
 from services.youtube_manager import YouTubeManager
-from storage.db_handler import DatabaseHandler
 from core.token_engine import count_tokens
-from constants import THUMBNAILS_DIR, EXPORTS_DIR
+from core.app_state import AppState
+from core.export_formatter import ExportFormatter
+from constants import THUMBNAILS_DIR
 
 class ProcessingTask:
     def __init__(self, url: str, playlist_id: str = None, playlist_title: str = None):
@@ -29,24 +30,25 @@ class Processor:
     """
     Controlador central de processamento.
     Gerencia a fila de vídeos e executa as etapas de download/transcrição em background.
+    Agora integrado ao AppState para garantir Single Source of Truth.
     """
-    def __init__(self):
+    def __init__(self, app_state: AppState = None):
+        self.app_state = app_state or AppState()
         self.task_queue = queue.Queue()
         self.active = False
         self.thread = None
         
         self.yt_manager = YouTubeManager()
-        self.db_handler = DatabaseHandler()
         
         # Garante diretório de thumbnails
         os.makedirs(THUMBNAILS_DIR, exist_ok=True)
         
-        # Callbacks para atualização da UI
+        # Callbacks Legacy (serão mantidos por enquanto para compatibilidade, 
+        # mas a UI deve migrar para observar AppState)
         self.on_task_update: Callable[[str, str], None] = None 
         self.on_task_complete: Callable[[Dict[str, Any]], None] = None 
         self.on_error: Callable[[str, str], None] = None
         
-        # Novos callbacks granulares
         self.on_task_queued: Callable[[str, str], None] = None # (uuid, url)
         self.on_task_started: Callable[[str], None] = None # (uuid)
         self.on_metadata_fetched: Callable[[str, str, str], None] = None # (uuid, video_id, title)
@@ -78,7 +80,6 @@ class Processor:
                         pl_title = pl_info['title']
                         for vid_info in pl_info['videos']:
                             v_url = vid_info.get('url') or f"https://www.youtube.com/watch?v={vid_info['id']}"
-                            # Verifica cancelamento ou status aqui se necessário
                             self._enqueue_video(v_url, pl_id, pl_title)
                 else:
                     self._enqueue_video(line)
@@ -90,7 +91,16 @@ class Processor:
             task = ProcessingTask(url, pl_id, pl_title)
             self.task_queue.put(task)
             
-            # Notifica UI que entrou na fila
+            # Registra no AppState como tarefa ativa (temporária)
+            self.app_state.add_active_task(task.uuid, {
+                'uuid': task.uuid,
+                'url': url,
+                'status': 'queued',
+                'title': 'Aguardando...',
+                'playlist_id': pl_id
+            })
+            
+            # Notifica UI (Legacy + AppState Event implícito no add_active_task)
             if self.on_task_queued:
                 wx.CallAfter(self.on_task_queued, task.uuid, task.url)
 
@@ -109,7 +119,8 @@ class Processor:
 
     def _process_task(self, task: ProcessingTask):
         try:
-            # 0. Notifica Início (Task Started)
+            # 0. Notifica Início
+            self.app_state.update_active_task(task.uuid, {'status': 'downloading'})
             if self.on_task_started:
                 wx.CallAfter(self.on_task_started, task.uuid)
 
@@ -126,6 +137,9 @@ class Processor:
             if self.on_metadata_fetched:
                 wx.CallAfter(self.on_metadata_fetched, task.uuid, task.video_id, task.title)
             
+            # Atualiza tarefa ativa com ID real
+            self.app_state.update_active_task(task.uuid, {'video_id': task.video_id, 'title': task.title})
+            
             self._notify_update(task.video_id, "Baixando Thumbnail...")
             
             # Download Thumbnail
@@ -134,19 +148,21 @@ class Processor:
             thumb_url = meta.get('thumbnail')
             
             if thumb_url and not os.path.exists(thumb_local_path):
+                # FIX: Ensure dir exists before download
+                os.makedirs(THUMBNAILS_DIR, exist_ok=True)
                 self.yt_manager.download_thumbnail(thumb_url, thumb_local_path)
             
-            # Se falhar ou não existir, deixar path vazio ou padrão
             final_thumb_path = thumb_local_path if os.path.exists(thumb_local_path) else ""
 
             self._notify_update(task.video_id, "Baixando Transcrição...")
             
-            # Salva metadados iniciais no banco
-            self.db_handler.add_video_entry({
+            # Prepara dados para AppState (que vai salvar no DB)
+            video_data = {
                 'id': task.video_id,
                 'url': task.url,
                 'title': task.title,
                 'duration': meta.get('duration'),
+                'duration_seconds': meta.get('duration_seconds'),
                 'upload_date': meta.get('upload_date'),
                 'thumbnail_path': final_thumb_path,
                 'playlist_id': task.playlist_id,
@@ -154,7 +170,13 @@ class Processor:
                 'channel_name': meta.get('channel_name'),
                 'added_at': meta.get('added_at'),
                 'status': 'processing'
-            })
+            }
+            
+            # CRITICAL FIX: Ensure UUID is passed to allow UI to promote the row
+            video_data['uuid'] = task.uuid
+
+            # Salva metadados iniciais
+            self.app_state.add_or_update_video(video_data)
 
             # 2. Transcrição
             transcript, source = self.yt_manager.get_transcript(task.video_id)
@@ -165,20 +187,40 @@ class Processor:
             # 3. Contagem de Tokens
             token_count, _ = count_tokens(transcript)
             
-            # 4. Salvar
-            self.db_handler.save_transcript(task.video_id, transcript)
-            self.db_handler.update_video_status(task.video_id, "completed", token_count)
+            # 4. Salvar Transcrição e Finalizar
+            # Transcrição é pesada, AppState não guarda em memória por padrão no _videos (só snippet).
+            # Mas _videos é só metadata. Transcripts table é separado.
+            # Precisamos salvar a transcrição. AppState não tem método save_transcript explícito na interface pública
+            # mostrada anteriormente, mas podemos usar o db_handler dele ou adicionar método.
+            # Vamos adicionar método aqui ou usar db_handler direto? 
+            # O ideal é AppState gerenciar. Por enquanto, acessamos o db_handler do app_state.
+            self.app_state.db_handler.save_transcript(task.video_id, transcript)
+            
+            # Atualiza status final
+            self.app_state.update_video_status(
+                task.video_id, 
+                "completed", 
+                token_count=token_count
+            )
+            
+            # Limpa active task pois virou video persistido
+            self.app_state.remove_active_task(task.uuid)
             
             self._notify_complete(task.video_id, task.title)
 
         except Exception as e:
             if task.video_id:
-                self.db_handler.update_video_status(task.video_id, "error")
+                self.app_state.update_video_status(task.video_id, "ERROR")
                 self._notify_error(task.video_id, str(e))
+                # Remove active task mesmo em erro, pois já está no DB com erro
+                self.app_state.remove_active_task(task.uuid)
             else:
+                # Erro cedo demais (antes do ID), mantém na active task com erro?
+                self.app_state.update_active_task(task.uuid, {'status': 'error', 'error': str(e)})
                 self._notify_error("UNKNOWN", str(e))
 
     def _notify_update(self, video_id, status):
+        # Legacy callback
         if self.on_task_update:
             wx.CallAfter(self.on_task_update, video_id, status)
 
@@ -192,8 +234,7 @@ class Processor:
 
     def export_batch(self, video_ids: List[str], format_type: str, output_path: str, progress_callback: Callable[[int, int, str], None] = None):
         """
-        Executa exportação em lote. Deve ser chamado em Thread separada.
-        progress_callback signature: (current_index, total, current_item_name)
+        Executa exportação em lote.
         """
         import zipfile
         
@@ -201,43 +242,38 @@ class Processor:
         
         try:
             if format_type == "markdown_single":
-                # Single MD File Stream
                 with open(output_path, 'w', encoding='utf-8') as f:
-                    # Write Header
-                    f.write(f"# Exportação ContextFlow\nData: {time.strftime('%Y-%m-%d %H:%M')}\n\n")
+                    f.write(ExportFormatter.get_single_markdown_header())
                     
                     for i, vid in enumerate(video_ids):
-                        meta = next((v for v in self.db_handler.get_all_videos() if v['id'] == vid), None)
+                        meta = self.app_state.get_video(vid)
                         if meta:
                             if progress_callback:
                                 wx.CallAfter(progress_callback, i, total, f"Exportando: {meta['title']}")
                             
-                            data = self.db_handler.get_transcript(vid)
+                            # Transcrição completa vem do DB
+                            t_data = self.app_state.db_handler.get_transcript(vid)
+                            full_text = t_data['full_text'] if t_data else ""
                             
-                            f.write(f"---\n\n# {meta['title']}\n")
-                            f.write(f"**URL:** {meta['url']}\n")
-                            f.write(f"**Canal:** {meta.get('channel_name', '-')}\n")
-                            f.write(f"**Tokens:** {meta.get('token_count', 0)}\n\n")
-                            f.write(f"## Transcrição\n\n")
-                            f.write(data['full_text'] if data else "(Sem transcrição)\n")
-                            f.write("\n\n")
+                            md_content = ExportFormatter.format_video_markdown(meta, full_text)
+                            f.write(f"---\n\n{md_content}\n")
                             
             elif format_type == "zip":
                  with zipfile.ZipFile(output_path, 'w') as zf:
                     for i, vid in enumerate(video_ids):
-                        meta = next((v for v in self.db_handler.get_all_videos() if v['id'] == vid), None)
+                        meta = self.app_state.get_video(vid)
                         if meta:
                             if progress_callback:
                                 wx.CallAfter(progress_callback, i, total, f"Compactando: {meta['title']}")
                                 
-                            data = self.db_handler.get_transcript(vid)
+                            t_data = self.app_state.db_handler.get_transcript(vid)
+                            full_text = t_data['full_text'] if t_data else ""
                             
-                            safe_title = "".join([c for c in meta['title'] if c.isalnum() or c in (' ', '-', '_')]).strip()
-                            content = f"# {meta['title']}\n\n**URL:** {meta['url']}\n**Canal:** {meta.get('channel_name', '-')}\n\n## Transcrição\n\n{data['full_text'] if data else '(Sem transcrição)'}"
+                            md_content = ExportFormatter.format_video_markdown(meta, full_text)
+                            filename = f"{ExportFormatter.get_safe_filename(meta['title'])}.md"
                             
-                            zf.writestr(f"{safe_title}.md", content)
+                            zf.writestr(filename, md_content)
             
-            # Finish
             if progress_callback:
                 wx.CallAfter(progress_callback, total, total, "Concluído!")
                 

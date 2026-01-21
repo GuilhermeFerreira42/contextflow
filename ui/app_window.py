@@ -5,6 +5,7 @@ import threading
 import os
 from constants import APP_NAME, APP_VERSION
 from core.token_engine import get_encoder_info
+from core.app_state import AppState
 
 # Real implementations
 from ui.panel_grid import GridPanel
@@ -18,7 +19,10 @@ class AppWindow(wx.Frame):
     def __init__(self, parent, title=f"{APP_NAME} v{APP_VERSION}"):
         super().__init__(parent, title=title, size=(1280, 850))
         
-        self.db_handler = DatabaseHandler()
+        # Initialize App State Singleton
+        self.app_state = AppState()
+        self.db_handler = self.app_state.db_handler # Shortcut for compatibility if needed
+        
         self._init_ui()
         self.Maximize() # Inicia maximizado
         self.Show(True)
@@ -30,8 +34,8 @@ class AppWindow(wx.Frame):
         # 1. Main Splitter (Vertical: Sidebar | Workspace+Console)
         self.main_splitter = wx.SplitterWindow(self, style=wx.SP_BORDER | wx.SP_LIVE_UPDATE)
         
-        # 1.1 Sidebar (Left)
-        self.sidebar = Sidebar(self.main_splitter, self.on_sidebar_selection, self.on_sidebar_data_changed)
+        # 1.1 Sidebar (Left) - Inject AppState
+        self.sidebar = Sidebar(self.main_splitter, self.on_sidebar_selection, self.on_sidebar_data_changed, app_state=self.app_state)
 
         # 1.2 Right Area Container (will be a Splitter too)
         self.right_splitter = wx.SplitterWindow(self.main_splitter, style=wx.SP_BORDER | wx.SP_LIVE_UPDATE)
@@ -43,14 +47,15 @@ class AppWindow(wx.Frame):
         self.panel_console = ConsolePanel(self.right_splitter)
         
         # 4. Criar Abas do Notebook
-        # Aba 1: Grid de Dados
+        # Aba 1: Grid de Dados - Inject AppState
         # Passamos self.log_to_console como callback
         self.panel_grid = GridPanel(self.notebook, 
                                     on_data_changed=self.on_grid_data_changed,
-                                    log_callback=self.log_to_console)
+                                    log_callback=self.log_to_console,
+                                    app_state=self.app_state)
         
-        # Aba 2: Tabela: Vídeos (Nova Aba)
-        self.panel_table = PanelTable(self.notebook, on_selection_callback=self.on_table_selection)
+        # Aba 2: Tabela: Vídeos (Nova Aba) - Inject AppState
+        self.panel_table = PanelTable(self.notebook, on_selection_callback=self.on_table_selection, app_state=self.app_state)
         
         # Aba 3: Detalhes / Conteúdo
         self.panel_detail = DetailPanel(self.notebook)
@@ -114,20 +119,14 @@ class AppWindow(wx.Frame):
 
     def on_sidebar_selection(self, video_id):
         """Ao selecionar na árvore, focar na aba de Leitura e carregar."""
-        # Carrega dados
-        video_meta = None
-        all_v = self.db_handler.get_all_videos() 
-        for v in all_v:
-            if v['id'] == video_id:
-                video_meta = v
-                break
-        
-        transcript_data = self.db_handler.get_transcript(video_id)
+        # Carrega dados via AppState
+        video_meta = self.app_state.get_video(video_id)
+        transcript_data = self.app_state.db_handler.get_transcript(video_id)
         
         if video_meta and transcript_data:
             self.panel_detail.load_video(video_meta, transcript_data['full_text'])
             # Muda para a aba de conteúdo
-            self.notebook.SetSelection(1)
+            self.notebook.SetSelection(2) # Index 2 is Detail
             self.log_to_console(f"Visualizando: {video_meta.get('title')}", "NAV")
 
     def on_grid_data_changed(self):
@@ -142,19 +141,19 @@ class AppWindow(wx.Frame):
     def on_sidebar_data_changed(self, action=None, affected_ids=None):
         """Called when data is deleted from Sidebar."""
         
-        # Grid Update Strategy
+        # Grid Update Strategy - With AppState, maybe we don't need this explicit propagation 
+        # if GridPanel observes AppState? 
+        # But for now, we keep it to force reloads if observer implementation is pending or minimal.
+        
         if action in ["delete_video", "delete_playlist"] and affected_ids:
             # Surgical update
             if hasattr(self.panel_grid, "remove_items"):
                 self.panel_grid.remove_items(affected_ids)
             else:
-                # Fallback if method not exists yet
                 self.panel_grid.load_data()
         else:
-            # Fallback global reload
             self.panel_grid.load_data()
             
-        # Table always reloads for now (it's fast)
         self.panel_table.load_data()
 
     def on_exit(self, event):
@@ -166,25 +165,21 @@ class AppWindow(wx.Frame):
         event.Skip()
 
     def on_reprocess_errors(self, event):
-        """Busca vídeos com erro no DB e re-enfileira."""
-        # Obter IDs com erro
-        conn = self.db_handler._get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT url FROM videos WHERE status='ERROR'")
-        rows = cursor.fetchall()
-        conn.close()
+        """Busca vídeos com erro no AppState e re-enfileira."""
+        all_videos = self.app_state.get_all_videos()
+        error_urls = [v['url'] for v in all_videos if v.get('status') == 'ERROR']
         
-        if not rows:
+        if not error_urls:
             wx.MessageBox("Nenhum vídeo com erro encontrado.", "Info")
             return
             
-        urls = [r[0] for r in rows]
-        confirm = wx.MessageBox(f"Encontrados {len(urls)} vídeos com erro. Deseja tentar novamente?", "Confirmação", wx.YES_NO | wx.ICON_QUESTION)
+        confirm = wx.MessageBox(f"Encontrados {len(error_urls)} vídeos com erro. Deseja tentar novamente?", "Confirmação", wx.YES_NO | wx.ICON_QUESTION)
         
         if confirm == wx.YES:
             # Join URLs
-            text_block = "\n".join(urls)
-            # Envia para o processador (via GridPanel que tem a instância)
+            text_block = "\n".join(error_urls)
+            # Envia para o processador (via GridPanel que tem a instância OU AppState poderia ter método de retry)
+            # Mas a entrada de tasks está no GridPanel/Processor. Assumindo que GridPanel expõe método.
             self.panel_grid.txt_input.SetValue(text_block)
             self.panel_grid.on_click_process(None)
-            self.log_to_console(f"Reiniciando processamento de {len(urls)} itens.", "SYSTEM")
+            self.log_to_console(f"Reiniciando processamento de {len(error_urls)} itens.", "SYSTEM")

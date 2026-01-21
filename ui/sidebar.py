@@ -1,19 +1,26 @@
 
 # contextflow/ui/sidebar.py
 import wx
-from storage.db_handler import DatabaseHandler
 import collections
+from core.app_state import AppState
 
 class Sidebar(wx.Panel):
-    def __init__(self, parent, on_selection_callback, on_data_changed_callback=None):
+    def __init__(self, parent, on_selection_callback, on_data_changed_callback=None, app_state: AppState = None):
         super().__init__(parent)
         self.on_selection = on_selection_callback
         self.on_data_changed = on_data_changed_callback
-        self.db_handler = DatabaseHandler()
+        self.app_state = app_state # Expected to be injected
+        
+        # If not injected (legacy fallback?), get singleton
+        if not self.app_state:
+            self.app_state = AppState()
+            
         self._init_ui()
+        
+        # Register Observer
+        self.app_state.register_observer(self._on_state_change)
+        
         self.load_history()
-
-
 
     def _init_ui(self):
         # Re-implementing init to bind right click
@@ -45,6 +52,20 @@ class Sidebar(wx.Panel):
         self.Bind(wx.EVT_TREE_SEL_CHANGED, self.on_tree_selection, self.tree)
         # Right Click
         self.tree.Bind(wx.EVT_TREE_ITEM_MENU, self.on_right_click)
+
+    def _on_state_change(self, event_type, data):
+        """Callback do AppState Observer."""
+        # Refresh tree on relevant changes
+        relevant_events = ['VIDEO_UPDATED', 'VIDEOS_DELETED', 'PLAYLIST_DELETED', 'TASK_COMPLETE'] 
+        # TASK_COMPLETE is usually same as VIDEO_UPDATED (status: completed)
+        
+        # Optimization: We could be smarter, but reloading tree is fast enough for <1000 items usually
+        # But let's filter a bit.
+        if event_type in ['VIDEOS_DELETED', 'PLAYLIST_DELETED', 'VIDEO_UPDATED']:
+             # Use CallAfter just in case, though notify uses it already.
+             # Refreshing tree might lose expansion state...
+             # For now, let's keep simple: full reload.
+             self.load_history(self.search_ctrl.GetValue())
 
     def on_right_click(self, event):
         item = event.GetItem()
@@ -99,11 +120,8 @@ class Sidebar(wx.Panel):
             video_id = data["id"]
             dlg = wx.MessageDialog(self, "Tem certeza que deseja excluir este vídeo?", "Confirmar Exclusão", wx.YES_NO | wx.ICON_QUESTION)
             if dlg.ShowModal() == wx.ID_YES:
-                self.db_handler.delete_video(video_id)
-                self.load_history() 
-                if self.on_data_changed:
-                    # Passa action e affected_ids
-                    self.on_data_changed("delete_video", [video_id])
+                self.app_state.delete_videos([video_id]) 
+                # Observer will trigger refresh
             dlg.Destroy()
 
     def on_delete_playlist(self, event):
@@ -112,25 +130,16 @@ class Sidebar(wx.Panel):
         if data and data.get("type") == "playlist":
             pid = data["id"]
             
-            # Fetch affected videos BEFORE deletion
-            affected_ids = self.db_handler.get_video_ids_for_playlist(pid)
-            
             dlg = wx.MessageDialog(self, "Tem certeza que deseja excluir esta Playlist e TODOS os seus vídeos?", "Confirmar Exclusão em Massa", wx.YES_NO | wx.ICON_WARNING)
             if dlg.ShowModal() == wx.ID_YES:
-                self.db_handler.delete_playlist(pid)
-                self.load_history()
-                if self.on_data_changed:
-                    # Passa action e affected_ids
-                    self.on_data_changed("delete_playlist", affected_ids)
+                self.app_state.delete_playlist(pid)
+                # Observer refresh
             dlg.Destroy()
 
     def on_delete_orphans(self, event):
         dlg = wx.MessageDialog(self, "Tem certeza que deseja excluir TODOS os vídeos sem playlist (Individuais)?", "Confirmar Exclusão em Massa", wx.YES_NO | wx.ICON_WARNING)
         if dlg.ShowModal() == wx.ID_YES:
-            deleted_ids = self.db_handler.delete_orphaned_videos()
-            self.load_history()
-            if self.on_data_changed and deleted_ids:
-                self.on_data_changed("delete_playlist", deleted_ids) # Reuse delete_playlist logic to remove list of IDs
+            self.app_state.delete_orphans()
         dlg.Destroy()
 
     def on_copy_link(self, event):
@@ -156,8 +165,11 @@ class Sidebar(wx.Panel):
         self.load_history()
 
     def load_history(self, filter_text=""):
+        # Save expansion state if possible? Too complex for now.
         self.tree.DeleteChildren(self.root)
-        videos = self.db_handler.get_all_videos()
+        
+        # Use AppState
+        videos = self.app_state.get_all_videos()
         
         # Filter if needed
         if filter_text:
@@ -213,18 +225,21 @@ class Sidebar(wx.Panel):
         
         if data['type'] == 'video':
             ids = [data['id']]
-            # Try to get title for filename
-            v = next((x for x in self.db_handler.get_all_videos() if x['id'] == data['id']), None)
+            v = self.app_state.get_video(data['id'])
             if v:
-                safe_title = "".join([c for c in v['title'] if c.isalnum() or c in (' ', '-', '_')]).strip()
-                default_name = safe_title
+                from core.export_formatter import ExportFormatter
+                default_name = ExportFormatter.get_safe_filename(v['title'])
+                
         elif data['type'] == 'playlist':
-            ids = self.db_handler.get_video_ids_for_playlist(data['id'])
+            # Get videos from AppState memory
+            all_v = self.app_state.get_all_videos()
+            ids = [x['id'] for x in all_v if x.get('playlist_id') == data['id']]
             default_name = f"playlist_{data['id']}"
+            
         elif data['type'] == 'folder' and data['id'] == 'orphans':
              # Get all orphans
-             all_videos = self.db_handler.get_all_videos()
-             ids = [v['id'] for v in all_videos if not v.get('playlist_id')]
+             all_v = self.app_state.get_all_videos()
+             ids = [v['id'] for v in all_v if not v.get('playlist_id')]
              default_name = "videos_individuais"
 
         if not ids:
@@ -254,12 +269,21 @@ class Sidebar(wx.Panel):
                 except:
                     pass
         
+        # Use Processor just to access run_export? 
+        # Ideally export logic should be in Service or AppState.
+        # But for now Processor has `export_batch`.
+        # Create a temp processor instance IS BAD for AppState?
+        # Processor __init__ creates new stuff.
+        # We should probably move export logic to AppState or dedicated service.
+        # But Processor needs to injected AppState.
+        
         from core.processor import Processor
-        proc = Processor()
+        proc = Processor(app_state=self.app_state)
         
         import threading
         t = threading.Thread(target=proc.export_batch, args=(ids, fmt, path, update_progress), daemon=True)
         t.start()
+
     def on_tree_selection(self, event):
         item = event.GetItem()
         if not item.IsOk() or item == self.root: return

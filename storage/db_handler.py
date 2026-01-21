@@ -99,19 +99,26 @@ class DatabaseHandler:
                     status=excluded.status,
                     thumbnail_path=excluded.thumbnail_path,
                     duration=excluded.duration
+                    -- created_at e added_at NÃO são atualizados
             ''', (
                 video_data['id'],
                 video_data['url'],
                 video_data.get('title', 'Unknown'),
-                video_data.get('channel_name', video_data.get('channel', '')), # Handle both keys
+                video_data.get('channel_name', video_data.get('channel', '')), 
+                # Salva duration formatada ou raw? O ideal é salvar raw se possível, mas aqui estamos mantendo compatibilidade
+                # Se vier 'duration' formatado (str), salva. Se vier int, formata?
+                # O youtube_manager manda formatado em 'duration'.
+                # Vamos salvar o que vier em 'duration'.
                 video_data.get('duration', 0),
                 video_data.get('upload_date', ''),
                 video_data.get('thumbnail_path', ''),
                 video_data.get('playlist_id'),
                 video_data.get('playlist_title'),
                 video_data.get('status', 'pending'),
+                # created_at (novo registro)
                 datetime.datetime.now().isoformat(),
-                video_data.get('added_at', '')
+                # added_at (novo registro) - Se vier no video_data, usa, senão usa agora
+                video_data.get('added_at') or datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
             ))
             conn.commit()
         except Exception as e:

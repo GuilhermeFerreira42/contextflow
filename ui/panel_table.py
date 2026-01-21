@@ -4,22 +4,30 @@ import wx.dataview
 import os
 import datetime
 import webbrowser
-from storage.db_handler import DatabaseHandler
-from core.processor import Processor
+from core.app_state import AppState
+from core.export_formatter import ExportFormatter
 
 class PanelTable(wx.Panel):
-    def __init__(self, parent, on_selection_callback=None):
+    def __init__(self, parent, on_selection_callback=None, app_state: AppState = None):
         super().__init__(parent)
-        self.db_handler = DatabaseHandler()
         self.on_selection = on_selection_callback
+        self.app_state = app_state or AppState()
         
-        # Processor para resumos (sob demanda)
-        self.processor = Processor()
+        # Processor se for necessário (mas idealmente via AppState ou Service)
+        from core.processor import Processor
+        self.processor = Processor(app_state=self.app_state)
         
         self.video_map = {} # Map index or object to video data
         
         self._init_ui()
+        
+        self.app_state.register_observer(self._on_state_change)
+        
         self.load_data()
+
+    def _on_state_change(self, event_type, data):
+        if event_type in ['VIDEO_UPDATED', 'VIDEOS_DELETED', 'TASK_COMPLETE']:
+            self.load_data()
 
     def _init_ui(self):
         main_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -117,8 +125,8 @@ class PanelTable(wx.Panel):
 
     def load_data(self):
         self.dv_ctrl.DeleteAllItems()
-        self.all_videos = self.db_handler.get_all_videos()
-        self.all_videos.sort(key=lambda x: x['created_at'], reverse=True)
+        self.all_videos = self.app_state.get_all_videos()
+        self.all_videos.sort(key=lambda x: x.get('created_at') or "", reverse=True)
         self.apply_filter()
 
     def apply_filter(self):
@@ -130,7 +138,7 @@ class PanelTable(wx.Panel):
         else:
             self.filtered_videos = [
                 v for v in self.all_videos 
-                if query in (v['title'] or "").lower() or 
+                if query in (v.get('title') or "").lower() or 
                    query in (v.get('channel_name') or "").lower()
             ]
             
@@ -243,29 +251,18 @@ class PanelTable(wx.Panel):
             return
 
         # Fetch FULL transcripts for these videos
-        # Optimization: Fetch one by one or batch?
-        # db_handler.get_transcript(vid) returns full dict
         
-        md_content = f"# Exportação ContextFlow\nData: {datetime.datetime.now()}\n\n"
+        md_content = ExportFormatter.get_single_markdown_header()
         
         for v in videos:
             v_id = v['id']
-            full_data = self.db_handler.get_transcript(v_id)
+            full_data = self.app_state.db_handler.get_transcript(v_id)
             
             full_text = ""
             if full_data and full_data.get('full_text'):
                 full_text = full_data['full_text']
-            else:
-                full_text = "(Transcrição não disponível)"
-                
-            md_content += f"## {v['title']}\n"
-            md_content += f"- **Canal**: {v.get('channel_name') or '-'}\n"
-            md_content += f"- **URL**: {v.get('url')}\n"
-            md_content += f"- **Duração**: {self.format_duration(v.get('duration'))}\n\n"
-            md_content += "### Resumo\n"
-            md_content += f"{v.get('summary_text') or 'N/A'}\n\n"
-            md_content += "### Transcrição Completa\n"
-            md_content += f"{full_text}\n"
+            
+            md_content += ExportFormatter.format_video_markdown(v, full_text)
             md_content += "\n---\n\n"
             
         with wx.FileDialog(self, "Salvar Markdown", wildcard="Markdown (*.md)|*.md",
