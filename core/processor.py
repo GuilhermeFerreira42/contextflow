@@ -7,6 +7,7 @@ import wx
 import os
 import uuid
 import random
+import logging
 from typing import List, Callable, Dict, Any, Optional
 
 from services.youtube_manager import YouTubeManager
@@ -14,6 +15,8 @@ from core.token_engine import count_tokens
 from core.app_state import AppState
 from core.export_formatter import ExportFormatter
 from constants import THUMBNAILS_DIR
+
+logger = logging.getLogger("contextflow.processor")
 
 class ProcessingTask:
     def __init__(self, url: str, playlist_id: str = None, playlist_title: str = None):
@@ -120,11 +123,13 @@ class Processor:
     def _process_task(self, task: ProcessingTask):
         try:
             # 0. Notifica Início
+            logger.info(f"Starting task for UUID: {task.uuid} (URL: {task.url})")
             self.app_state.update_active_task(task.uuid, {'status': 'downloading'})
             if self.on_task_started:
                 wx.CallAfter(self.on_task_started, task.uuid)
 
             # 1. Metadados
+            logger.info(f"Fetching metadata for {task.url}...")
             meta = self.yt_manager.get_video_metadata(task.url)
             
             if meta['status'] == 'error':
@@ -132,6 +137,8 @@ class Processor:
 
             task.video_id = meta.get('id')
             task.title = meta.get('title')
+            
+            logger.info(f"Metadata identified: [{task.video_id}] {task.title}")
 
             # Notifica ID real descoberto
             if self.on_metadata_fetched:
@@ -148,13 +155,18 @@ class Processor:
             thumb_url = meta.get('thumbnail')
             
             if thumb_url and not os.path.exists(thumb_local_path):
+                logger.info(f"Downloading thumbnail for {task.video_id}...")
                 # FIX: Ensure dir exists before download
                 os.makedirs(THUMBNAILS_DIR, exist_ok=True)
-                self.yt_manager.download_thumbnail(thumb_url, thumb_local_path)
+                if self.yt_manager.download_thumbnail(thumb_url, thumb_local_path):
+                     logger.info(f"Thumbnail saved to {thumb_local_path}")
+                else:
+                     logger.warning(f"Failed to save thumbnail for {task.video_id}")
             
             final_thumb_path = thumb_local_path if os.path.exists(thumb_local_path) else ""
 
             self._notify_update(task.video_id, "Baixando Transcrição...")
+            logger.info(f"Fetching transcript for {task.video_id}...")
             
             # Prepara dados para AppState (que vai salvar no DB)
             video_data = {
@@ -183,17 +195,14 @@ class Processor:
             
             if not transcript:
                 raise Exception("Transcrição indisponível")
+            
+            logger.info(f"Transcript fetched via {source}. Length: {len(transcript)} chars.")
 
             # 3. Contagem de Tokens
             token_count, _ = count_tokens(transcript)
+            logger.info(f"Tokens counted: {token_count}")
             
             # 4. Salvar Transcrição e Finalizar
-            # Transcrição é pesada, AppState não guarda em memória por padrão no _videos (só snippet).
-            # Mas _videos é só metadata. Transcripts table é separado.
-            # Precisamos salvar a transcrição. AppState não tem método save_transcript explícito na interface pública
-            # mostrada anteriormente, mas podemos usar o db_handler dele ou adicionar método.
-            # Vamos adicionar método aqui ou usar db_handler direto? 
-            # O ideal é AppState gerenciar. Por enquanto, acessamos o db_handler do app_state.
             self.app_state.db_handler.save_transcript(task.video_id, transcript)
             
             # Atualiza status final
@@ -206,9 +215,11 @@ class Processor:
             # Limpa active task pois virou video persistido
             self.app_state.remove_active_task(task.uuid)
             
+            logger.info(f"Task completed successfully: {task.video_id}")
             self._notify_complete(task.video_id, task.title)
 
         except Exception as e:
+            logger.error(f"Task failed for UUID {task.uuid}: {e}")
             if task.video_id:
                 self.app_state.update_video_status(task.video_id, "ERROR")
                 self._notify_error(task.video_id, str(e))

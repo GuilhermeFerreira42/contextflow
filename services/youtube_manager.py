@@ -259,19 +259,34 @@ class YouTubeManager:
         return {}
 
     def download_thumbnail(self, url: str, save_path: str) -> bool:
-        """Baixa e salva thumbnail."""
-        try:
-            # Garantir que diretório existe
-            os.makedirs(os.path.dirname(save_path), exist_ok=True)
-            
-            resp = requests.get(url, headers=self.headers, stream=True, timeout=10)
-            if resp.status_code == 200:
-                with open(save_path, 'wb') as f:
-                    for chunk in resp.iter_content(1024):
-                        f.write(chunk)
-                return True
-            else:
-                logger.error(f"Thumbnail request failed: {resp.status_code}")
-        except Exception as e:
-            logger.error(f"Thumbnail download failed: {e}")
+        """Baixa e salva thumbnail, convertendo para JPG real via Pillow."""
+        from PIL import Image
+        from io import BytesIO
+
+        # Lista de tentativas: URL original (geralmente maxres) -> hqdefault (fallback)
+        urls_to_try = [url]
+        if "maxresdefault" in url:
+            urls_to_try.append(url.replace("maxresdefault", "hqdefault"))
+        
+        for target_url in urls_to_try:
+            try:
+                # Garantir que diretório existe
+                os.makedirs(os.path.dirname(save_path), exist_ok=True)
+                
+                resp = requests.get(target_url, headers=self.headers, stream=True, timeout=10)
+                if resp.status_code == 200:
+                    # Carrega na memória
+                    img_data = BytesIO(resp.content)
+                    
+                    # Abre e converte
+                    with Image.open(img_data) as img:
+                        img = img.convert("RGB") # Remove Alpha se houver (WebP/PNG)
+                        img.save(save_path, "JPEG", quality=90)
+                    
+                    return True
+                else:
+                    logger.warning(f"Thumbnail request failed ({resp.status_code}) for {target_url}")
+            except Exception as e:
+                logger.error(f"Thumbnail download failed for {target_url}: {e}")
+        
         return False

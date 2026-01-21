@@ -41,3 +41,34 @@ class ConsolePanel(wx.Panel):
         formatted_msg = f"[{timestamp}] [{level}] {message}\n"
         
         self.txt_log.AppendText(formatted_msg)
+
+import logging
+class WxLogHandler(logging.Handler):
+    """
+    Handler customizado do logging que escreve no TextCtrl da GUI.
+    """
+    def __init__(self, text_ctrl):
+        super().__init__()
+        self.text_ctrl = text_ctrl
+        
+    def emit(self, record):
+        msg = self.format(record)
+        # Garante que vai para a main thread
+        if wx.GetApp():
+             # Precisa acessar o método log do painel pai OU escrever direto?
+             # Vamos escrever direto ou chamar log?
+             # O log method do ConsolePanel formata de novo.
+             # Vamos chamar direto o append para evitar duplo timestamp se o formatter padrão já tiver.
+             # Mas aqui vamos usar o Panel.log para consistência se possível, 
+             # mas Panel.log espera mensagem crua.
+             # Vamos extrair a mensagem e chamar ConsolePanel.log
+             
+             # Melhor: Vamos fazer o handler escrever direto, já formatado pelo logging system
+             wx.CallAfter(self._write, msg + "\n")
+
+    def _write(self, msg):
+        try:
+            if self.text_ctrl:
+                self.text_ctrl.AppendText(msg)
+        except:
+            pass

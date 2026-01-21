@@ -17,6 +17,27 @@ class ContextFlowApp(wx.App):
         
         self.frame = AppWindow(None)
         self.SetTopWindow(self.frame)
+
+        # --- Logging Setup ---
+        import logging
+        from ui.panel_console import WxLogHandler
+        
+        # Pega o logger raiz
+        root_logger = logging.getLogger()
+        root_logger.setLevel(logging.INFO)
+        
+        # Cria o handler apontando para o TextCtrl do Console
+        # AppWindow -> panel_console -> txt_log
+        if hasattr(self.frame, 'panel_console'):
+            handler = WxLogHandler(self.frame.panel_console.txt_log)
+            
+            # Formatter simples
+            formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(name)s: %(message)s', datefmt='%H:%M:%S')
+            handler.setFormatter(formatter)
+            
+            root_logger.addHandler(handler)
+            logging.info("Logging system initialized and connected to GUI.")
+
         return True
 
 if __name__ == '__main__':
