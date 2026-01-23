@@ -121,7 +121,113 @@ Esses prompts foram desenhados incorporando as **correções de segurança** (ar
 
 ---
 
-### 📦 Fase 6: Personalização e Persistência
+### 📋 User Stories - Fase 6
+
+Entendido! O ajuste faz todo o sentido: a célula expande para dar conforto visual, mas mantém um **limite de altura com scroll interno** para não quebrar a navegação da tabela inteira.
+
+Aqui está a **US01** atualizada com o novo critério de aceite para você registrar:
+
+---
+
+#### **US01 - Leitura Ágil (Expansão e Scroll)**
+
+> **Como** usuário do ContextFlow,
+> **quero** dar um duplo clique em uma célula de texto longo para que ela se expanda instantaneamente até um limite confortável com scroll interno,
+> **para que** eu possa conferir um detalhe rápido sem precisar mudar de aba ou arrastar bordas manualmente.
+
+* **Critérios de Aceite:**
+* O duplo clique deve alternar entre "Tamanho Padrão" e "Tamanho Expandido (Max-Height)".
+* O scroll deve ser funcional dentro da célula expandida.
+* O comando de "Restaurar Padrões" deve recolher todas as células expandidas.
+
+
+#### **US02 - Personalização de Visualização (Colunas)**
+
+> **Como** usuário,
+> **quero** escolher quais colunas vejo e em qual ordem elas aparecem,
+> **para que** eu possa focar apenas nas informações que importam para o meu fluxo de trabalho (ex: ocultar a coluna 'Canal' e priorizar 'Resumo').
+
+* **Critério de Aceite:** O sistema deve salvar a preferência de ordenação e visibilidade durante a sessão.
+
+#### **US03 - Resumo em Lote (Bulk Action)**
+
+> **Como** criador de conteúdo,
+> **quero** selecionar vários vídeos e clicar em um único botão "Resumir",
+> **para que** eu não precise solicitar o resumo individualmente para cada novo vídeo adicionado.
+
+* **Critério de Aceite:** Deve aparecer um modal de confirmação dizendo: "Resumindo [X] vídeos...". O processo deve ser assíncrono para não travar a interface.
+
+#### **US04 - Gatilho de Resumo Individual (Link Dinâmico)**
+
+> **Como** usuário,
+> **quero** clicar diretamente em um link "Clique em Resumir" dentro da tabela,
+> **para que** o resumo daquele vídeo específico comece imediatamente sem eu precisar selecionar checkboxes.
+
+* **Critério de Aceite:** A célula deve exibir um estado de "Carregando..." enquanto a IA processa o texto e atualizar automaticamente ao finalizar.
+
+Perfeito, os requisitos ficaram bem mais robustos. Essa US05 agora cobre toda a "memória" e restauração da interface.
+
+Aqui está a atualização da **US05** e a organização das **Ações de Interface**, já prevendo a criação do menu **Exibir** ou o **Menu de Contexto** (botão direito), conforme você sugeriu:
+
+---
+
+### 📋 User Stories - Fase 6 (Atualizada)
+
+#### **US05 - Ordenação, Índice e Restauração de Fábrica**
+
+> **Como** usuário com uma grande biblioteca de vídeos,
+> **quero** poder ordenar a tabela por qualquer coluna e ter um índice fixo de adição,
+> **para que** eu organize meu estudo e consiga voltar à ordem original de importação sempre que desejar.
+
+* **Critérios de Aceite:**
+* **Índice de Adição:** A tabela deve conter uma coluna fixa de ID/Índice (ex: `[#]`) que representa a ordem cronológica em que os vídeos foram inseridos.
+* **Ordenação Total:** Todos os cabeçalhos de coluna (Título, Data, Canal, etc.) devem ser clicáveis para ordenar de A-Z ou Z-A.
+* **Botão "Restaurar Padrões":** Deve existir uma função que, ao ser acionada, resete simultaneamente:
+1. A **ordem** dos vídeos (volta para o índice de adição).
+2. A **largura** das colunas para o padrão inicial.
+3. A **visibilidade** (exibe todas as colunas ocultas).
+4. A **posição** das colunas (caso tenham sido reordenadas via drag-and-drop).
+
+---
+
+## Fase 6: Refinamento de UX, Resumos e Controle de Exibição
+
+Nesta fase, o foco é transformar a aba de conteúdo em uma ferramenta de alta produtividade, permitindo personalização total da visualização e automação de resumos. 
+
+### 1. Visualização Dinâmica e Leitura (UX/UI)
+
+* [ ] **Expansão via Duplo Clique:** Implementar evento de `Double-Click` nas células de "Transcrição" e "Resumo".
+* *Ação:* A linha expande instantaneamente para o `max-height` (tamanho máximo configurado).
+
+
+* [ ] **Scroll Interno Inteligente:** Se o texto for maior que o `max-height` após a expansão, a célula deve habilitar o **scroll vertical**, mantendo o restante da tabela visível.
+* [ ] **Navegação para Aba 3:** Manter o comportamento de clique/seleção para abrir a aba dedicada de leitura imersiva.
+* [ ] **Reset de Layout Global:** Botão "Restaurar Padrões de Fábrica" para resetar larguras, visibilidade, ordem de colunas e tamanhos de linha.
+
+### 2. Gestão Avançada e Ordenação
+
+* [ ] **Índice de Adição Permanente:** Coluna fixa `[#]` para manter o registro da ordem original de importação.
+* [ ] **Engine de Ordenação Multi-coluna:** Cabeçalhos clicáveis para ordenar por qualquer critério, permitindo retornar ao padrão via coluna de Índice.
+* [ ] **Menu "Exibir" e Contexto:**
+* Menu superior para gerenciar visibilidade de colunas (Checkboxes).
+* Menu de contexto (Botão Direito) com opções: "Resumir este vídeo", "Expandir Célula" e "Restaurar Visualização".
+
+
+
+### 3. Integração de IA e Automação
+
+* [ ] **Resumo em Lote (Bulk):** Botão "Resumir" no topo processa todos os itens selecionados (com aviso de quantidade).
+* [ ] **Link de Ação Rápida:** Célula de resumo vazia exibe "Clique em Resumir" como um gatilho para processar apenas aquela linha.
+* [ ] **Atualização Reativa:** O texto do resumo deve "brotar" na célula assim que a IA finalizar, via sinal da thread de processamento.
+
+### 4. Usabilidade e Seleção
+
+* [ ] **Seleção em Massa:** Suporte a `Shift + Clique` e `Ctrl + A`.
+* [ ] **Drag-and-Drop:** Reordenação manual das colunas por arraste.
+
+---
+
+### 📦 Fase 7: Personalização e Persistência
 
 **Objetivo:** Permitir que o sistema "lembre" das preferências do usuário e ofereça controle total sobre a interface.
 
@@ -140,7 +246,7 @@ Esses prompts foram desenhados incorporando as **correções de segurança** (ar
 
 ---
 
-### 📦 Fase 7: Identidade Visual e Dark Mode Global
+### 📦 Fase 8: Identidade Visual e Dark Mode Global
 
 **Objetivo:** Estética "Productivity Tool" e suporte total a temas escuros.
 
