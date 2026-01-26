@@ -121,6 +121,112 @@ Esses prompts foram desenhados incorporando as **correções de segurança** (ar
 
 ---
 
+
+* * *
+
+Esta é a reestruturação completa do seu **`kanban.md`**, redesenhada para transformar o **ContextFlow** em uma ferramenta de análise inteligente e robusta. A Fase 5.5 agora serve como a fundação técnica (estabilidade e velocidade) para que a Fase 6 entregue a "mágica" da interface reativa que discutimos.
+
+---
+
+# 🗺️ Kanban de Desenvolvimento: ContextFlow (v2.0)
+
+## 📦 Fase 5.5: Estabilização & Performance (O Novo Core)
+
+**Objetivo:** Converter a interface estática em uma arquitetura reativa e virtualizada para suportar grandes volumes de dados sem latência.
+
+### 1. Virtualização da Grid (`Virtual Table`)
+
+* **Ação:** Substituir o carregamento direto da `wx.grid` pelo padrão `wx.grid.GridTableBase`.
+* **Roadmap:** A Grid deixará de armazenar dados. Ela passará a consultar o `AppState` apenas para as linhas visíveis na tela.
+* **Ganho:** Performance instantânea com 10 ou 10.000 vídeos.
+
+### 2. Desacoplamento via PubSub
+
+* **Ação:** Implementar `wx.lib.pubsub` para comunicação entre módulos.
+* **Roadmap:** O `Processor` emitirá eventos (ex: `VIDEO_DONE`). A Grid e o Painel de Resumo "escutam" e se atualizam sozinhos.
+* **Ganho:** Fim das dependências circulares e erros de "referência de objeto perdida".
+
+### 3. Otimização de Persistência (Zlib)
+
+* **Ação:** Implementar compressão `zlib` nas transcrições antes do `INSERT` no SQLite.
+* **Ganho:** Redução drástica no tamanho do `.db` e maior velocidade de I/O.
+
+---
+
+## 🧠 Fase 6: UX Reativa & Painel Analítico (A Nova Visão)
+
+**Objetivo:** Implementar a lógica de interface que "reage" ao conteúdo do vídeo e permite configurações de comportamento do usuário.
+
+### 1. Painel de Resumo Adaptativo
+
+* **User Story:** Como Analista, quero que o resumo apareça automaticamente ao clicar em um vídeo processado, para que eu não perca tempo abrindo janelas manuais.
+* **Técnico:** Implementar o `SplitterWindow` reativo que expande/colapsa baseado no campo `has_summary` do vídeo selecionado.
+
+### 2. Motor de Comportamento (Settings)
+
+* **Ação:** Criar no menu "Ferramentas" as opções de visualização:
+* **Modo Inteligente:** Abre resumo se existir conteúdo; fecha se estiver vazio.
+* **Modo Fixo:** Mantém o painel sempre aberto (placeholder "Aguardando").
+* **Modo Zen:** Mantém o painel oculto até comando manual.
+
+
+
+### 3. Integração de Log Unificado
+
+* **Técnico:** Mover o console de log para o rodapé (estilo IDE), permitindo que o usuário visualize o status do processamento sem perder o foco na análise do resumo.
+
+---
+
+## ⚡ Fase 7: Inteligência de Contexto (IA & Tags)
+
+**Objetivo:** Transformar texto bruto em insights categorizados.
+
+### 1. Provider Manager (OpenAI / Ollama / Local)
+
+* **Ação:** Criar interface abstrata para provedores de IA.
+* **Roadmap:** Suporte a chaves de API externas e conexão com modelos locais (Phi-3/Llama) via `requests` para o Ollama.
+
+### 2. Geração Automática de Tags
+
+* **Ação:** Prompt de sistema para extrair 3 a 5 tags de contexto por vídeo.
+* **UX:** Exibir essas tags como "Chips" coloridos na Grid Virtual.
+
+---
+
+## 🎨 Fase 8: Finalização & Dark Mode Profissional
+
+**Objetivo:** Padronização visual e polimento de exportação.
+
+* **Tema:** Aplicação do dicionário de cores `COLOR_BG` / `COLOR_FG` em todos os widgets personalizados.
+* **Exportação:** Sistema de "Exportação de Resumos Selecionados" em Markdown único ou ZIP.
+
+---
+
+# 🛠️ Planejamento Técnico: Sprint 5.5 (Aprofundado)
+
+### Arquitetura e Design
+
+* **Pattern:** **Observer (via PubSub)**. O `AppState` é o sujeito, e os painéis da UI são os observadores.
+* **Modelagem de Fluxo:**
+* **Assincronia:** O `Processor` mantém sua própria thread, mas agora se comunica exclusivamente via mensagens `pub.sendMessage`, garantindo segurança de thread na UI (`wx.CallAfter`).
+
+### Checklist de QA (Garantia de Qualidade)
+
+1. **Estresse:** Carregar 500 URLs de uma vez e realizar scroll rápido. A Grid não deve "piscar" ou travar.
+2. **Regressão:** Verificar se a troca de UUID por ID real durante o processamento continua refletindo na UI via PubSub.
+3. **Integridade:** Validar se a compressão `zlib` não altera caracteres especiais em transcrições de vídeos em português/outras línguas.
+
+---
+
+### Definition of Done (DoD) - Sprint 5.5
+
+* [ ] Código sem chamadas diretas entre `PanelA` e `PanelB`.
+* [ ] Grid Virtual implementada e lendo do `AppState`.
+* [ ] Banco de dados comprimindo transcrições automaticamente.
+* [ ] Memória RAM estável em < 150MB para listas grandes.
+
+* * * 
+
 ### 📋 User Stories - Fase 6
 
 Entendido! O ajuste faz todo o sentido: a célula expande para dar conforto visual, mas mantém um **limite de altura com scroll interno** para não quebrar a navegação da tabela inteira.
