@@ -17,7 +17,9 @@ class DatabaseHandler:
 
     def _init_db(self):
         """Cria as tabelas se não existirem."""
-        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        db_dir = os.path.dirname(self.db_path)
+        if db_dir:
+            os.makedirs(db_dir, exist_ok=True)
         conn = self._get_connection()
         cursor = conn.cursor()
         
@@ -35,7 +37,8 @@ class DatabaseHandler:
                 playlist_title TEXT,
                 token_count INTEGER DEFAULT 0,
                 status TEXT DEFAULT 'pending', 
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                added_at TEXT
             )
         ''')
 
@@ -48,6 +51,53 @@ class DatabaseHandler:
                 FOREIGN KEY (video_id) REFERENCES videos(id)
             )
         ''')
+
+        # Tabela ai_usage_log (Auditabilidade Financeira)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS ai_usage_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                video_id TEXT, -- Relacionamento fraco (sem FK restritiva)
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                model_name TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                input_hash TEXT NOT NULL,
+                prompt_checksum TEXT NOT NULL,
+                input_tokens INTEGER NOT NULL,
+                output_tokens INTEGER NOT NULL,
+                estimated_cost REAL NOT NULL,
+                actual_cost REAL,
+                billing_period TEXT NOT NULL,
+                queue_wait_ms INTEGER,
+                fetch_ms INTEGER,
+                llm_processing_ms INTEGER,
+                ui_render_ms INTEGER,
+                total_tti_ms INTEGER,
+                status TEXT NOT NULL
+            )
+        ''')
+
+        # Tabela ai_cache (Eficiência Operacional)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS ai_cache (
+                hash_key TEXT PRIMARY KEY,
+                response_json TEXT NOT NULL,
+                prompt_checksum TEXT NOT NULL,
+                model_version TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Tabela system_config (Persistência de Estados e Configurações)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS system_config (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_ai_log_hash ON ai_usage_log(input_hash)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_ai_log_video ON ai_usage_log(video_id)')
         
         conn.commit()
         conn.close()
@@ -282,5 +332,98 @@ class DatabaseHandler:
         except Exception as e:
             print(f"Erro ao deletar orfãos: {e}")
             return []
+        finally:
+            conn.close()
+
+    # --- AI Governance Extensions ---
+
+    def log_ai_usage(self, usage_data: Dict[str, Any]):
+        """Registra uma entrada de uso de IA para auditoria."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute('''
+                INSERT INTO ai_usage_log (
+                    video_id, model_name, provider, input_hash, prompt_checksum,
+                    input_tokens, output_tokens, estimated_cost, actual_cost, billing_period,
+                    queue_wait_ms, fetch_ms, llm_processing_ms, ui_render_ms, total_tti_ms, status
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                usage_data.get('video_id'),
+                usage_data.get('model_name'),
+                usage_data.get('provider'),
+                usage_data.get('input_hash'),
+                usage_data.get('prompt_checksum'),
+                usage_data.get('input_tokens', 0),
+                usage_data.get('output_tokens', 0),
+                usage_data.get('estimated_cost', 0.0),
+                usage_data.get('actual_cost'),
+                usage_data.get('billing_period'),
+                usage_data.get('queue_wait_ms'),
+                usage_data.get('fetch_ms'),
+                usage_data.get('llm_processing_ms'),
+                usage_data.get('ui_render_ms'),
+                usage_data.get('total_tti_ms'),
+                usage_data.get('status')
+            ))
+            conn.commit()
+        except Exception as e:
+            print(f"DB Error (log_ai_usage): {e}")
+        finally:
+            conn.close()
+
+    def get_ai_cache(self, hash_key: str) -> Optional[Dict[str, Any]]:
+        """Busca resposta no cache de IA."""
+        conn = self._get_connection()
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        try:
+            cursor.execute('SELECT * FROM ai_cache WHERE hash_key = ?', (hash_key,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+        finally:
+            conn.close()
+
+    def save_ai_cache(self, hash_key: str, response_json: str, prompt_checksum: str, model_version: str):
+        """Salva uma resposta no cache de IA."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute('''
+                INSERT INTO ai_cache (hash_key, response_json, prompt_checksum, model_version)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(hash_key) DO UPDATE SET
+                    response_json=excluded.response_json,
+                    prompt_checksum=excluded.prompt_checksum,
+                    model_version=excluded.model_version,
+                    created_at=CURRENT_TIMESTAMP
+            ''', (hash_key, response_json, prompt_checksum, model_version))
+            conn.commit()
+        except Exception as e:
+            print(f"DB Error (save_ai_cache): {e}")
+        finally:
+            conn.close()
+
+    def set_setting(self, key: str, value: Any):
+        """Salva uma configuração no banco."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute('''
+                INSERT INTO system_config (key, value) VALUES (?, ?)
+                ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP
+            ''', (key, str(value)))
+            conn.commit()
+        finally:
+            conn.close()
+
+    def get_setting(self, key: str) -> Optional[str]:
+        """Busca uma configuração no banco."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute('SELECT value FROM system_config WHERE key = ?', (key,))
+            row = cursor.fetchone()
+            return row[0] if row else None
         finally:
             conn.close()

@@ -52,13 +52,19 @@ class YouTubeManager:
             if match: return match.group(1)
         return None
 
-    def get_video_metadata(self, url: str) -> Dict[str, Any]:
+    def get_video_metadata(self, url: str, proxy: str = None) -> Dict[str, Any]:
         """Obtém metadados básicos sem baixar o vídeo."""
+        from constants import COOKIES_PATH
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
             'skip_download': True,
         }
+        if proxy:
+            ydl_opts['proxy'] = proxy
+        if os.path.exists(COOKIES_PATH):
+            ydl_opts['cookiefile'] = COOKIES_PATH
+
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
@@ -86,7 +92,7 @@ class YouTubeManager:
         except Exception as e:
             logger.error(f"Metadata extraction failed for {url}: {e}")
             video_id = self.extract_video_id(url)
-            return {'id': video_id, 'url': url, 'title': 'Metadata Error', 'status': 'error'}
+            return {'id': video_id, 'url': url, 'title': 'Metadata Error', 'status': 'error', 'error_msg': str(e)}
 
     def _format_duration(self, seconds: int) -> str:
         """Converte segundos para HH:MM:SS"""
@@ -95,7 +101,7 @@ class YouTubeManager:
         h, m = divmod(m, 60)
         return f"{h:02d}:{m:02d}:{s:02d}"
 
-    def get_transcript(self, video_id: str) -> Tuple[Optional[str], str]:
+    def get_transcript(self, video_id: str, proxy: str = None) -> Tuple[Optional[str], str]:
         """
         Tenta obter transcrição na seguinte ordem:
         1. API (Manual - PT)
@@ -106,7 +112,9 @@ class YouTubeManager:
         
         # 1. API - Tentativa Manual
         try:
-            # Tenta pegar lista de transcrições disponíveis
+            # Check proxies for requests if needed, but Transcript API is different.
+            # We don't have easy proxy support for youtube_transcript_api without global mock.
+            # For now focus on ytdlp fallback which is the main extractor.
             transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
             
             # Tenta encontrar manual created em PT
@@ -116,14 +124,14 @@ class YouTubeManager:
             except:
                 pass
 
-            # Tenta manual EN e traduz? Não, por enquanto só pega original
+            # Tenta manual EN
             try:
                  t = transcript_list.find_manually_created_transcript(['en'])
                  return self._clean_text(" ".join([i['text'] for i in t.fetch()])), "api_manual_en"
             except:
                 pass
                 
-            # Fallback para generated se não achou manual (via API)
+            # Fallback para generated PT
             try:
                 t = transcript_list.find_generated_transcript(['pt', 'pt-BR'])
                 return self._clean_text(" ".join([i['text'] for i in t.fetch()])), "api_auto_pt"
@@ -134,18 +142,17 @@ class YouTubeManager:
             logger.warning(f"YouTubeTranscriptApi initial check failed: {e}")
 
         # 2. Fallback via yt-dlp (Heavy methods)
-        # Tenta Auto PT
-        res, method = self._download_subtitles_fallback(video_id, langs=['pt', 'pt-BR'])
+        res, method = self._download_subtitles_fallback(video_id, langs=['pt', 'pt-BR'], proxy=proxy)
         if res: return res, f"ytdlp_{method}"
         
-        # Tenta Auto EN
-        res, method = self._download_subtitles_fallback(video_id, langs=['en'])
+        res, method = self._download_subtitles_fallback(video_id, langs=['en'], proxy=proxy)
         if res: return res, f"ytdlp_{method}"
 
         return None, "failed"
 
-    def _download_subtitles_fallback(self, video_id: str, langs: List[str] = None) -> Tuple[Optional[str], str]:
+    def _download_subtitles_fallback(self, video_id: str, langs: List[str] = None, proxy: str = None) -> Tuple[Optional[str], str]:
         if langs is None: langs = ["pt", "pt-BR", "en"]
+        from constants import COOKIES_PATH
         
         url = f"https://www.youtube.com/watch?v={video_id}"
         ydl_opts = {
@@ -156,6 +163,11 @@ class YouTubeManager:
             'subformat': 'json3',
             'quiet': True
         }
+        if proxy:
+            ydl_opts['proxy'] = proxy
+        if os.path.exists(COOKIES_PATH):
+            ydl_opts['cookiefile'] = COOKIES_PATH
+
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
@@ -180,7 +192,8 @@ class YouTubeManager:
                     target_url = find_url(auto_subs, langs)
                 
                 if target_url:
-                    resp = requests.get(target_url, headers=self.headers)
+                    proxies_dict = {"http": proxy, "https": proxy} if proxy else None
+                    resp = requests.get(target_url, headers=self.headers, proxies=proxies_dict)
                     if resp.status_code == 200:
                         return self._clean_downloaded_subs(resp.text), "fallback_ytdlp"
         except Exception as e:
@@ -224,8 +237,8 @@ class YouTubeManager:
             
             # Se tiver cara de JSON mas falhou o load, tenta limpar chaves
             if '{' in text and '}' in text:
-                 text = re.sub(r'[{:"},]', ' ', text)
-                 text = re.sub(r'wireMagic|pens|wsWinStyles|wpWinPositions|events|tStartMs|dDurationMs|utf8|acAsrConf', '', text)
+                text = re.sub(r'[{:"},]', ' ', text)
+                text = re.sub(r'wireMagic|pens|wsWinStyles|wpWinPositions|events|tStartMs|dDurationMs|utf8|acAsrConf', '', text)
             
             lines = [l.strip() for l in text.split('\n') if l.strip()]
             clean_lines = [l for l in lines if not re.match(r'^\d+$', l) and '-->' not in l]
@@ -242,6 +255,8 @@ class YouTubeManager:
             'quiet': True,
             'no_warnings': True,
         }
+        # For playlist info, we don't strictly require proxy yet but it's good practice
+        # However, for simplicity let's keep it basic unless user requests playlist scaling
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
@@ -258,7 +273,7 @@ class YouTubeManager:
             logger.error(f"Playlist info extraction failed: {e}")
         return {}
 
-    def download_thumbnail(self, url: str, save_path: str) -> bool:
+    def download_thumbnail(self, url: str, save_path: str, proxy: str = None) -> bool:
         """Baixa e salva thumbnail, convertendo para JPG real via Pillow."""
         from PIL import Image
         from io import BytesIO
@@ -268,12 +283,14 @@ class YouTubeManager:
         if "maxresdefault" in url:
             urls_to_try.append(url.replace("maxresdefault", "hqdefault"))
         
+        proxies_dict = {"http": proxy, "https": proxy} if proxy else None
+
         for target_url in urls_to_try:
             try:
                 # Garantir que diretório existe
                 os.makedirs(os.path.dirname(save_path), exist_ok=True)
                 
-                resp = requests.get(target_url, headers=self.headers, stream=True, timeout=10)
+                resp = requests.get(target_url, headers=self.headers, stream=True, timeout=10, proxies=proxies_dict)
                 if resp.status_code == 200:
                     # Carrega na memória
                     img_data = BytesIO(resp.content)

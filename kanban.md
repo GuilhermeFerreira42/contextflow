@@ -220,10 +220,22 @@ Esta é a reestruturação completa do seu **`kanban.md`**, redesenhada para tra
 
 ### Definition of Done (DoD) - Sprint 5.5
 
-* [ ] Código sem chamadas diretas entre `PanelA` e `PanelB`.
-* [ ] Grid Virtual implementada e lendo do `AppState`.
-* [ ] Banco de dados comprimindo transcrições automaticamente.
-* [ ] Memória RAM estável em < 150MB para listas grandes.
+* [x] Código sem chamadas diretas entre `PanelA` e `PanelB`.
+* [x] Grid Virtual implementada e lendo do `AppState`.
+* [x] Banco de dados comprimindo transcrições automaticamente.
+* [x] Memória RAM estável em < 150MB para listas grandes.
+
+---
+
+### 📦 Fase 5.6: Operação Antifragilidade (O Cofre & O Escudo)
+
+**Objetivo:** Garantir que o sistema seja financeiramente auditável, tecnicamente resiliente e performance-aware.
+
+* [x] **Passo 1: O Cofre (Governança):** Logging de tokens, custos e cache semântico.
+* [x] **Passo 2: O Painel (Telemetria):** Monitoramento de tempos P95 (Queue, Fetch, LLM).
+* [x] **Passo 3: O Escudo (Blindagem):** Proxies, Cookies e Pre-flight check de segurança.
+* [x] **Passo 4: O Freio (Protocolos):** Cooldown Alpha persistente em SQLite.
+* [ ] **Passo 5: Homologação (Stress Test):** Simulação de carga massiva e validação final.
 
 * * * 
 

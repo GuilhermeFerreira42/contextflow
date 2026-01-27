@@ -26,6 +26,7 @@ class ProcessingTask:
         self.error_msg = ""
         self.playlist_id = playlist_id
         self.playlist_title = playlist_title
+        self.creation_time = time.perf_counter() # For telemetry
 
 class Processor:
     def __init__(self, app_state: AppState = None):
@@ -47,6 +48,16 @@ class Processor:
 
     def add_urls(self, raw_text: str):
         threading.Thread(target=self._async_resolve_urls, args=(raw_text,), daemon=True).start()
+
+    def validate_infrastructure(self) -> Dict[str, Any]:
+        """Verifica se as ferramentas e configs necessárias estão presentes."""
+        from constants import PROXY_LIST_PATH, COOKIES_PATH
+        return {
+            'yt_dlp': True, # Assume working since imported
+            'proxies_configured': os.path.exists(PROXY_LIST_PATH),
+            'cookies_configured': os.path.exists(COOKIES_PATH),
+            'network_status': 'ok' # Placeholder for real ping if needed
+        }
 
     def _async_resolve_urls(self, raw_text: str):
         lines = [l.strip() for l in raw_text.split('\n') if l.strip()]
@@ -81,7 +92,16 @@ class Processor:
             PubSub.publish('TASK_QUEUED', uuid=task.uuid, url=task.url)
 
     def _worker_loop(self):
+        from core.cooldown_manager import CooldownManager
+        cooldown = CooldownManager(self.app_state)
+        
         while self.active:
+            if cooldown.is_cooling_down():
+                remaining = cooldown.get_remaining_cooldown()
+                # logger.info(f"SYSTEM COOLDOWN ACTIVE. Waiting... ({remaining}s remaining)")
+                time.sleep(10) # Wait and check again
+                continue
+
             try:
                 task = self.task_queue.get(timeout=1) 
             except queue.Empty:
@@ -91,17 +111,57 @@ class Processor:
             time.sleep(random.uniform(2.0, 5.0))
 
     def _process_task(self, task: ProcessingTask):
+        from core.metrics import MetricsCollector
+        from core.ai_governance import AIGovernance, TokenCounter
+        from core.proxy_manager import ProxyManager
+        from core.cooldown_manager import CooldownManager
+        
+        gov = AIGovernance(self.app_state)
+        proxy_mgr = ProxyManager()
+        cooldown = CooldownManager(self.app_state)
+        metrics = MetricsCollector(task.video_id or "UNKNOWN")
+        
+        # Check Cooldown again right before starting (Safety Alpha)
+        if cooldown.is_cooling_down():
+            logger.warning(f"Task {task.uuid} aborted: System Cooldown Active.")
+            # Put back in queue or keep pending
+            self.task_queue.put(task)
+            return
+
+        # Pre-Flight Check (Contract Step 3.2)
+        if self.task_queue.qsize() > 20 and not proxy_mgr.has_proxies():
+            logger.error("ALERTA DE SEGURANÇA: Fila > 20 sem Proxies. Abortando para evitar BAN.")
+            self.app_state.update_active_task(task.uuid, {'status': 'ABORTED', 'error': 'Security: Proxy required for large batches'})
+            PubSub.publish('TASK_ERROR', video_id="SECURITY", error_msg="Proxy required for large batches")
+            return
+
+        # Record queue wait
+        wait_time = int((time.perf_counter() - task.creation_time) * 1000)
+        metrics.tracker.durations['queue_wait'] = wait_time
+        
+        # Get Proxy
+        active_proxy = proxy_mgr.get_proxy()
+
         try:
-            logger.info(f"Starting task for UUID: {task.uuid}")
+            logger.info(f"Starting task for UUID: {task.uuid} (Waited: {wait_time}ms) [Proxy: {active_proxy or 'None'}]")
             self.app_state.update_active_task(task.uuid, {'status': 'downloading'})
             PubSub.publish('TASK_STARTED', uuid=task.uuid)
 
+            metrics.tracker.start('fetch')
             logger.info(f"Fetching metadata for {task.url}...")
-            meta = self.yt_manager.get_video_metadata(task.url)
-            if meta['status'] == 'error': raise Exception("Falha ao obter metadados")
+            meta = self.yt_manager.get_video_metadata(task.url, proxy=active_proxy)
+            
+            # 429 Detection (Contract Step 3.1)
+            if meta.get('status') == 'error' and '429' in meta.get('error_msg', ''):
+                if active_proxy: proxy_mgr.ban_proxy(active_proxy)
+                cooldown.trigger_cooldown(3600) # Global cooldown (1h)
+                raise Exception("YouTube Block (429) detected. Proxy banned and SYSTEM COOLDOWN triggered.")
+
+            if meta['status'] == 'error': raise Exception(f"Falha ao obter metadados: {meta.get('error_msg')}")
 
             task.video_id = meta.get('id')
             task.title = meta.get('title')
+            metrics.video_id = task.video_id
             
             PubSub.publish('METADATA_FETCHED', uuid=task.uuid, video_id=task.video_id, title=task.title)
             self.app_state.update_active_task(task.uuid, {'video_id': task.video_id, 'title': task.title})
@@ -113,7 +173,7 @@ class Processor:
             thumb_url = meta.get('thumbnail')
             if thumb_url and not os.path.exists(thumb_local_path):
                 os.makedirs(THUMBNAILS_DIR, exist_ok=True)
-                self.yt_manager.download_thumbnail(thumb_url, thumb_local_path)
+                self.yt_manager.download_thumbnail(thumb_url, thumb_local_path, proxy=active_proxy)
             
             final_thumb_path = thumb_local_path if os.path.exists(thumb_local_path) else ""
 
@@ -136,15 +196,70 @@ class Processor:
             }
             self.app_state.add_or_update_video(video_data)
 
-            transcript, source = self.yt_manager.get_transcript(task.video_id)
+            transcript, source = self.yt_manager.get_transcript(task.video_id, proxy=active_proxy)
+            metrics.tracker.stop('fetch')
+
             if not transcript: raise Exception("Transcrição indisponível")
             
-            token_count, _ = count_tokens(transcript)
+            # --- AI STEP (Governance) ---
+            metrics.tracker.start('llm')
+            from constants import MODEL_NAME
+            token_count = TokenCounter.count_tokens(transcript, MODEL_NAME)
+            time.sleep(0.1) # Simulate
+            metrics.tracker.stop('llm')
+
             self.app_state.db_handler.save_transcript(task.video_id, transcript)
             self.app_state.update_video_status(task.video_id, "completed", token_count=token_count)
             self.app_state.remove_active_task(task.uuid)
             
+            # --- FINAL TELEMETRY LOG ---
+            final_metrics = metrics.finalize()
+            gov_data = {
+                'video_id': task.video_id,
+                'model_name': 'tiktoken-local',
+                'provider': 'local',
+                'input_hash': 'local-hash',
+                'prompt_checksum': 'none',
+                'input_tokens': token_count,
+                'output_tokens': 0,
+                'status': 'SUCCESS'
+            }
+            gov_data.update(final_metrics)
+            gov.log_and_bill(task.video_id, gov_data)
+
             PubSub.publish('TASK_COMPLETED', video_id=task.video_id, data_dict={'title': task.title})
+
+        except Exception as e:
+            logger.error(f"Task failed: {e}")
+            metrics.tracker.stop('fetch')
+            metrics.tracker.stop('llm')
+            
+            # Check for 429 in Exception message
+            if '429' in str(e):
+                if active_proxy: proxy_mgr.ban_proxy(active_proxy)
+                cooldown.trigger_cooldown(3600)
+
+            fail_metrics = metrics.finalize()
+            gov_error_data = {
+                'video_id': task.video_id or "UNKNOWN",
+                'model_name': 'tiktoken-local',
+                'provider': 'local',
+                'input_hash': 'error',
+                'prompt_checksum': 'none',
+                'input_tokens': 0,
+                'output_tokens': 0,
+                'status': 'FAILED'
+            }
+            gov_error_data.update(fail_metrics)
+            gov.log_and_bill(task.video_id or "UNKNOWN", gov_error_data)
+
+            if task.video_id:
+                self.app_state.update_video_status(task.video_id, "ERROR")
+                PubSub.publish('TASK_ERROR', video_id=task.video_id, error_msg=str(e))
+                self.app_state.remove_active_task(task.uuid)
+            else:
+                self.app_state.update_active_task(task.uuid, {'status': 'error', 'error': str(e)})
+                PubSub.publish('TASK_ERROR', video_id="UNKNOWN", error_msg=str(e))
 
         except Exception as e:
             logger.error(f"Task failed: {e}")

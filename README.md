@@ -10,10 +10,11 @@
     *   **"Ana, a Engenheira de Prompt":** Precisa transcrever 50 vídeos de uma playlist, limpar o lixo (timestamps/intro) e saber exatamente quantos tokens isso vai custar antes de enviar para o GPT-4.
     *   **"Marcos, o Pesquisador de Dados":** Precisa de um banco de dados local pesquisável de conteúdos de vídeo sem depender de APIs instáveis ou interfaces web lentas.
 *   **Diferenciais:**
-    *   Foco em **Tokens** (Moeda da IA) e não apenas tempo.
-    *   Processamento em Batch (Lote) real com *thread* de fundo.
-    *   Interface Desktop Nativa (alta densidade de informação) vs Web Apps lentos.
-    *   Armazenamento SQLite Local (Privacidade e Persistência).
+    *   **Governança de IA:** Controle rigoroso de tokens e custos financeiros (O Cofre).
+    *   **Antifragilidade:** Blindagem contra bans do YouTube com proxies e cooldown (O Escudo/Freio).
+    *   **Telemetria P95:** Monitoramento exato de gargalos de rede e processamento (O Painel).
+    *   **Processamento em Lote:** Threading robusto com jitter e auditoria.
+    *   **Privacidade:** SQLite Local e exportação transparente.
 
 ---
 
@@ -23,28 +24,25 @@
 
 ```mermaid
 graph TD
-    User["Usuário"] -->|Cola URLs (Batch)| UI_Batch["UI: BatchPanel"]
+    User["Usuário"] -->|Cola URLs| UI_Batch["UI: BatchPanel"]
     UI_Batch -->|Enfileira| Processor["Core: Processor (Thread)"]
     
     subgraph Core System
-        Processor -->|Fetch Metadata| YT_Mgr["Service: YouTubeManager"]
-        YT_Mgr -->|yt-dlp / Requests| YouTube["YouTube (External)"]
+        Processor -->|Ref Check| Shield["Shield: ProxyManager"]
+        Processor -->|Brake| Brake["Brake: CooldownManager"]
         
-        Processor -->|Clean Text| YT_Mgr
-        Processor -->|Count Tokens| TokenEng["Core: TokenEngine"]
+        Processor -->|Fetch| YT_Mgr["Service: YouTubeManager"]
+        YT_Mgr -->|yt-dlp| YouTube["YouTube"]
         
-        Processor -->|Persist Data| DB["Storage: DatabaseHandler"]
+        Processor -->|Audit| Vault["Vault: AIGovernance"]
+        Processor -->|Metrics| Panel["Panel: Metrics (Telemetry)"]
+        
+        Processor -->|Persist| DB["Storage: DatabaseHandler"]
         DB -->|SQL| SQLite[("contextflow.db")]
-        DB -->|Save Img| FS_Thumbs["FileSys: /data/thumbs"]
     end
     
-    DB -->|Read Data| UI_Excel["UI: ExcelPanel (Grid)"]
-    DB -->|Read Details| UI_Detail["UI: DetailPanel"]
-    
-    subgraph Features "Dormant (Future)"
-        Scanner["Core: Scanner"]
-        Tree["Core: TreeLogic"]
-    end
+    DB -->|Read| UI_Excel["UI: ExcelPanel"]
+    Vault -->|Audit Logs| SQLite
 ```
 
 ### Stack Tecnológico
@@ -118,10 +116,10 @@ contextflow/
 
 ## 5. Requisitos Não Funcionais (RNFs)
 
-*   **RNF-001: Responsividade da UI**: Operações de rede (download/parse) **devem** ocorrer em thread separada ([core/processor.py](file:///c:/Users/Usuario/Desktop/pro/contextflow/core/processor.py)), nunca bloqueando a MainLoop do wxPython.
-*   **RNF-002: Resiliência a Falhas de Rede**: Se uma imagem ou vídeo falhar, o sistema não deve crashar. Deve registrar erro no Console e continuar o próximo item da fila.
-*   **RNF-003: Persistência de Estado**: Dados processados devem sobreviver ao reinício do app (SQLite).
-*   **RNF-004: Performance de Lista**: A Grid deve suportar centenas de linhas sem lag excessivo (uso de `wx.grid` vs controles nativos pesados).
+*   **RNF-001: Responsividade da UI**: Operações de rede (download/parse) **devem** ocorrer em thread separada, nunca bloqueando a MainLoop.
+*   **RNF-002: Resiliência Antifrágil**: O sistema deve sobreviver a erros 429, rotacionando proxies e entrando em cooldown preventivo se necessário.
+*   **RNF-003: Auditoria Financeira**: Todo uso de IA (mesmo simulado) deve ser logado com hash de entrada e custo estimado para garantir solvência.
+*   **RNF-004: Telemetria Granular**: O sistema deve capturar tempos P95 de fila, download e processamento para otimização futura.
 
 ---
 
@@ -226,9 +224,9 @@ python main.py
 
 ## 10. Limitações Conhecidas
 
-1.  **Bloqueio de IP:** Se você processar 500 vídeos em 1 minuto, o YouTube vai bloquear seu IP temporariamente ("HTTP 429"). O código tem headers "realistas" (`User-Agent` rotativo em [youtube_manager.py](file:///c:/Users/Usuario/Desktop/pro/contextflow/services/youtube_manager.py)), mas não tem proxy rotation.
-2.  **Thumbnails na Grid:** Por design (performance), a Grid mostra apenas o texto `[Imagem]` ou placeholder, para evitar carregar 100 bitmaps na thread principal de renderização. A imagem real aparece na aba "Leitura" ou Sidebar.
-3.  **Consumo de Memória:** O `wx.html2.WebView` (Edge/Chrome embedded) consome RAM considerável (100MB+ por instância).
+1.  **Dependência Externa (yt-dlp):** O YouTube muda o layout e pode quebrar a extração. **Ação:** Manter atualizado e usar Proxies/Cookies (implementados na v0.2.0-alpha).
+2.  **Thumbnails na Grid:** Mostra placeholders por performance. Renderização real na aba Detalhes.
+3.  **Consumo de Memória:** O carregamento de transcrições gigantes pode impactar a RAM se não houver virtualização da Grid (em andamento).
 
 ---
 

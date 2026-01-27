@@ -13,9 +13,13 @@ MODEL_NAME = "gpt-4o"
 # --- Paths ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 EXPORTS_DIR = os.path.join(BASE_DIR, "exports")
+CONFIG_DIR = os.path.join(BASE_DIR, "config")
 DATA_DIR = os.path.join(BASE_DIR, "data")
 THUMBNAILS_DIR = os.path.join(DATA_DIR, "thumbs")
 DB_PATH = os.path.join(DATA_DIR, "contextflow.db")
+AI_PRICES_PATH = os.path.join(CONFIG_DIR, "ai_prices.json")
+PROXY_LIST_PATH = os.path.join(CONFIG_DIR, "proxies.txt")
+COOKIES_PATH = os.path.join(BASE_DIR, "cookies.txt")
 
 # --- UI Colors (Dark Theme) ---
 COLOR_BG = wx.Colour(30, 30, 30)
