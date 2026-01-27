@@ -17,7 +17,25 @@
     - [ ] Adicionar compressão `zlib`.
     - [ ] Script de VACUUM.
 
-## 🔨 FASE 6: Insights e Resumos (PRÓXIMO)
+## 🛡️ FASE 5.6: Blindagem Operacional (EM ANDAMENTO)
+> **Meta:** Garantir sobrevivência (Extração) e solvência (Custo) antes da IA.
+
+- [ ] **[DOC] Estruturação**
+    - [x] Estratégia e Contratos (`docs/PHASE_5_6_*.md`).
+    - [x] Especificações Técnicas.
+- [ ] **[CORE] Blindagem da Extração**
+    - [ ] Sistema de Cookies Persistentes.
+    - [ ] Rotação de User-Agent.
+    - [ ] Detecção de 429 e Backoff Exponencial.
+- [ ] **[CORE] Governança de IA**
+    - [ ] Token Engine (`tiktoken`) integrada.
+    - [ ] Estimativa Prévia de Custo.
+    - [ ] Hash-based Caching (`ai_cache`).
+- [ ] **[OPS] Observabilidade**
+    - [ ] Métricas de TTI (Time To Insight).
+    - [ ] Logs de auditoria financeira.
+
+## 🔒 FASE 6: Insights e Resumos (BLOQUEADA)
 - [ ] **[IA] Integração Opcional**
     - [ ] Implementar chamadas de IA como "Plugin" que pode falhar sem quebrar o app.
     - [ ] Botão "Gerar Resumo" manual (sob demanda).

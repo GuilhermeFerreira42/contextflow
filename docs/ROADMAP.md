@@ -21,7 +21,22 @@
 
 ---
 
-## 🚧 FASE 6: Insights e Valor (Próximo)
+## 🚧 FASE 5.6: Blindagem Operacional (EM ANDAMENTO)
+> **Foco:** Resiliência contra YouTube e Controle de Custo de IA.
+> **Status:** Execução Documental concluída. Implementação iniciada.
+
+### 5.6.1. Blindagem (Anti-Ban)
+*   Cookies, Headers Rotativos, Backoff Inteligente.
+*   Objetivo: Zero perda de dados por bloqueio 429.
+
+### 5.6.2. Governança (Anti-Falência)
+*   Nenhuma IA roda sem estimativa prévia.
+*   Nenhum prompt repetido paga duas vezes (Hash Cache).
+
+---
+
+## 🔒 FASE 6: Insights e Valor (BLOQUEADA)
+> **Status:** BLOQUEADA até conclusão da Fase 5.6.
 > **Foco:** Transformar dados brutos em informação útil. Estabilidade do Core permite focar em Features agora.
 
 ### 6.1. Integração de IA (Opcional)
