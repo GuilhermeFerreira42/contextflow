@@ -235,7 +235,7 @@ Esta é a reestruturação completa do seu **`kanban.md`**, redesenhada para tra
 * [x] **Passo 2: O Painel (Telemetria):** Monitoramento de tempos P95 (Queue, Fetch, LLM).
 * [x] **Passo 3: O Escudo (Blindagem):** Proxies, Cookies e Pre-flight check de segurança.
 * [x] **Passo 4: O Freio (Protocolos):** Cooldown Alpha persistente em SQLite.
-* [ ] **Passo 5: Homologação (Stress Test):** Simulação de carga massiva e validação final.
+* [x] **Passo 5: Homologação (Stress Test):** Simulação de carga massiva e validação final.
 
 * * * 
 
