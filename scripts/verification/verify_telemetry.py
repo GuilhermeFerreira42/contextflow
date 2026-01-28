@@ -7,7 +7,7 @@ import threading
 from queue import Queue
 
 # Add project root to sys.path
-sys.path.append(os.getcwd())
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 from core.processor import Processor, ProcessingTask
 from core.app_state import AppState

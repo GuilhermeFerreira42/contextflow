@@ -5,7 +5,7 @@ import time
 import sqlite3
 
 # Add project root to sys.path
-sys.path.append(os.getcwd())
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 from core.cooldown_manager import CooldownManager
 from storage.db_handler import DatabaseHandler

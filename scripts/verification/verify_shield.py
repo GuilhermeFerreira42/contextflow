@@ -5,7 +5,7 @@ import time
 import logging
 
 # Add project root to sys.path
-sys.path.append(os.getcwd())
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 from core.proxy_manager import ProxyManager
 from core.processor import Processor, ProcessingTask

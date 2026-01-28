@@ -1,2 +1,0 @@
-http://dummy:8080
-http://dummy2:8080

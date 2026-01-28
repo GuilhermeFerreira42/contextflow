@@ -8,7 +8,7 @@ try:
     print("tiktoken ok")
     import sqlite3
     print("sqlite3 ok")
-    sys.path.append(os.getcwd())
+    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
     from constants import DB_PATH
     print(f"constants ok: {DB_PATH}")
     from storage.db_handler import DatabaseHandler
