@@ -16,7 +16,10 @@ class GridPanel(wx.Panel):
 
         self.table = VirtualVideoTable()
         
+        # [REATIVIDADE] O Painel é um Observador Passivo.
+        # Ele não faz polling; ele acorda apenas quando o AppState avisa que algo mudou.
         self.app_state.register_observer(self.on_app_state_updated)
+
         
         # PubSub Subscriptions
         PubSub.subscribe('TASK_PROGRESS', self.on_task_progress)
@@ -110,8 +113,11 @@ class GridPanel(wx.Panel):
         x, y = self.grid.CalcUnscrolledPosition(event.GetX(), event.GetY())
         row, col = self.grid.XYToCell(x, y)
         if col == 2 and row >= 0:
+            # [UX AFFORDANCE] Cursor de Mão indica clicabilidade.
+            # Reforça a intuição de que a URL é um hiperlink ativo.
             self.grid.SetCursor(wx.Cursor(wx.CURSOR_HAND))
         else:
+
             self.grid.SetCursor(wx.Cursor(wx.CURSOR_ARROW))
         event.Skip()
     

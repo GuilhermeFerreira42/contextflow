@@ -205,8 +205,13 @@ class YouTubeManager:
         return text.strip()
 
     def _clean_downloaded_subs(self, raw_content: str) -> str:
-        """Limpa legendas que podem vir em XML, JSON3 ou VTT."""
+        """
+        Limpa legendas que podem vir em XML, JSON3 ou VTT.
+        [HEURÍSTICA] O YouTube envelopa legendas de formas imprevisíveis.
+        Se o parse JSON falhar, usamos Regex agressivo para extrair apenas texto humano.
+        """
         import traceback
+
         
         # Log para debug extremo se falhar
         # logger.debug(f"Cleaning content (preview): {raw_content[:200]}")
@@ -274,7 +279,12 @@ class YouTubeManager:
         return {}
 
     def download_thumbnail(self, url: str, save_path: str, proxy: str = None) -> bool:
-        """Baixa e salva thumbnail, convertendo para JPG real via Pillow."""
+        """
+        Baixa e salva thumbnail.
+        [COMPATIBILIDADE] Converte forçadamente para RGB/JPEG via Pillow.
+        O wxPython (StaticBitmap) pode falhar com WebP ou PNGs com canal Alpha corrompido.
+        """
+
         from PIL import Image
         from io import BytesIO
 

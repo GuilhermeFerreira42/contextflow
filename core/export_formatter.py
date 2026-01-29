@@ -50,5 +50,10 @@ class ExportFormatter:
 
     @staticmethod
     def get_safe_filename(title: str) -> str:
-        """Sanitiza título para nome de arquivo."""
+        """
+        Sanitiza título para nome de arquivo.
+        [COMPATIBILIDADE] Remove caracteres proibidos no Windows (*:? etc) para evitar
+        erros de I/O durante exportação em massa.
+        """
+
         return "".join([c for c in title if c.isalnum() or c in (' ', '-', '_')]).strip()

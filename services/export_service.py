@@ -13,9 +13,10 @@ class ExportService:
     def export_batch(self, video_ids: List[str], format_type: str, output_path: str, progress_callback: Callable[[int, int, str], None] = None):
         """
         Executa exportação em lote.
-        progress_callback: Função (current, total, msg) -> None.
-        Nota: O callback deve ser thread-safe (usar wx.CallAfter se tocar na UI).
+        [DESACOPLAMENTO] Este serviço é agnóstico de UI.
+        O 'progress_callback' permite que seja usado via CLI ou GUI (desde que a GUI use wx.CallAfter no callback).
         """
+
         total = len(video_ids)
         
         try:

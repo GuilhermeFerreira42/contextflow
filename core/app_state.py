@@ -9,8 +9,15 @@ from storage.db_handler import DatabaseHandler
 logger = logging.getLogger("contextflow.state")
 
 class AppState:
+    """
+    Singleton que gerencia o Estado Global da Aplicação.
+    
+    [THREAD SAFETY] Utiliza RLock internamente para garantir 'Single Source of Truth'
+    em operações concorrentes (Processor Thread vs UI Thread).
+    """
     _instance = None
     _lock = threading.RLock()
+
 
     def __new__(cls):
         with cls._lock:
@@ -65,7 +72,12 @@ class AppState:
                 self._observers.remove(callback)
 
     def _notify(self, event_type: str, data: Any = None):
-        """Dispara callbacks na Main Thread via wx.CallAfter para segurança da UI."""
+        """
+        Dispara callbacks.
+        
+        [CRÍTICO] Se o callback for para a UI, usamos wx.CallAfter.
+        Isso delega a execução para a MainLoop, evitando crash por manipulação de GUI em thread secundária.
+        """
         # Snapshot dos observers para evitar problemas de concorrência se a lista mudar durante iteração
         with self._lock:
             observers_copy = list(self._observers)

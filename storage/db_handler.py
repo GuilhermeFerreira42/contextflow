@@ -103,7 +103,12 @@ class DatabaseHandler:
         conn.close()
 
     def _check_and_migrate_db(self):
-        """Verifica se as novas colunas existem e as adiciona se necessário."""
+        """
+        Verifica se as novas colunas existem e as adiciona se necessário.
+        [MANUTENÇÃO ZERO] 'Auto-Migrate' via PRAGMA table_info.
+        Evita a necessidade de ferramentas complexas (Alembic) para um app desktop simples.
+        """
+
         conn = self._get_connection()
         cursor = conn.cursor()
         try:
@@ -348,6 +353,9 @@ class DatabaseHandler:
                     input_tokens, output_tokens, estimated_cost, actual_cost, billing_period,
                     queue_wait_ms, fetch_ms, llm_processing_ms, ui_render_ms, total_tti_ms, status
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                -- [INTEGRIDADE FINANCEIRA] O relacionamento com 'video_id' é fraco (sem FK restritiva).
+                -- Isso garante que o log de custo persista para auditoria mesmo que o usuário delete o vídeo.
+
             ''', (
                 usage_data.get('video_id'),
                 usage_data.get('model_name'),

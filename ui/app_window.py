@@ -32,7 +32,10 @@ class AppWindow(wx.Frame):
 
     def _init_ui(self):
         # 1. Main Splitter (Vertical: Sidebar | Workspace+Console)
+        # [LAYOUT] Arquitetura de Splitters aninhados permite ocultar painéis
+        # para maximizar a área de leitura em monitores pequenos.
         self.main_splitter = wx.SplitterWindow(self, style=wx.SP_BORDER | wx.SP_LIVE_UPDATE)
+
         
         # 1.1 Sidebar (Left) - Inject AppState
         self.sidebar = Sidebar(self.main_splitter, self.on_sidebar_selection, self.on_sidebar_data_changed, app_state=self.app_state)
@@ -119,8 +122,11 @@ class AppWindow(wx.Frame):
 
     def on_sidebar_selection(self, video_id):
         """Ao selecionar na árvore, focar na aba de Leitura e carregar."""
+        # [CARGA SOB DEMANDA] Buscamos a transcrição pesada (blob) apenas no clique.
+        # Isso economiza RAM, evitando carregar megabytes de texto de todos os vídeos na inicialização.
         # Carrega dados via AppState
         video_meta = self.app_state.get_video(video_id)
+
         transcript_data = self.app_state.db_handler.get_transcript(video_id)
         
         if video_meta and transcript_data:

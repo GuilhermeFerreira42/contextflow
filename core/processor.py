@@ -129,11 +129,14 @@ class Processor:
             return
 
         # Pre-Flight Check (Contract Step 3.2)
+        # [REGRA BETA] Bloqueio de Segurança para Filas Grandes.
+        # Filas > 20 requerem Proxy para evitar banimento de IP Residencial.
         if self.task_queue.qsize() > 20 and not proxy_mgr.has_proxies():
             logger.error("ALERTA DE SEGURANÇA: Fila > 20 sem Proxies. Abortando para evitar BAN.")
             self.app_state.update_active_task(task.uuid, {'status': 'ABORTED', 'error': 'Security: Proxy required for large batches'})
             PubSub.publish('TASK_ERROR', video_id="SECURITY", error_msg="Proxy required for large batches")
             return
+
 
         # Record queue wait
         wait_time = int((time.perf_counter() - task.creation_time) * 1000)
@@ -154,8 +157,11 @@ class Processor:
             # 429 Detection (Contract Step 3.1)
             if meta.get('status') == 'error' and '429' in meta.get('error_msg', ''):
                 if active_proxy: proxy_mgr.ban_proxy(active_proxy)
+                # [REGRA ALPHA] Disparo de Cooldown Global.
+                # O sistema entra em hibernação forçada para proteger a infraestrutura.
                 cooldown.trigger_cooldown(3600) # Global cooldown (1h)
                 raise Exception("YouTube Block (429) detected. Proxy banned and SYSTEM COOLDOWN triggered.")
+
 
             if meta['status'] == 'error': raise Exception(f"Falha ao obter metadados: {meta.get('error_msg')}")
 

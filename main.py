@@ -13,7 +13,10 @@ from core.token_engine import TIKTOKEN_AVAILABLE
 class ContextFlowApp(wx.App):
     def OnInit(self):
         print(f"Iniciando ContextFlow...")
+        # [DIAGNÓSTICO] Verifica TIKTOKEN_AVAILABLE na inicialização.
+        # Se falhar, o sistema avisa que operará em modo de estimativa de custos (fallback).
         print(f"Ambiente: wxpython={wx.version()}, tiktoken={'OK' if TIKTOKEN_AVAILABLE else 'FAIL'}")
+
         
         self.frame = AppWindow(None)
         self.SetTopWindow(self.frame)

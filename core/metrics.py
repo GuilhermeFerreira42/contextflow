@@ -35,8 +35,11 @@ class MetricsCollector:
         metrics = self.tracker.get_all_metrics()
         
         # Calculate overhead: Total TTI - Sum of tracked parts
+        # O 'overhead' captura latências não rastreadas, geralmente Renderização de UI ou GC do Python.
+        # É crucial para identificar se a lentidão é do modelo (LLM) ou da nossa interface (wxPython).
         tracked_sum = sum(metrics.values())
         overhead = max(0, tti - tracked_sum)
+
         
         return {
             'video_id': self.video_id,

@@ -39,7 +39,12 @@ class ProxyManager:
             logger.error(f"Failed to load proxies: {e}")
 
     def get_proxy(self) -> Optional[str]:
-        """Retorna um proxy aleatório da lista de não-banidos."""
+        """
+        Retorna um proxy aleatório da lista de não-banidos.
+        
+        [LAZY CLEANING] A limpeza de proxies banidos ocorre apenas no momento da solicitação (Just-in-Time).
+        Isso evita a necessidade de uma Thread de Background consumindo CPU para monitorar timeouts.
+        """
         now = time.time()
         # Clean expired bans
         self.banned_proxies = {p: t for p, t in self.banned_proxies.items() if t > now}

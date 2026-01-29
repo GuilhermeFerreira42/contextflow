@@ -24,8 +24,11 @@ def count_tokens(text: str) -> Tuple[int, str]:
             return len(tokens), MODEL_NAME
         else:
             # Fallback
+            # [SEGURANÇA FINANCEIRA] Se tiktoken falhar, usamos uma estimativa conservadora (4 bytes/char).
+            # Garante que o sistema nunca opere 'às cegas' em custo, mesmo sem libs nativas.
             byte_size = len(text.encode('utf-8'))
             estimated_tokens = max(1, byte_size // 4)
+
             return estimated_tokens, CONTEXT_INFO
             
     except Exception:

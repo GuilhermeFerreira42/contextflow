@@ -32,8 +32,12 @@ class VirtualVideoTable(wx.grid.GridTableBase):
             msg = wx.grid.GridTableMessage(self, wx.grid.GRIDTABLE_NOTIFY_ROWS_DELETED, 0, self.GetView().GetNumberRows())
             self.GetView().ProcessTableMessage(msg)
             
+            # [VIRTUALIZAÇÃO] Notificação Manual de Append.
+            # O wx.grid Virtual não rastreia mudanças no AppState automaticamente.
+            # Precisamos 'mentir' que deletamos tudo e reinserimos para atualizar a ScrollBar corretamente sem Crash.
             msg = wx.grid.GridTableMessage(self, wx.grid.GRIDTABLE_NOTIFY_ROWS_APPENDED, len(self.data))
             self.GetView().ProcessTableMessage(msg)
+
             
             self.GetView().EndBatch()
             self.GetView().ForceRefresh()
@@ -132,6 +136,10 @@ class VirtualVideoTable(wx.grid.GridTableBase):
                     attr.SetTextColour(wx.BLACK)
                 else:
                     attr.SetTextColour(wx.Colour(200, 100, 0)) # Orange-ish
+                    
+        # [TELEMETRIA VISUAL] Usamos cores (Vermelho/Laranja) para permitir triagem rápida
+        # de falhas em grandes lotes, sem necessidade de abrir logs.
+
 
         # Align center for most
         if col not in [2, 3, 7]: # Link, Title, Playlist left aligned

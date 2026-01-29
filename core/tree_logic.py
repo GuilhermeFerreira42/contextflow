@@ -25,7 +25,12 @@ class TreeNode:
         child.parent = self
 
     def calculate_recursive_tokens(self) -> int:
-        """Calcula e atualiza o total de tokens do nó e seus filhos."""
+        """
+        Calcula e atualiza o total de tokens do nó e seus filhos.
+        [RECURSIVIDADE] O valor é a soma dinâmica de todos os descendentes.
+        Permite saber o 'custo' de uma pasta inteira antes de enviar para a IA.
+        """
+
         total_tokens = self.token_count if not self.is_dir and self.is_text else 0
         for child in self.children:
             total_tokens += child.calculate_recursive_tokens()

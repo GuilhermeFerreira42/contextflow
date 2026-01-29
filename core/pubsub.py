@@ -12,8 +12,9 @@ class PubSub:
     @classmethod
     def publish(cls, topic: str, **kwargs):
         # Notify all subscribers
-        # Note: Callbacks run in the publisher's thread!
-        # Subscribers responsible for UI thread safety.
+        # [AVISO CRÍTICO DE THREAD] Os Callbacks são executados na Thread do Publisher!
+        # Se quem publica é o Processor (Worker Thread), o Callback roda lá.
+        # Assinantes de UI DEVEM usar wx.CallAfter.
         if topic in cls._subscribers:
             for cb in cls._subscribers[topic]:
                 try:

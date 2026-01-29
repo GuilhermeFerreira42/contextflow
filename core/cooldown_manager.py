@@ -22,7 +22,11 @@ class CooldownManager:
         self._initialized = True
 
     def trigger_cooldown(self, duration_seconds: int = 3600):
-        """Ativa o COOLDOWN global e persiste no DB."""
+        """
+        Ativa o COOLDOWN global e persiste no DB.
+        [PERSISTÊNCIA] Salvamos no SQLite para que o sistema 'lembre' do bloqueio
+        mesmo se o usuário reiniciar a aplicação (Regra Alpha).
+        """
         expiration = int(time.time() + duration_seconds)
         self.db.set_setting("global_cooldown_until", expiration)
         logger.warning(f"GLOBAL COOLDOWN TRIGGERED! Suspended until {time.strftime('%H:%M:%S', time.localtime(expiration))}")

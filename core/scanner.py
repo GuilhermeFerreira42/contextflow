@@ -33,7 +33,12 @@ def natural_sort_key(s: str) -> List[Any]:
     return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', s)]
 
 def is_binary_by_content_check(file_path: str) -> bool:
-    """Heurística: Checa por bytes nulos."""
+    """
+    Heurística: Checa por bytes nulos.
+    [PERFORMANCE] Lemos apenas os primeiros 1024 bytes.
+    Isso evita carregar arquivos gigantes (ex: ISOs, vídeos) na memória apenas para checar o tipo.
+    """
+
     try:
         if os.path.getsize(file_path) == 0:
             return False 
@@ -50,6 +55,12 @@ def is_binary_by_content_check(file_path: str) -> bool:
         return True
 
 def _get_common_root(paths: List[str]) -> str:
+    """
+    Calcula o prefixo comum dos caminhos.
+    [IMPORTÂNCIA] Crucial para manter a estrutura de pastas relativa correta durante a exportação,
+    garantindo que o 'Nome do Projeto' seja identificado corretamente.
+    """
+
     if not paths: return ""
     normalized_paths = [os.path.abspath(p) for p in paths]
     valid_paths = [p for p in normalized_paths if os.path.exists(p)]

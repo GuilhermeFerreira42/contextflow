@@ -53,20 +53,25 @@ class AICacheManager:
 
     def generate_hash(self, video_id: str, text: str, prompt_checksum: str) -> str:
         """Gera hash determinístico SHA256."""
-        # Normalização básica de espaços
+        # [GOVERNANCE] Normalização de espaços (trim/split) é MANDATÓRIA.
+        # Diferenças de formatação (ex: \n vs espaço) não devem gerar Cache Miss.
         norm_text = " ".join(text.split())
         payload = f"{video_id}|{norm_text}|{prompt_checksum}"
         return hashlib.sha256(payload.encode('utf-8')).hexdigest()
 
+
     def get_cached_response(self, hash_key: str, current_prompt_checksum: str) -> Optional[Dict[str, Any]]:
         cached = self.db.get_ai_cache(hash_key)
         if cached:
-            # Validação cruzada de Checksum do Prompt (Invariante 2.2 do Contrato)
+            # [GOVERNANCE] Invariante 2.2: Validação Cruzada de Checksum.
+            # Se o Prompt do Sistema mudar, o cache antigo torna-se inválido para garantir
+            # consistência com as novas regras de negócio da IA.
             if cached.get('prompt_checksum') == current_prompt_checksum:
                 return json.loads(cached['response_json'])
             else:
                 logger.info("Cache hit, but prompt checksum mismatch. Ignoring cache.")
         return None
+
 
     def save_to_cache(self, hash_key: str, response: Dict[str, Any], prompt_checksum: str, model: str):
         self.db.save_ai_cache(hash_key, json.dumps(response), prompt_checksum, model)

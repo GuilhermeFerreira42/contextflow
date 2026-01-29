@@ -177,8 +177,12 @@ class Sidebar(wx.Panel):
             videos = [v for v in videos if ft in (v.get('title') or "").lower()]
 
         # Agrupar por Playlist
+        # [ESTRATÉGIA DE SYNC] Reconstruímos a árvore do zero a cada update.
+        # Embora 'caro', garante Consistência Total com o AppState (Single Source of Truth),
+        # evitando bugs visuais de itens fantasmas ou duplicados comuns em 'deltas'.
         playlists = collections.defaultdict(list)
         single_videos = []
+
         
         for v in videos:
             pid = v.get('playlist_id')
