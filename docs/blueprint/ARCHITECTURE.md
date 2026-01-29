@@ -1,7 +1,7 @@
 # ARCHITECTURE: A Lei da Estabilidade (AMV)
 
 > **Princípio Mestre:** Estabilidade Operacional > Features Complexas.
-> **Status:** Atualizado Pós-Fase 5.5 (Monolito Zero).
+> **Status:** Atualizado Pós-Fase 5.5 (Monolito Zero) e Fase 6 (Insights).
 
 ## 1. Padrões Arquiteturais Ativos
 
@@ -59,3 +59,17 @@ graph TD
 ## 4. Próximos Passos (Evolução)
 *   **Plugin IA:** Deve seguir padrão Service (AIService), falhando silenciosamente se indisponível.
 *   **Leitura:** UI de leitura deve consumir AppState diretamente.
+
+## 5. Arquitetura Fase 6 (Insights & IA)
+
+### 5.1. Padrão Strategy para IA
+*   **Interface:** `AIService` define o contrato `generate_summary(text)`.
+*   **Implementações:** 
+    *   `OpenAIProvider`: Conecta via API (custo por token).
+    *   `OllamaProvider`: Conecta em `localhost` (custo zero, mais lento).
+*   **Seleção:** Dinâmica baseada em `config.json`.
+
+### 5.2. Master-Detail Interno
+*   A Aba 2 (`GridPanel`) evolui para conter um `wx.SplitterWindow`.
+*   **Grid (Master):** Mantém a `VirtualTable` no topo.
+*   **Detail (Slave):** Novo painel de resumo na base, instanciado sob demanda.

@@ -113,15 +113,16 @@ contextflow/
 - **Módulo Crítico:** `core/processor.py` (linhas 45-120)
 - **Status:** Implementado (V2.3)
 
-### RF-002: Interface Master-Detail para Triagem Rápida
-- **Ação do Usuário:** Usuário seleciona um vídeo na Grid para ver detalhes
+### RF-002: Interface Master-Detail e Configurações
+- **Ação do Usuário:** 
+  1. Seleciona vídeo na Grid para ver detalhes (Master-Detail).
+  2. Acessa menu para configurar provedor de IA e comportamento da interface.
 - **Fluxo de Código:**
-  1. Evento `EVT_GRID_SELECT_CELL` capturado no `GridPanel`
-  2. `AppState` busca dados do vídeo selecionado
-  3. Painel inferior expande automaticamente se vídeo tem resumo
-  4. Componente `DetailPanel` carrega resumo e transcrição
-- **Módulo Crítico:** `ui/panels/grid_panel.py` (linhas 320-410)
-- **Status:** Em implementação (Fase 6)
+  1. Evento `EVT_GRID_SELECT_CELL` dispara expansão do Painel de Detalhes (se configurado como 'Adaptativo').
+  2. `SettingsDialog` permite alterar entre OpenAI/Ollama e definir API Keys sem reiniciar.
+  3. `AppState` persiste preferências em `config.json` e notifica componentes via `PREFS_CHANGED`.
+- **Módulo Crítico:** `ui/panels/grid_panel.py` e `ui/dialogs/settings_dialog.py`
+- **Status:** Planejado (Fase 6)
 
 ### RF-003: Resumo de Conteúdo sob Demanda
 - **Ação do Usuário:** Clica em "Gerar Resumo" ou checkbox de resumo individual

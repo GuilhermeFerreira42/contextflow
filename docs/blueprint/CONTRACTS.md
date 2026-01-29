@@ -1,7 +1,7 @@
 # CONTRATOS E GARANTIAS DO SISTEMA
 
 > **Objetivo:** Definir interfaces rígidas que não podem ser quebradas sem refatoração maior.
-> **Vigência:** A partir da Fase 5.5.
+> **Vigência:** A partir da Fase 5.5 e Fase 6.
 
 ## 1. PubSub Eventos (`core/pubsub.py`)
 
@@ -50,3 +50,13 @@ A tabela virtual é a única visualização permitida para listas longas.
 
 *   **Independência:** Deve aceitar lista de IDs e funcionar mesmo sem `wx.App` instanciado (usado em testes).
 *   **Feedback:** Aceita callback de progresso genérico.
+
+## 5. Contratos Fase 6 (Insights)
+
+### AIService
+*   **Request:** `generate_summary(video_id)` deve retornar objeto `SummaryResult`.
+*   **Cache:** NUNCA chamar API se o resumo já existir no banco (`cache_first`).
+*   **Performance (TTI):** O "Time To Insight" (tempo entre seleção e exibição do resumo) deve ser **< 15s** (considerando OpenAI). Para modelos locais, o UI não pode congelar.
+
+### Interfaces de Configuração
+*   Qualquer alteração em `SettingsDialog` deve emitir `PREFS_CHANGED` via PubSub imediatamente.
