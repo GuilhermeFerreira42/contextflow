@@ -1,11 +1,5 @@
 # DB_SCHEMA: Persistência para Análise
 
-## Novas Tabelas (Fase 6+)
-1. **`video_tags`**: Relacionamento 1:N com `videos`. Armazena tags geradas por IA (ex: "Tutorial", "Vendas").
-2. **`summaries`**: Relacionamento 1:1 com `videos`.
-   - `short_summary`: Texto para o painel rápido.
-   - `key_points`: JSON com bullet points.
-   - `ai_verdict`: Avaliação automática (ex: "Conteúdo Rico", "Clickbait").
-
-## Otimizações
+## Otimizações de Performance
+* O `AppState` deve ser otimizado para snapshots rápidos de leitura, permitindo que a Aba 2 renderize dados (objetivo: 10.000 vídeos) sem bloquear a thread de escrita do `Processor`.
 * Coluna `transcript` na tabela `videos` deve ser migrada para tabela dedicada ou comprimida com `zlib` (BLOB) para não pesar queries de listagem.

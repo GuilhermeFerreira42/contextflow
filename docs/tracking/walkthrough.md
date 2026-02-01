@@ -1,16 +1,24 @@
-# Walkthrough: Operação Antifragilidade - Passo 1 (O Cofre)
+# Implementation Plan - Phase 5.7 SSoT Consolidation
 
-O primeiro pilar da blindagem do ContextFlow foi concluído. Implementamos a camada de **Governança de IA**, garantindo que o software tenha controle financeiro total e eficiência operacional antes de escalar.
+Document set sanitization to establish Phase 5.7 as the absolute Source of Truth, eliminating all "future noise" and legacy ambiguities.
 
-## 🛡️ O que foi implementado
+## Proposed Changes
 
-### 1. Governança e Solvência Financeira
-- **Novo Schema de DB**: Adicionadas as tabelas `ai_usage_log` e [ai_cache](file:///c:/Users/Usuario/Desktop/contextflow/storage/db_handler.py#375-386) para auditoria e performance.
-- **Relacionamento Fraco**: Garantimos que a deleção de um vídeo **NÃO** apague o histórico de gastos (Integridade Financeira).
-- **Cálculo de Custo Dinâmico**: Implementado [AICostCalculator](file:///c:/Users/Usuario/Desktop/contextflow/core/ai_governance.py#24-49) que lê de [config/ai_prices.json](file:///c:/Users/Usuario/Desktop/contextflow/config/ai_prices.json), permitindo atualizações de preço sem mudar o código.
+### 1. Blueprint Sanitization
+- **PRD.md:** Remove all mentions of IA, Tags, Summaries, and Phase 6 requirements.
+- **ROADMAP.md:** Remove Phase 6 and 7. Set status to "5.7 Consolidation".
+- **DB_SCHEMA.md:** Delete future tables (`video_tags`, `summaries`).
 
-### 2. Eficiência Operacional (Cache Semântico)
-- **Hash Determinístico**: O sistema agora reconhece o mesmo conteúdo (via normalização) e o mesmo prompt.
+### 2. History & Protocol Reinforcement
+- **PHASE_5_7_SPECS.md:** Mandate `wx.Timer` with restart logic for 250ms debouncing.
+- **PHASE_5_7_EXECUTION.md:** Add `no-circular-imports` audit to validation steps. Explicitly confirm `ui/panel_grid.py` as INTERDICTED.
+
+## Verification Plan
+
+### Manual Verification
+- Confirm that no "IA", "Tag" or "Summary" keywords remain in blueprints.
+- Confirm tree structure contains only underline patterns for Phase 5.7.
+- Verify dependency graph in `ARCHITECTURE.md`.
 - **Invariante de Prompt**: Se o prompt for alterado, o cache é invalidado automaticamente para garantir consistência.
 
 ## 🛡️ O Painel (Instrumentação e Telemetria) - Passo 2
@@ -34,14 +42,22 @@ Implementamos um sistema de defesa de rede para garantir que o ContextFlow sobre
 
 ### 1. Rotação e Gestão de Proxies
 - **[ProxyManager](file:///c:/Users/Usuario/Desktop/contextflow/core/proxy_manager.py#11-62)**: Carrega e rotaciona proxies de `config/proxies.txt`.
-- **Banimento Inteligente**: Se um proxy recebe erro 429 (Too Many Requests), ele é banido temporariamente (1h) e o sistema rotaciona para o próximo.
+-# Task: Consolidate Phase 5.7 SSoT (Fonte Única de Verdade)
 
-### 2. Pre-flight Check (Segurança Máxima)
-- O processador agora recusa processar filas grandes (> 20 vídeos) se não houver proxies configurados, protegendo o IP residencial do usuário contra bans preventivos.
-
-## 🛡️ O Freio (Protocolos de Defesa) - Passo 4
-
-A "Regra Alpha" de sobrevivência foi implementada para paralisar o sistema em caso de ataques ou bloqueios massivos.
+- [/] Phase 1: Blueprint Sanitization (Purge Future Noise)
+    - [ ] Purge `docs/blueprint/PRD.md` (Remove IA/Tags/Resumos)
+    - [ ] Purge `docs/blueprint/ROADMAP.md` (Remove Phase 6+)
+    - [ ] Purge `docs/blueprint/DB_SCHEMA.md` (Remove future tables)
+- [/] Phase 2: History Consolidation
+    - [x] Delete dot-pattern files in `docs/history/PHASE_5.7/`
+    - [ ] Update `PHASE_5_7_SPECS.md` (wx.Timer Debounce Upgrade)
+    - [ ] Update `PHASE_5_7_EXECUTION.md` (Add no-circular-imports audit)
+- [/] Phase 3: Final Verification
+    - [ ] Verify `ui/panel_grid.py` interdiction status in all docs
+    - [ ] Generate sanitized tree view
+    - [ ] Present new ARCHITECTURE.md dependency graph
+- [ ] Notify Auditor (User)
+para paralisar o sistema em caso de ataques ou bloqueios massivos.
 
 ### 1. Cooldown Global Alpha
 - **[CooldownManager](file:///c:/Users/Usuario/Desktop/contextflow/core/cooldown_manager.py#9-53)**: Quando um erro 429 é detectado em nível sistêmico, o ContextFlow entra em "Estado de Hibernação" por 1 hora.

@@ -1,35 +1,51 @@
 # ARCHITECTURE: A Lei da Estabilidade (AMV)
 
 > **Princípio Mestre:** Estabilidade Operacional > Features Complexas.
-> **Status:** Atualizado Pós-Fase 5.5 (Monolito Zero) e Fase 6 (Insights).
+> **Módulo Crítico:** `ui/tab_analysis.py`
+> **Status:** Em Implementação (Consolidação Estrutural)
 
-## 1. Padrões Arquiteturais Ativos
+## ⚠️ INTERDIÇÃO TÉCNICA E SEGURANÇA
+*   **ALVO DE DEMOLIÇÃO:** `ui/panel_grid.py`. Este arquivo está **TERMINANTEMENTE INTERDITADO**. Qualquer tentativa de importá-lo ou ler seu conteúdo resultará em erro de auditoria. Ele deve ser tratado como **inexistente** para todas as novas lógicas de implementação.
+*   **MISSÃO:** Operação exclusiva via **Topologia de 3 Abas Independentes**.
 
-### 1.1. Virtualização de UI (VirtualTable)
-A Grid (`panel_grid.py`) agora opera **exclusivamente** em modo virtual.
-*   **Fonte de Verdade:** `AppState`. A Grid não possui estado próprio de dados.
-*   **Mecanismo:** `VirtualVideoTable` (em `ui/virtual_table.py`) atua como proxy entre a `wx.Grid` e o `AppState`.
-*   **Performance:** Capaz de renderizar 10.000+ itens com latência < 1ms (Validado).
+## 1. Topologia Oficial (Trindade de Isolamento)
+O sistema é estruturado em três entidades físicas e lógicas que não se conhecem (Zero-Knowledge):
 
-### 1.2. Barramento de Eventos (PubSub)
-O acoplamento direto entre Processamento e UI foi removido.
-*   **Core (`processor.py`):** Não importa `wx`. Publica eventos via `core/pubsub.py`.
-*   **UI (`panel_grid.py`):** Assina tópicos para fornecer feedback visual.
-*   **Fluxo:** Unidirecional (Core -> PubSub -> UI).
+1.  **Aba 1 (Doca de Carga):** `ui/tab_batch.py`. Exclusiva para ingestão massiva e feedback de fila.
+2.  **Aba 2 (Cockpit Analítico):** `ui/tab_analysis.py`. Centro de triagem Master-Detail utilizando `VirtualVideoTable`.
+3.  **Aba 3 (Leitura Imersiva):** `ui/panel_detail.py`. Visualização de conteúdo bruto sem distrações de grid.
 
-### 1.3. Serviços Isolados
-Lógica de negócios pesada é extraída para serviços puros.
-*   **ExportService:** Gerencia I/O de arquivos (ZIP/MD). Independente da UI.
-*   **YouTubeManager:** Isola complexidade do `yt-dlp`.
+### Roadmap de Consolidação
+| Fase | Prioridade | Principais Entregas |
+|------|------------|---------------------|
+| **5.7** | CRÍTICA | Segregação Tática: Purga de Legado, Virtualização Total e Isolamento Zero-Knowledge das Abas. |
+| **Estabilização**| Alta | Validação da Suite de Testes e Performance Stress Test |
 
-## 2. Fluxo de Dados e Dependências
+## 2. Padrões Arquiteturais Mandatários
 
-### Grafo de Dependências Permitido
+### 2.1. Virtualização de UI (Sempre-Virtual)
+A Grid no Cockpit Analítico (`ui/tab_analysis.py`) opera **exclusivamente** através de `ui/virtual_table.py`.
+*   **Fonte de Verdade:** `AppState`. Nunca armazene dados de vídeos em variáveis de instância da UI.
+*   **Performance:** Latência zero para 10.000+ itens.
+
+### 2.2. Barramento de Eventos (PubSub)
+Toda comunicação inter-módulos é assíncrona e desacoplada.
+*   **Core:** Publica eventos (ex: `VIDEO_DONE`).
+*   **UI:** Assina eventos e agenda updates via `wx.CallAfter`.
+*   **Proibição:** É proibido que as abas importem classes umas das outras.
+
+## 3. Fluxo de Dados e Dependências (SSoT)
+
+### Grafo de Dependências Saneado
 ```mermaid
 graph TD
-    UI[UI Layer] -->|Read| AppState
-    UI -->|Subscribe| PubSub
-    UI -->|Use| ExportService
+    TabBatch[ui/tab_batch.py] -->|Read| AppState
+    TabAnalysis[ui/tab_analysis.py] -->|Read| AppState
+    TabDetail[ui/panel_detail.py] -->|Read| AppState
+    
+    TabBatch -->|Subscribe| PubSub
+    TabAnalysis -->|Subscribe| PubSub
+    TabDetail -->|Subscribe| PubSub
     
     Processor[Core Layer] -->|Write| AppState
     Processor -->|Publish| PubSub
@@ -40,36 +56,10 @@ graph TD
     AppState -->|Read/Write| DB[SQLite]
 ```
 
-### Regras de Ouro (Linter Mental)
-1.  **Processor NUNCA importa wx.** (Violação = Rollback imediato).
-2.  **Grid NUNCA gerencia linhas manualmente.** (Use `VirtualTable`).
-3.  **AppState é Singleton.** Única fonte de verdade para dados de vídeos.
+## 4. Regras Pétreas (Auditoria de Integridade)
+1.  **Isolamento Zero-Knowledge:** Abas 1, 2 e 3 não possuem referências diretas. Sincronia 100% via `AppState`.
+2.  **Debouncing Mandatário:** Refresh da Grid na Aba 2 exige debounce de 250ms acumulativos (Timer Restart-on-Event).
+3.  **Prioridade de CPU:** Processamento de Ingestão (Aba 1) tem prioridade absoluta sobre a renderização da Aba 2.
+4.  **Proibição de IA (Fase 6):** Qualquer referência a "Insights", "Resumos Automáticos" ou "IA" em Blueprints é nula até a validação física da Fase 5.7.
+5.  **Interdição de Legado:** O arquivo `ui/panel_grid.py` é considerado inexistente. O sistema RECUSA qualquer importação vinda dele.
 
-## 3. Estado e Persistência
-
-### AppState
-*   Mantém cache em memória de todos os vídeos.
-*   `get_all_videos()` retorna cópia segura (Snapshot) para renderização.
-*   Escritas são protegidas por `RLock`.
-
-### Banco de Dados
-*   SQLite para persistência entre sessões.
-*   Transcrições (BLOBs de texto) separadas de metadados para performance de listagem.
-
-## 4. Próximos Passos (Evolução)
-*   **Plugin IA:** Deve seguir padrão Service (AIService), falhando silenciosamente se indisponível.
-*   **Leitura:** UI de leitura deve consumir AppState diretamente.
-
-## 5. Arquitetura Fase 6 (Insights & IA)
-
-### 5.1. Padrão Strategy para IA
-*   **Interface:** `AIService` define o contrato `generate_summary(text)`.
-*   **Implementações:** 
-    *   `OpenAIProvider`: Conecta via API (custo por token).
-    *   `OllamaProvider`: Conecta em `localhost` (custo zero, mais lento).
-*   **Seleção:** Dinâmica baseada em `config.json`.
-
-### 5.2. Master-Detail Interno
-*   A Aba 2 (`GridPanel`) evolui para conter um `wx.SplitterWindow`.
-*   **Grid (Master):** Mantém a `VirtualTable` no topo.
-*   **Detail (Slave):** Novo painel de resumo na base, instanciado sob demanda.

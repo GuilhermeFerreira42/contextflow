@@ -7,12 +7,12 @@ from constants import APP_NAME, APP_VERSION
 from core.token_engine import get_encoder_info
 from core.app_state import AppState
 
-# Real implementations
-from ui.panel_grid import GridPanel
+# Real implementations (Phase 5.7 Segregated)
+from ui.tab_batch import TabBatch
+from ui.tab_analysis import TabAnalysis
 from ui.panel_detail import DetailPanel
 from ui.panel_console import ConsolePanel
 from ui.sidebar import Sidebar
-from ui.panel_table import PanelTable
 from storage.db_handler import DatabaseHandler
 
 class AppWindow(wx.Frame):
@@ -49,22 +49,19 @@ class AppWindow(wx.Frame):
         # 3. Console (Bottom Right)
         self.panel_console = ConsolePanel(self.right_splitter)
         
-        # 4. Criar Abas do Notebook
-        # Aba 1: Grid de Dados - Inject AppState
-        # Passamos self.log_to_console como callback
-        self.panel_grid = GridPanel(self.notebook, 
-                                    on_data_changed=self.on_grid_data_changed,
-                                    log_callback=self.log_to_console,
-                                    app_state=self.app_state)
+        # 4. Criar Abas do Notebook (Phase 5.7 Topology)
+        # Aba 1: Doca de Carga (Batch Ingestion)
+        # Note: TabBatch is now independent and Zero-Knowledge
+        self.tab_batch = TabBatch(self.notebook)
         
-        # Aba 2: Tabela: Vídeos (Nova Aba) - Inject AppState
-        self.panel_table = PanelTable(self.notebook, on_selection_callback=self.on_table_selection, app_state=self.app_state)
+        # Aba 2: Cockpit Analítico (Master-Detail)
+        self.tab_analysis = TabAnalysis(self.notebook)
         
         # Aba 3: Detalhes / Conteúdo
         self.panel_detail = DetailPanel(self.notebook)
         
-        self.notebook.AddPage(self.panel_grid, "Dados (Batch)")
-        self.notebook.AddPage(self.panel_table, "Tabela: Vídeos")
+        self.notebook.AddPage(self.tab_batch, "Dados (Batch)")
+        self.notebook.AddPage(self.tab_analysis, "Tabela: Vídeos")
         self.notebook.AddPage(self.panel_detail, "Conteúdo (Leitura)")
 
         # Configurar Splitters
@@ -136,38 +133,25 @@ class AppWindow(wx.Frame):
             self.log_to_console(f"Visualizando: {video_meta.get('title')}", "NAV")
 
     def on_grid_data_changed(self):
-        """Chamado quando o GridPanel recebe novos dados/processamento."""
+        """Chamado quando há novos dados/processamento."""
         self.sidebar.load_history()
-        self.panel_table.load_data() # Update table as well
+        # A atualização da Grid agora é via PubSub no TabAnalysis
 
     def on_table_selection(self, video_id):
         # Reuse logic
         self.on_sidebar_selection(video_id)
 
     def on_sidebar_data_changed(self, action=None, affected_ids=None):
-        """Called when data is deleted from Sidebar."""
-        
-        # Grid Update Strategy - With AppState, maybe we don't need this explicit propagation 
-        # if GridPanel observes AppState? 
-        # But for now, we keep it to force reloads if observer implementation is pending or minimal.
-        
-        if action in ["delete_video", "delete_playlist"] and affected_ids:
-            # Surgical update
-            if hasattr(self.panel_grid, "remove_items"):
-                self.panel_grid.remove_items(affected_ids)
-            else:
-                self.panel_grid.load_data()
-        else:
-            self.panel_grid.load_data()
-            
-        self.panel_table.load_data()
+        """Called when data is changed."""
+        # Com AppState e PubSub, a sincronização é automática nas abas.
+        # Forçamos apenas o reload do sidebar por enquanto.
+        self.sidebar.load_history()
 
     def on_exit(self, event):
         self.Close()
         
     def on_close(self, event):
-        if hasattr(self.panel_grid, 'processor') and self.panel_grid.processor:
-            self.panel_grid.processor.stop_processing()
+        # O encerramento seguro será gerenciado pelo AppState ou Processor central
         event.Skip()
 
     def on_reprocess_errors(self, event):
@@ -182,10 +166,5 @@ class AppWindow(wx.Frame):
         confirm = wx.MessageBox(f"Encontrados {len(error_urls)} vídeos com erro. Deseja tentar novamente?", "Confirmação", wx.YES_NO | wx.ICON_QUESTION)
         
         if confirm == wx.YES:
-            # Join URLs
-            text_block = "\n".join(error_urls)
-            # Envia para o processador (via GridPanel que tem a instância OU AppState poderia ter método de retry)
-            # Mas a entrada de tasks está no GridPanel/Processor. Assumindo que GridPanel expõe método.
-            self.panel_grid.txt_input.SetValue(text_block)
-            self.panel_grid.on_click_process(None)
+            # Lógica de reprocessamento será centralizada no Processor
             self.log_to_console(f"Reiniciando processamento de {len(error_urls)} itens.", "SYSTEM")

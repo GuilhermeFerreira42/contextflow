@@ -5,7 +5,7 @@ O ContextFlow deve ser a ferramenta definitiva para o **Analista Solo**.
 Não almejamos ser um SaaS multiusuário. O objetivo é servir **VOCÊ** por anos.
 
 ## 2. KPI de Longevidade
-*   **Escalabilidade Pessoal:** O sistema deve aguentar sua biblioteca crescer até 5.000 vídeos sem ficar lento.
+*   **Escalabilidade Pessoal:** O sistema deve aguentar sua biblioteca crescer até 10.000 vídeos sem ficar lento.
 *   **Consumo de Recursos:** Manter RAM < 200MB em repouso.
 *   **Zero Config:** Abrir e usar. Sem docker, sem servidores complexos.
 
