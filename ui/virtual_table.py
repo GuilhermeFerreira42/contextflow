@@ -1,44 +1,40 @@
+# contextflow/ui/virtual_table.py
 import wx
 import wx.grid
 from services.utils import format_duration
+from core.app_state import AppState
 
 class VirtualVideoTable(wx.grid.GridTableBase):
+    """
+    MOTOR DE VIRTUALIZAÇÃO (SSoT)
+    Implementa o padrão Sempre-Virtual para suportar 10.000+ itens.
+    Regra: Renderização de célula < 0.1ms [3].
+    """
     def __init__(self, data=None):
         super().__init__()
+        self.app_state = AppState()
         self.data = data or []
         self.selected_ids = set()
         
+        # Colunas oficiais conforme PRD e specs de Triagem [5]
         self.col_labels = [
-            " [x] ", "ID", "Link", "Título", "Canal", 
-            "Publicado", "Adicionado", "Playlist", "Duração", "Tokens", "Status"
+            " [x] ", "ID", "Título", "Canal", 
+            "Duração", "Tokens", "Status", "Link"
         ]
 
     def UpdateData(self, new_data):
-        # Notify Grid about change
-        # Bruteforce approach: Tells grid the table has changed size or content
+        """
+        Atualiza o snapshot de dados e notifica a Grid.
+        Mantém a persistência da visualização durante o debouncing [6].
+        """
         self.data = new_data
-        
         if self.GetView():
             self.GetView().BeginBatch()
-            
-            # Reset view if possible, or inform rows
-            current_rows = self.GetNumberRows()
-            
-            # This logic is tricky. The easiest way to refresh a Virtual Grid 
-            # is normally ProcessTableMessage(RESET) or telling it rows changed.
-            # But the documentation implies we should just set the data and the grid will query GetValue.
-            # However, row count might change.
-            
+            # Notifica a Grid que o número de linhas mudou para atualizar a ScrollBar
             msg = wx.grid.GridTableMessage(self, wx.grid.GRIDTABLE_NOTIFY_ROWS_DELETED, 0, self.GetView().GetNumberRows())
             self.GetView().ProcessTableMessage(msg)
-            
-            # [VIRTUALIZAÇÃO] Notificação Manual de Append.
-            # O wx.grid Virtual não rastreia mudanças no AppState automaticamente.
-            # Precisamos 'mentir' que deletamos tudo e reinserimos para atualizar a ScrollBar corretamente sem Crash.
             msg = wx.grid.GridTableMessage(self, wx.grid.GRIDTABLE_NOTIFY_ROWS_APPENDED, len(self.data))
             self.GetView().ProcessTableMessage(msg)
-
-            
             self.GetView().EndBatch()
             self.GetView().ForceRefresh()
 
@@ -52,6 +48,10 @@ class VirtualVideoTable(wx.grid.GridTableBase):
         return self.col_labels[col]
 
     def GetValue(self, row, col):
+        """
+        [PERFORMANCE] Método ultra-rápido para renderização sob demanda.
+        Busca apenas o campo necessário do snapshot em memória [3].
+        """
         try:
             if row >= len(self.data): return ""
             item = self.data[row]
@@ -59,91 +59,48 @@ class VirtualVideoTable(wx.grid.GridTableBase):
             if col == 0: # Checkbox
                 vid = item.get('id') or item.get('uuid')
                 return "1" if vid in self.selected_ids else "0"
-                
             elif col == 1: # ID
                 return str(item.get('id') or item.get('uuid') or "...")
-                
-            elif col == 2: # Link
-                return str(item.get('url', ''))
-                
-            elif col == 3: # Title
+            elif col == 2: # Título
                 return str(item.get('title', 'Aguardando...'))
-                
-            elif col == 4: # Channel
+            elif col == 3: # Canal
                 return str(item.get('channel_name') or "-")
-                
-            elif col == 5: # Published
-                raw = str(item.get('upload_date') or "")
-                if len(raw) == 8 and raw.isdigit():
-                    return f"{raw[6:8]}/{raw[4:6]}/{raw[0:4]}"
-                return raw
-                
-            elif col == 6: # Added
-                return str(item.get('added_at') or "")
-                
-            elif col == 7: # Playlist
-                return str(item.get('playlist_title') or "-")
-                
-            elif col == 8: # Duration
+            elif col == 4: # Duração
                 dur = item.get('duration_seconds') or item.get('duration')
                 return format_duration(dur)
-                
-            elif col == 9: # Tokens
+            elif col == 5: # Tokens
                 return str(item.get('token_count', 0))
-                
-            elif col == 10: # Status
-                return str(item.get('status', 'pending'))
-        except:
-            pass
-        return ""
+            elif col == 6: # Status
+                return str(item.get('status', 'pending')).upper()
+            elif col == 7: # Link
+                return str(item.get('url', ''))
+        except Exception:
+            return ""
 
     def SetValue(self, row, col, value):
-        if col == 0:
-            if row >= len(self.data): return
+        """Gerencia a seleção de linhas (Checkbox)."""
+        if col == 0 and row < len(self.data):
             item = self.data[row]
             vid = item.get('id') or item.get('uuid')
-            if vid:
-                # Toggle logic
-                # Grid passes "1" or "0" usually if checkbox
-                # But sometimes it passes empty or we handle click.
-                # Standard Text Editor passes string.
-                # bool check
-                if value in ["1", "True", "true", 1]:
-                    self.selected_ids.add(vid)
-                else:
-                    self.selected_ids.discard(vid)
+            if value in ["1", "True", 1]:
+                self.selected_ids.add(vid)
+            else:
+                self.selected_ids.discard(vid)
 
     def GetAttr(self, row, col, kind):
+        """Aplica telemetria visual (Cores de Status) [7]."""
         attr = wx.grid.GridCellAttr()
+        attr.SetReadOnly(col != 0) # Apenas checkbox é editável
         
-        # Read-only default for all except Checkbox (col 0)
-        # Actually, if we use custom renderer for checkbox, we might need read-only=False
-        if col != 0:
-            attr.SetReadOnly(True)
-        else:
-            attr.SetReadOnly(False)
-            
-        # Specific styling
-        if col == 2: # Link
+        if col == 6 and row < len(self.data): # Status
+            status = str(self.data[row].get('status', '')).upper()
+            if status == 'ERROR':
+                attr.SetTextColour(wx.RED)
+            elif status in ['COMPLETED', 'DOWNLOADED']:
+                attr.SetTextColour(wx.Colour(0, 150, 0)) # Verde
+        
+        if col == 7: # Link
             attr.SetTextColour(wx.BLUE)
-            
-        elif col == 10: # Status
-             if row < len(self.data):
-                status = self.data[row].get('status', '')
-                if status == 'ERROR':
-                    attr.SetTextColour(wx.RED)
-                elif status in ['completed', 'downloaded']:
-                    attr.SetTextColour(wx.BLACK)
-                else:
-                    attr.SetTextColour(wx.Colour(200, 100, 0)) # Orange-ish
-                    
-        # [TELEMETRIA VISUAL] Usamos cores (Vermelho/Laranja) para permitir triagem rápida
-        # de falhas em grandes lotes, sem necessidade de abrir logs.
-
-
-        # Align center for most
-        if col not in [2, 3, 7]: # Link, Title, Playlist left aligned
-            attr.SetAlignment(wx.ALIGN_CENTER, wx.ALIGN_CENTER)
             
         attr.IncRef()
         return attr
