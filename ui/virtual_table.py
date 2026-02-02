@@ -58,21 +58,28 @@ class VirtualVideoTable(wx.grid.GridTableBase):
             ]
 
     def UpdateData(self, new_data):
+        """
+        ATOMIC SNAPSHOT: Atualiza os dados minimizando o jitter visual.
+        [MANDATÓRIO v5.8] Se a contagem de linhas for igual, evita notificações
+        de deletar/adicionar para impedir o 'pulo' visual na promoção de UUID para ID.
+        """
         if self.GetView():
             self.GetView().BeginBatch()
-            old_rows = self.GetNumberRows() # Pega contagem ANTES da troca
-            self.data = new_data
-            new_rows = len(self.data)
+            old_rows = self.GetNumberRows()
+            new_rows = len(new_data)
             
+            self.data = new_data
+            
+            # Só notifica mudança estrutural se o tamanho da lista mudar de fato
             if new_rows < old_rows:
                 msg = wx.grid.GridTableMessage(self, wx.grid.GRIDTABLE_NOTIFY_ROWS_DELETED, 0, old_rows - new_rows)
                 self.GetView().ProcessTableMessage(msg)
             elif new_rows > old_rows:
                 msg = wx.grid.GridTableMessage(self, wx.grid.GRIDTABLE_NOTIFY_ROWS_APPENDED, new_rows - old_rows)
                 self.GetView().ProcessTableMessage(msg)
-                
+            
             self.GetView().EndBatch()
-            self.GetView().ForceRefresh()
+            self.GetView().ForceRefresh() # Atualiza conteúdo das células sem 'pular' scroll
         else:
             self.data = new_data
 
@@ -81,6 +88,10 @@ class VirtualVideoTable(wx.grid.GridTableBase):
     def GetColLabelValue(self, col): return self.col_labels[col]
 
     def GetValue(self, row, col):
+        """
+        [IDENTIFICAÇÃO HÍBRIDA]
+        Garante que a visualização trate UUID e ID como a mesma entidade durante a promoção.
+        """
         try:
             if row >= len(self.data): return ""
             item = self.data[row]
@@ -88,8 +99,12 @@ class VirtualVideoTable(wx.grid.GridTableBase):
             
             if label == "#": return str(row + 1)
             if label == "[x]":
-                vid = item.get('uuid') or item.get('id')
-                return "1" if vid in self.selected_ids else "0"
+                # Busca por qualquer um dos dois identificadores para manter a marcação
+                # durante a transição UUID -> ID real.
+                vid = item.get('id')
+                uuid_val = item.get('uuid')
+                selected = (vid in self.selected_ids) or (uuid_val in self.selected_ids)
+                return "1" if selected else "0"
             if label == "Thumb": return "" 
             
             mapping = {
@@ -122,7 +137,8 @@ class VirtualVideoTable(wx.grid.GridTableBase):
         label = self.col_labels[col].strip()
         if label == "[x]" and row < len(self.data):
             item = self.data[row]
-            vid = item.get('uuid') or item.get('id')
+            # [ESTABILIDADE] Prefere ID real para a chave de seleção
+            vid = item.get('id') or item.get('uuid')
             if value in ["1", "True", 1, True]:
                 if vid: self.selected_ids.add(vid)
             else:
@@ -156,8 +172,9 @@ class VirtualVideoTable(wx.grid.GridTableBase):
                 attr.SetTextColour(color_map[status])
         
         if label == 'Link':
-            # [AFFORDANCE] Estética de hiperlink
+            # [AFFORDANCE] Estética de hiperlink tecnológica (HeidiSQL Style)
             attr.SetTextColour(wx.BLUE)
+            attr.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL, True)) # Underline
         
         attr.IncRef()
         return attr

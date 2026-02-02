@@ -116,11 +116,18 @@ class TabBatch(wx.Panel):
         self.grid.GetGridWindow().Bind(wx.EVT_MOTION, self.on_grid_motion)
 
     def on_grid_click(self, event):
+        """
+        [HITBOX EXPANDIDA & GATILHO IMEDIATO]
+        Intercepa o clique na coluna 1 antes da seleção de linha do wxPython.
+        """
         row, col = event.GetRow(), event.GetCol()
         if col == 1: # TOGGLE CHECKBOX (One-Click)
             val = self.table.GetValue(row, col)
             self.table.SetValue(row, col, "0" if val == "1" else "1")
             self.grid.ForceRefresh()
+            # [CRÍTICO] Não chama Event.Skip() para impedir que SelectRows capture o clique
+            return 
+            
         elif col == 2: # OPEN LINK (Navigation)
             url = self.table.GetValue(row, col)
             if url and url.startswith("http"):
@@ -129,15 +136,19 @@ class TabBatch(wx.Panel):
 
     def on_label_click(self, event):
         if event.GetCol() == 1: # SELEÇÃO GLOBAL (Check/Uncheck All)
-            all_ids = set()
-            for item in self.table.data:
-                vid = item.get('uuid') or item.get('id')
-                if vid: all_ids.add(vid)
-                
-            if len(self.table.selected_ids) == len(all_ids):
-                self.table.selected_ids.clear()
-            else:
-                self.table.selected_ids = all_ids
+            if not self.table.data: return
+            
+            # [SSOT v5.8] Usa a própria lógica híbrida da tabela para ler o estado
+            is_first_selected = (self.table.GetValue(0, 1) == "1")
+            
+            new_selection = set()
+            if not is_first_selected:
+                # Marcar todos
+                for item in self.table.data:
+                    vid = item.get('uuid') or item.get('id')
+                    if vid: new_selection.add(vid)
+            
+            self.table.selected_ids = new_selection
             self.grid.ForceRefresh()
         event.Skip()
 
@@ -170,14 +181,20 @@ class TabBatch(wx.Panel):
         [ATOMIC SNAPSHOT] Unificação de tarefas ativas e vídeos persistidos.
         Requisito de Fase 5.8: Visibilidade total do ciclo de vida.
         """
-        # Combina downloads ativos (UUIDs) com vídeos no banco (IDs)
-        # [SSOT] Atômico e Unificado: Combina downloads ativos com persistidos
-        active_tasks = self.app_state.get_active_downloads()
-        persistent_videos = self.app_state.get_all_videos()
+        # [SSOT] Atômico e Unificado: Evita duplicação visual durante a promoção
+        unified_data = self.app_state.get_unified_data()
         
-        unified_data = active_tasks + persistent_videos
+        # [ESTABILIDADE DE ORDEM] Garante que o ID real herde a posição do UUID
+        # Como o added_at está em DD/MM/YYYY, precisamos reverter para sort correto
+        def sort_key(x):
+            ts = x.get('added_at') or ""
+            if len(ts) >= 10 and ts[2] == '/' and ts[5] == '/':
+                # Converte DD/MM/YYYY para YYYYMMDD para ordenação estável
+                return ts[6:10] + ts[3:5] + ts[0:2] + ts[11:]
+            return ts or "0000"
+
+        unified_data.sort(key=sort_key, reverse=True)
         
-        # Ordenação opcional: Mais recentes primeiro (baseado em algo?) ou manter ordem de entrada
         self.table.UpdateData(unified_data)
         self.grid.ForceRefresh()
 
@@ -204,11 +221,10 @@ class TabBatch(wx.Panel):
             return
             
         if wx.MessageBox(f"Deseja excluir {len(ids)} itens?", "Confirmação", wx.YES_NO | wx.ICON_QUESTION) == wx.YES:
-            # Filtra IDs reais (SQL) de UUIDs (Ativos) se necessário
-            sql_ids = [vid for vid in ids if not str(vid).startswith('task-')] # UUIDs costumam ser strings complexas
-            self.app_state.delete_videos(sql_ids)
-            # Para tarefas ativas, idealmente teríamos remove_active_task
+            # [SSOT v5.8] AppState.delete_videos agora é polivalente e trata UUIDs e IDs.
+            self.app_state.delete_videos(ids)
             self.table.selected_ids.clear()
+            self._refresh_grid()
 
     def on_unify_md(self, event):
         ids = self._get_selected_ids()

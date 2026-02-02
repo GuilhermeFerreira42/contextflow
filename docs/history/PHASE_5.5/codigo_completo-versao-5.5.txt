@@ -1,0 +1,3481 @@
+==========================================
+Conteúdo de constants.py (caminho: constants.py):
+==========================================
+
+# contextflow/constants.py
+import os
+import wx
+
+# --- Application Info ---
+APP_NAME = "ContextFlow"
+APP_VERSION = "0.1.0"
+
+# --- Models ---
+MODEL_NAME = "gpt-4o"
+
+# --- Paths ---
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+EXPORTS_DIR = os.path.join(BASE_DIR, "exports")
+DATA_DIR = os.path.join(BASE_DIR, "data")
+THUMBNAILS_DIR = os.path.join(DATA_DIR, "thumbs")
+DB_PATH = os.path.join(DATA_DIR, "contextflow.db")
+
+# --- UI Colors (Dark Theme) ---
+COLOR_BG = wx.Colour(30, 30, 30)
+COLOR_FG = wx.Colour(220, 220, 220)
+COLOR_HIGHLIGHT = wx.Colour(70, 70, 70)
+COLOR_ACCENT = wx.Colour(0, 120, 215)  # Blue accent
+
+
+==========================================
+Conteúdo de app_state.py (caminho: core\app_state.py):
+==========================================
+# contextflow/core/app_state.py
+import threading
+import uuid
+import wx
+import logging
+from typing import Dict, Any, List, Callable, Optional
+from storage.db_handler import DatabaseHandler
+
+logger = logging.getLogger("contextflow.state")
+
+class AppState:
+    _instance = None
+    _lock = threading.RLock()
+
+    def __new__(cls):
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = super(AppState, cls).__new__(cls)
+                cls._instance._initialized = False
+            return cls._instance
+
+    def __init__(self):
+        if self._initialized:
+            return
+            
+        with self._lock:
+            self._initialized = True
+            self.db_handler = DatabaseHandler()
+            
+            # State Storage
+            # _videos: Dict mapping video_id (str) -> dict (full metadata)
+            self._videos: Dict[str, Dict[str, Any]] = {} 
+            
+            # _active_downloads: Dict mapping UUID -> dict (temp task data)
+            # Used for items currently in queue/processing before they have a real ID or final state
+            # Or as a way to track progress of specific operations.
+            self._active_downloads: Dict[str, Dict[str, Any]] = {}
+            
+            # Observers: List of callbacks (event_type, data)
+            self._observers: List[Callable[[str, Any], None]] = []
+            
+            # Load initial state
+            self._load_from_db()
+
+    def _load_from_db(self):
+        """Loads all videos from DB into memory."""
+        try:
+            db_videos = self.db_handler.get_all_videos()
+            with self._lock:
+                self._videos = {v['id']: dict(v) for v in db_videos}
+            logger.info(f"AppState loaded {len(self._videos)} videos from DB.")
+        except Exception as e:
+            logger.error(f"Failed to load state from DB: {e}")
+
+    # --- Observer Pattern ---
+
+    def register_observer(self, callback: Callable[[str, Any], None]):
+        with self._lock:
+            if callback not in self._observers:
+                self._observers.append(callback)
+
+    def unregister_observer(self, callback: Callable[[str, Any], None]):
+        with self._lock:
+            if callback in self._observers:
+                self._observers.remove(callback)
+
+    def _notify(self, event_type: str, data: Any = None):
+        """Dispara callbacks na Main Thread via wx.CallAfter para segurança da UI."""
+        # Snapshot dos observers para evitar problemas de concorrência se a lista mudar durante iteração
+        with self._lock:
+            observers_copy = list(self._observers)
+            
+        for obs in observers_copy:
+            try:
+                # O observer deve estar preparado para receber CallAfter se for UI
+                # Mas como AppState pode ser chamado de thread, garantimos o CallAfter aqui?
+                # Se o observer for lógia pura, callafter pode atrapalhar?
+                # Assumimos que a maioria dos observers são UI.
+                # Se não for wx.App running, chamamos direto (ex: testes).
+                if wx.GetApp():
+                    wx.CallAfter(obs, event_type, data)
+                else:
+                    obs(event_type, data)
+            except Exception as e:
+                logger.error(f"Error notifying observer {obs}: {e}")
+
+    # --- State Management ---
+
+    def get_all_videos(self) -> List[Dict[str, Any]]:
+        """Returns a list of all videos (copy of values)."""
+        with self._lock:
+            # Sort by created_at desc (default view)
+            # Precisamos lidar com None
+            v_list = list(self._videos.values())
+            v_list.sort(key=lambda x: x.get('created_at') or "", reverse=True)
+            return v_list
+
+    def get_video(self, video_id: str) -> Optional[Dict[str, Any]]:
+        with self._lock:
+            # Retorna cópia para evitar mutação externa acidental
+            v = self._videos.get(video_id)
+            return dict(v) if v else None
+            
+    def get_active_downloads(self) -> List[Dict[str, Any]]:
+        with self._lock:
+            return list(self._active_downloads.values())
+
+    # --- Mutations (Async to DB, Sync to Memory) ---
+
+    def add_or_update_video(self, video_data: Dict[str, Any]):
+        """Central method to add/update video. Persists and notifies."""
+        video_id = video_data.get('id')
+        if not video_id: return
+
+        with self._lock:
+            # Merge with existing if present to preserve fields not passed
+            existing = self._videos.get(video_id, {})
+            merged = {**existing, **video_data}
+            
+            self._videos[video_id] = merged
+            
+            # If it was an active download (UUID based), maybe we should update/clear it?
+            # For now, let's keep it simple. Processor manages active state.
+        
+        # Persist (Async ideally, but sync is safer for consistency for now, db_handler is fast sqlite)
+        # To make it "async" without blocking UI, we could use a thread, but sqlite writes are fast.
+        # Let's run in a separate thread to strictly adhere to "No blocking UI".
+        threading.Thread(target=self._persist_video_worker, args=(merged,)).start()
+        
+        self._notify('VIDEO_UPDATED', video_id)
+
+    def _persist_video_worker(self, video_data):
+        self.db_handler.add_video_entry(video_data)
+        
+    def update_video_status(self, video_id: str, status: str, **kwargs):
+        """Shortcut helper."""
+        update_payload = {'id': video_id, 'status': status}
+        update_payload.update(kwargs)
+        self.add_or_update_video(update_payload)
+
+    def add_active_task(self, uuid_str: str, data: Dict[str, Any]):
+        """Registra uma tarefa temporária (antes de ter ID de vídeo ou enquanto está na fila)."""
+        with self._lock:
+            self._active_downloads[uuid_str] = data
+        self._notify('TASK_ADDED', uuid_str)
+
+    def update_active_task(self, uuid_str: str, updates: Dict[str, Any]):
+        with self._lock:
+            if uuid_str in self._active_downloads:
+                self._active_downloads[uuid_str].update(updates)
+                self._notify('TASK_UPDATED', uuid_str)
+            else:
+                # Se não existe, cria (pode acontecer na inicialização de fila)
+                self._active_downloads[uuid_str] = updates
+                self._notify('TASK_ADDED', uuid_str)
+
+    def remove_active_task(self, uuid_str: str):
+        with self._lock:
+            if uuid_str in self._active_downloads:
+                del self._active_downloads[uuid_str]
+                self._notify('TASK_REMOVED', uuid_str)
+
+    def delete_videos(self, video_ids: List[str]):
+        """Remove videos from memory and DB."""
+        with self._lock:
+            for vid in video_ids:
+                if vid in self._videos:
+                    del self._videos[vid]
+        
+        # Persist Deletion
+        threading.Thread(target=self._delete_worker, args=(video_ids,)).start()
+        
+        self._notify('VIDEOS_DELETED', video_ids)
+
+    def _delete_worker(self, video_ids):
+        for vid in video_ids:
+            self.db_handler.delete_video(vid)
+
+    def delete_playlist(self, playlist_id: str):
+        # Find all videos with playlist_id
+        ids_to_remove = []
+        with self._lock:
+            for vid, data in self._videos.items():
+                if data.get('playlist_id') == playlist_id:
+                    ids_to_remove.append(vid)
+        
+        if ids_to_remove:
+            self.delete_videos(ids_to_remove)
+            # Also notify playlist deletion specifically if UI relies on it
+            self._notify('PLAYLIST_DELETED', playlist_id)
+
+    def delete_orphans(self) -> List[str]:
+        ids_to_remove = []
+        with self._lock:
+            for vid, data in self._videos.items():
+                pid = data.get('playlist_id')
+                if not pid:
+                     ids_to_remove.append(vid)
+        
+        if ids_to_remove:
+            self.delete_videos(ids_to_remove)
+            
+        return ids_to_remove
+
+
+==========================================
+Conteúdo de export_formatter.py (caminho: core\export_formatter.py):
+==========================================
+# contextflow/core/export_formatter.py
+from services.utils import format_duration
+import time
+
+class ExportFormatter:
+    """
+    Centraliza a lógica de formatação para exportações (Markdown/ZIP),
+    garantindo consistência visual e de dados.
+    """
+
+    @staticmethod
+    def get_single_markdown_header() -> str:
+        return f"# Exportação ContextFlow\nData: {time.strftime('%Y-%m-%d %H:%M')}\n\n"
+
+    @staticmethod
+    def format_video_markdown(video_data: dict, transcript_text: str = None) -> str:
+        """
+        Gera o conteúdo Markdown para um único vídeo.
+        """
+        title = video_data.get('title', 'Sem Título')
+        url = video_data.get('url', '')
+        channel = video_data.get('channel_name') or video_data.get('channel') or '-'
+        duration_sec = video_data.get('duration_seconds') or video_data.get('duration')
+        
+        # Se duration já vier formatada (legacy), tenta parsear ou usa direto se não for int
+        # Mas idealmente AppState deve padronizar tudo.
+        # Aqui assumimos que pode vir int ou str.
+        if isinstance(duration_sec, (int, float)):
+             duration_str = format_duration(duration_sec)
+        else:
+             duration_str = str(duration_sec)
+
+        tokens = video_data.get('token_count', 0)
+        summary = video_data.get('summary', '') or video_data.get('summary_text', '')
+
+        md = f"# {title}\n\n"
+        md += f"**URL:** {url}\n"
+        md += f"**Canal:** {channel}\n"
+        md += f"**Duração:** {duration_str}\n"
+        md += f"**Tokens:** {tokens}\n"
+        
+        if summary:
+            md += f"\n### Resumo\n{summary}\n"
+            
+        md += f"\n## Transcrição\n\n"
+        md += transcript_text if transcript_text else "(Sem transcrição disponível)"
+        md += "\n"
+        
+        return md
+
+    @staticmethod
+    def get_safe_filename(title: str) -> str:
+        """Sanitiza título para nome de arquivo."""
+        return "".join([c for c in title if c.isalnum() or c in (' ', '-', '_')]).strip()
+
+
+==========================================
+Conteúdo de processor.py (caminho: core\processor.py):
+==========================================
+# contextflow/core/processor.py
+import threading
+import queue
+import time
+import os
+import uuid
+import random
+import logging
+from typing import List, Callable, Dict, Any, Optional
+
+from services.youtube_manager import YouTubeManager
+from core.token_engine import count_tokens
+from core.app_state import AppState
+from core.pubsub import PubSub
+from constants import THUMBNAILS_DIR
+
+logger = logging.getLogger("contextflow.processor")
+
+class ProcessingTask:
+    def __init__(self, url: str, playlist_id: str = None, playlist_title: str = None):
+        self.uuid = str(uuid.uuid4())
+        self.url = url
+        self.status = "pending"
+        self.video_id = None
+        self.title = "Aguardando..."
+        self.error_msg = ""
+        self.playlist_id = playlist_id
+        self.playlist_title = playlist_title
+
+class Processor:
+    def __init__(self, app_state: AppState = None):
+        self.app_state = app_state or AppState()
+        self.task_queue = queue.Queue()
+        self.active = False
+        self.thread = None
+        self.yt_manager = YouTubeManager()
+        os.makedirs(THUMBNAILS_DIR, exist_ok=True)
+
+    def start_processing(self):
+        if not self.active:
+            self.active = True
+            self.thread = threading.Thread(target=self._worker_loop, daemon=True)
+            self.thread.start()
+
+    def stop_processing(self):
+        self.active = False
+
+    def add_urls(self, raw_text: str):
+        threading.Thread(target=self._async_resolve_urls, args=(raw_text,), daemon=True).start()
+
+    def _async_resolve_urls(self, raw_text: str):
+        lines = [l.strip() for l in raw_text.split('\n') if l.strip()]
+        for line in lines:
+            try:
+                if "list=" in line:
+                    pl_info = self.yt_manager.get_playlist_info(line)
+                    if pl_info and pl_info.get('videos'):
+                        pl_id = pl_info['id']
+                        pl_title = pl_info['title']
+                        for vid_info in pl_info['videos']:
+                            v_url = vid_info.get('url') or f"https://www.youtube.com/watch?v={vid_info['id']}"
+                            self._enqueue_video(v_url, pl_id, pl_title)
+                else:
+                    self._enqueue_video(line)
+            except Exception as e:
+                print(f"Erro ao resolver URL {line}: {e}")
+
+    def _enqueue_video(self, url: str, pl_id: str = None, pl_title: str = None):
+        if self.yt_manager.validate_url(url):
+            task = ProcessingTask(url, pl_id, pl_title)
+            self.task_queue.put(task)
+            
+            self.app_state.add_active_task(task.uuid, {
+                'uuid': task.uuid,
+                'url': url,
+                'status': 'queued',
+                'title': 'Aguardando...',
+                'playlist_id': pl_id
+            })
+            
+            PubSub.publish('TASK_QUEUED', uuid=task.uuid, url=task.url)
+
+    def _worker_loop(self):
+        while self.active:
+            try:
+                task = self.task_queue.get(timeout=1) 
+            except queue.Empty:
+                continue
+            self._process_task(task)
+            self.task_queue.task_done()
+            time.sleep(random.uniform(2.0, 5.0))
+
+    def _process_task(self, task: ProcessingTask):
+        try:
+            logger.info(f"Starting task for UUID: {task.uuid}")
+            self.app_state.update_active_task(task.uuid, {'status': 'downloading'})
+            PubSub.publish('TASK_STARTED', uuid=task.uuid)
+
+            logger.info(f"Fetching metadata for {task.url}...")
+            meta = self.yt_manager.get_video_metadata(task.url)
+            if meta['status'] == 'error': raise Exception("Falha ao obter metadados")
+
+            task.video_id = meta.get('id')
+            task.title = meta.get('title')
+            
+            PubSub.publish('METADATA_FETCHED', uuid=task.uuid, video_id=task.video_id, title=task.title)
+            self.app_state.update_active_task(task.uuid, {'video_id': task.video_id, 'title': task.title})
+            
+            PubSub.publish('TASK_PROGRESS', video_id=task.video_id, status_msg="Baixando Thumbnail...")
+            
+            thumb_filename = f"{task.video_id}.jpg"
+            thumb_local_path = os.path.join(THUMBNAILS_DIR, thumb_filename)
+            thumb_url = meta.get('thumbnail')
+            if thumb_url and not os.path.exists(thumb_local_path):
+                os.makedirs(THUMBNAILS_DIR, exist_ok=True)
+                self.yt_manager.download_thumbnail(thumb_url, thumb_local_path)
+            
+            final_thumb_path = thumb_local_path if os.path.exists(thumb_local_path) else ""
+
+            PubSub.publish('TASK_PROGRESS', video_id=task.video_id, status_msg="Baixando Transcrição...")
+            
+            video_data = {
+                'id': task.video_id,
+                'url': task.url,
+                'title': task.title,
+                'duration': meta.get('duration'),
+                'duration_seconds': meta.get('duration_seconds'),
+                'upload_date': meta.get('upload_date'),
+                'thumbnail_path': final_thumb_path,
+                'playlist_id': task.playlist_id,
+                'playlist_title': task.playlist_title,
+                'channel_name': meta.get('channel_name'),
+                'added_at': meta.get('added_at'),
+                'status': 'processing',
+                'uuid': task.uuid
+            }
+            self.app_state.add_or_update_video(video_data)
+
+            transcript, source = self.yt_manager.get_transcript(task.video_id)
+            if not transcript: raise Exception("Transcrição indisponível")
+            
+            token_count, _ = count_tokens(transcript)
+            self.app_state.db_handler.save_transcript(task.video_id, transcript)
+            self.app_state.update_video_status(task.video_id, "completed", token_count=token_count)
+            self.app_state.remove_active_task(task.uuid)
+            
+            PubSub.publish('TASK_COMPLETED', video_id=task.video_id, data_dict={'title': task.title})
+
+        except Exception as e:
+            logger.error(f"Task failed: {e}")
+            if task.video_id:
+                self.app_state.update_video_status(task.video_id, "ERROR")
+                PubSub.publish('TASK_ERROR', video_id=task.video_id, error_msg=str(e))
+                self.app_state.remove_active_task(task.uuid)
+            else:
+                self.app_state.update_active_task(task.uuid, {'status': 'error', 'error': str(e)})
+                PubSub.publish('TASK_ERROR', video_id="UNKNOWN", error_msg=str(e))
+
+
+
+==========================================
+Conteúdo de pubsub.py (caminho: core\pubsub.py):
+==========================================
+from typing import Callable, Dict, List, Any
+
+class PubSub:
+    _subscribers: Dict[str, List[Callable]] = {}
+
+    @classmethod
+    def subscribe(cls, topic: str, callback: Callable):
+        if topic not in cls._subscribers:
+            cls._subscribers[topic] = []
+        cls._subscribers[topic].append(callback)
+
+    @classmethod
+    def publish(cls, topic: str, **kwargs):
+        # Notify all subscribers
+        # Note: Callbacks run in the publisher's thread!
+        # Subscribers responsible for UI thread safety.
+        if topic in cls._subscribers:
+            for cb in cls._subscribers[topic]:
+                try:
+                    cb(**kwargs) 
+                except Exception as e:
+                    # Avoid crashing publisher
+                    print(f"PubSub Error on topic '{topic}': {e}")
+
+
+==========================================
+Conteúdo de scanner.py (caminho: core\scanner.py):
+==========================================
+
+# contextflow/core/scanner.py
+import os
+import threading
+import re
+from typing import Dict, Any, List, Optional, Set
+
+from .token_engine import count_tokens 
+from .tree_logic import TreeNode
+
+# === CONSTANTES DE CONFIGURAÇÃO ===
+TEXT_EXTENSIONS: Set[str] = {
+    '.py', '.txt', '.js', '.html', '.css', '.md', '.json', '.xml', '.c', '.h', 
+    '.cpp', '.java', '.go', '.rs', '.ts', '.tsx', '.jsx', '.scss', '.sh', '.yaml', 
+    '.ini', '.log', '.rst', '.vue', '.mts', '.mjs', '.cjs', '.tf', '.tfvars', '.toml',
+    '.gitattributes', '.gitignore', '.editorconfig' 
+}
+
+IGNORED_BINARIES: Set[str] = {
+    '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.svg', '.webp', 
+    '.mp3', '.wav', '.ogg', 
+    '.mp4', '.avi', '.mov', 
+    '.zip', '.rar', '.7z', '.tar', '.gz', 
+    '.pdf', '.exe', '.dll', '.so', '.dylib', '.obj', '.bin', '.db', '.dat'
+}
+
+MAX_FILE_SIZE = 10 * 1024 * 1024 
+BINARY_CHECK_BYTES = 1024 
+NULL_BYTE_THRESHOLD = 5 
+
+def natural_sort_key(s: str) -> List[Any]:
+    """Chave de ordenação natural."""
+    return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', s)]
+
+def is_binary_by_content_check(file_path: str) -> bool:
+    """Heurística: Checa por bytes nulos."""
+    try:
+        if os.path.getsize(file_path) == 0:
+            return False 
+        
+        with open(file_path, 'rb') as f:
+            data = f.read(BINARY_CHECK_BYTES)
+            
+        null_byte_count = data.count(b'\x00')
+        
+        if null_byte_count > NULL_BYTE_THRESHOLD:
+            return True
+        return False
+    except IOError:
+        return True
+
+def _get_common_root(paths: List[str]) -> str:
+    if not paths: return ""
+    normalized_paths = [os.path.abspath(p) for p in paths]
+    valid_paths = [p for p in normalized_paths if os.path.exists(p)]
+    if not valid_paths: return ""
+    components = [p.split(os.path.sep) for p in valid_paths]
+    common_prefix_list = os.path.commonprefix(components)
+
+    if not common_prefix_list:
+        if os.path.isabs(valid_paths[0]):
+            return os.path.abspath(os.path.sep)
+        return ""
+
+    if common_prefix_list[0].endswith(':') and os.name == 'nt': 
+        if len(common_prefix_list) == 1:
+            root_path = common_prefix_list[0] + os.path.sep
+        else:
+            root_path = common_prefix_list[0] + os.path.sep + os.path.join(*common_prefix_list[1:])
+    else:
+        root_path = os.path.join(*common_prefix_list)
+
+    if os.path.isfile(root_path):
+        root_path = os.path.dirname(root_path)
+    return os.path.normpath(root_path)
+
+
+def scan_directory(paths: List[str], cancel_flag: threading.Event, progress_callback: callable) -> Dict[str, Any]:
+    if not paths:
+        return {'root_node': None, 'file_contents': {}, 'text_file_paths': set(), 'all_extensions': set(), 'total_files': 0, 'root_path': "", 'node_map': {}}
+
+    file_contents: Dict[str, str] = {}
+    text_file_paths: List[str] = []
+    all_extensions: Set[str] = set()
+    
+    root_path = _get_common_root(paths)
+    if root_path == os.path.abspath(os.path.sep) or (os.name == 'nt' and len(root_path) == 3 and root_path[1] == ':'):
+        root_node_name = "Projeto Composto (Raiz)"
+    else:
+        root_node_name = os.path.basename(root_path) 
+        
+    root_node = TreeNode(root_node_name, root_path, True)
+    node_map: Dict[str, TreeNode] = {root_path: root_node}
+    
+    all_items: List[str] = []
+    for input_path in paths:
+        input_path = os.path.abspath(input_path)
+        if not os.path.exists(input_path): continue
+
+        if os.path.isdir(input_path):
+            for dirpath, dirnames, filenames in os.walk(input_path):
+                dirnames[:] = [d for d in dirnames if not (d.startswith('.') or d in ('__pycache__', 'node_modules', 'dist', 'build', 'target', 'venv', 'env'))]
+                for f in filenames:
+                    all_items.append(os.path.join(dirpath, f))
+        elif os.path.isfile(input_path):
+            all_items.append(input_path)
+
+    total_files = len(all_items)
+    current_scanned_count = 0
+    
+    for full_path in all_items:
+        if cancel_flag.is_set(): break
+        current_scanned_count += 1
+        is_text_file = False
+        size = 0 
+        child_node_size = 0 
+        
+        try:
+            size = os.path.getsize(full_path)
+            item_name = os.path.basename(full_path)
+            _, ext = os.path.splitext(item_name)
+            ext = ext.lower()
+            all_extensions.add(ext)
+            
+            is_known_text = ext in TEXT_EXTENSIONS
+            is_known_binary = ext in IGNORED_BINARIES or size > MAX_FILE_SIZE
+            
+            if not is_known_binary:
+                if is_known_text or not is_binary_by_content_check(full_path):
+                    try:
+                        with open(full_path, 'r', encoding='utf-8') as f:
+                            content = f.read()
+                        is_text_file = True
+                        file_contents[full_path] = content
+                        text_file_paths.append(full_path)
+                        child_node_size = len(content.encode('utf-8'))
+                    except Exception:
+                        is_text_file = False 
+
+            child_node = TreeNode(item_name, full_path, False, 
+                                  size_bytes=size if not is_text_file else child_node_size, 
+                                  is_text=is_text_file)
+            
+            if full_path == root_path:
+                path_parts = [item_name]
+            elif root_path == os.path.dirname(full_path):
+                path_parts = [item_name]
+            else:
+                path_parts = os.path.relpath(full_path, root_path).split(os.path.sep)
+            
+            path_parts = [p for p in path_parts if p and p != '.']
+            current_path_segment = root_path
+            current_parent_node = root_node
+            
+            for part in path_parts[:-1]:
+                current_path_segment = os.path.join(current_path_segment, part)
+                if current_path_segment == root_path: continue
+                
+                if current_path_segment not in node_map:
+                    new_dir_node = TreeNode(part, current_path_segment, True)
+                    current_parent_node.add_child(new_dir_node)
+                    node_map[current_path_segment] = new_dir_node
+                    current_parent_node = new_dir_node
+                else:
+                    current_parent_node = node_map[current_path_segment]
+                    
+            current_parent_node.add_child(child_node)
+            node_map[full_path] = child_node
+
+        except Exception:
+            pass 
+        finally:
+            progress_callback(current_scanned_count, total_files, full_path)
+
+    for path, content in file_contents.items():
+        node = node_map.get(path)
+        if node and node.is_text:
+            tokens, _ = count_tokens(content)
+            node.token_count = tokens
+            
+    text_file_paths_set = {path for path in file_contents.keys() if node_map.get(path) and node_map.get(path).is_text}
+    
+    return {
+        'root_node': root_node,
+        'file_contents': file_contents,
+        'text_file_paths': text_file_paths_set,
+        'all_extensions': all_extensions,
+        'total_files': total_files,
+        'root_path': root_path, 
+        'node_map': node_map
+    }
+
+
+==========================================
+Conteúdo de token_engine.py (caminho: core\token_engine.py):
+==========================================
+
+# contextflow/core/token_engine.py
+import tiktoken
+from typing import Tuple, Dict, Any, Optional
+
+try:
+    TOKEN_ENCODER = tiktoken.encoding_for_model("gpt-4o")
+    TIKTOKEN_AVAILABLE = True
+    MODEL_NAME = "gpt-4o"
+    CONTEXT_INFO = f"{MODEL_NAME} (Tokenização real)"
+except ImportError:
+    TOKEN_ENCODER = None
+    TIKTOKEN_AVAILABLE = False
+    MODEL_NAME = "N/A"
+    CONTEXT_INFO = "gpt-4o (tiktoken AUSENTE, usando bytes/4 como FALLBACK)"
+
+def count_tokens(text: str) -> Tuple[int, str]:
+    """Calcula o número de tokens para o texto fornecido."""
+    if not text: return 0, CONTEXT_INFO
+    
+    try:
+        if TIKTOKEN_AVAILABLE and TOKEN_ENCODER:
+            tokens = TOKEN_ENCODER.encode(text)
+            return len(tokens), MODEL_NAME
+        else:
+            # Fallback
+            byte_size = len(text.encode('utf-8'))
+            estimated_tokens = max(1, byte_size // 4)
+            return estimated_tokens, CONTEXT_INFO
+            
+    except Exception:
+        byte_size = len(text.encode('utf-8'))
+        estimated_tokens = max(1, byte_size // 4)
+        return estimated_tokens, CONTEXT_INFO
+
+def get_encoder_info() -> str:
+    return CONTEXT_INFO
+
+def get_tokenization_details(text: str) -> Dict[str, Any]:
+    token_count, encoder_info = count_tokens(text)
+    byte_size = len(text.encode('utf-8'))
+    
+    details = {
+        'tokens': token_count,
+        'byte_size': byte_size,
+        'encoder_info': encoder_info,
+        'token_list': None
+    }
+    
+    if TIKTOKEN_AVAILABLE and TOKEN_ENCODER:
+        try:
+            tokens = [TOKEN_ENCODER.decode_single_token_bytes(t).decode('utf-8', errors='ignore') 
+                      for t in TOKEN_ENCODER.encode(text)]
+            details['token_list'] = tokens
+        except Exception:
+            pass
+
+    return details
+
+
+==========================================
+Conteúdo de tree_logic.py (caminho: core\tree_logic.py):
+==========================================
+
+# contextflow/core/tree_logic.py
+from typing import List, Dict, Any, Optional
+
+class TreeNode:
+    """Representa um arquivo ou diretório na estrutura do projeto."""
+    
+    def __init__(self, name: str, full_path: str, is_dir: bool, size_bytes: int = 0, is_text: bool = False, token_count: int = 0):
+        self.name: str = name
+        self.full_path: str = full_path 
+        self.is_dir: bool = is_dir
+        self.size_bytes: int = size_bytes
+        self.is_text: bool = is_text
+        self.token_count: int = token_count
+        
+        self.children: List['TreeNode'] = []
+        self.parent: Optional['TreeNode'] = None
+        
+        # 0: Não selecionado, 1: Parcialmente selecionado, 2: Totalmente selecionado (Logica original UI)
+        self.selection_state: int = 0 
+        self.total_recursive_tokens: int = 0
+
+    def add_child(self, child: 'TreeNode'):
+        self.children.append(child)
+        child.parent = self
+
+    def calculate_recursive_tokens(self) -> int:
+        """Calcula e atualiza o total de tokens do nó e seus filhos."""
+        total_tokens = self.token_count if not self.is_dir and self.is_text else 0
+        for child in self.children:
+            total_tokens += child.calculate_recursive_tokens()
+        self.total_recursive_tokens = total_tokens
+        return total_tokens
+
+    def __repr__(self) -> str:
+        return f"TreeNode(name='{self.name}', path='{self.full_path}', dir={self.is_dir})"
+
+
+==========================================
+Conteúdo de debug_transcript.py (caminho: debug_transcript.py):
+==========================================
+
+# debug_transcript.py
+import re
+import json
+
+raw_snippet = """{ "wireMagic": "pb3", "pens": [ { } ], "wsWinStyles": [ { }, { "mhModeHint": 2, "juJustifCode": 0, "sdScrollDir": 3 } ], "wpWinPositions": [ { }, { "apPoint": 6, "ahHorPos": 20, "avVerPos": 100, "rcRows": 2, "ccCols": 40 } ], "events": [ { "tStartMs": 0, "dDurationMs": 942360, "id": 1, "wpWinPosId": 1, "wsWinStyleId": 1 }, { "tStartMs": 80, "dDurationMs": 4440, "wWinId": 1, "segs": [ { "utf8": "Quando", "acAsrConf": 0 }, { "utf8": " afirmo", "tOffsetMs": 160, "acAsrConf": 0 }, { "utf8": " neste", "tOffsetMs": 480, "acAsrConf": 0 }, { "utf8": " canal", "tOffsetMs": 800, "acAsrConf": 0 }, { "utf8": " que", "tOffsetMs": 1160, "acAsrConf": 0 }, { "utf8": " o", "tOffsetMs": 1480, "acAsrConf": 0 } ] } ] }"""
+
+def _clean_text(text: str) -> str:
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
+
+def _clean_downloaded_subs(raw_content: str) -> str:
+    print(f"DEBUG: Input length: {len(raw_content)}")
+    print(f"DEBUG: Input start: {raw_content[:50]}...")
+    
+    # 1. Tentar JSON3 (Google Format)
+    try:
+        possible_json = json.loads(raw_content)
+        print("DEBUG: JSON load success")
+        
+        if 'events' in possible_json:
+            print("DEBUG: Found 'events' key")
+            segs = []
+            for event in possible_json['events']:
+                if 'segs' in event:
+                    for s in event['segs']:
+                        if 'utf8' in s and s['utf8'].strip():
+                            segs.append(s['utf8'].strip())
+            return _clean_text(" ".join(segs))
+        else:
+            print("DEBUG: JSON loaded but no 'events'")
+    except Exception as e:
+        print(f"DEBUG: JSON load failed: {e}")
+
+    # 2. Fallback
+    print("DEBUG: Fallback regex cleanup")
+    return "FALLBACK_USED"
+
+cleaned = _clean_downloaded_subs(raw_snippet)
+print("\n--- RESULTADO FINAL ---\n")
+print(cleaned)
+
+
+==========================================
+Conteúdo de main.py (caminho: main.py):
+==========================================
+
+# contextflow/main.py
+import wx
+import sys
+import os
+
+# Adiciona o diretório atual ao path para imports funcionarem corretamente
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+from ui.app_window import AppWindow
+from core.token_engine import TIKTOKEN_AVAILABLE
+
+class ContextFlowApp(wx.App):
+    def OnInit(self):
+        print(f"Iniciando ContextFlow...")
+        print(f"Ambiente: wxpython={wx.version()}, tiktoken={'OK' if TIKTOKEN_AVAILABLE else 'FAIL'}")
+        
+        self.frame = AppWindow(None)
+        self.SetTopWindow(self.frame)
+
+        # --- Logging Setup ---
+        import logging
+        from ui.panel_console import WxLogHandler
+        
+        # Pega o logger raiz
+        root_logger = logging.getLogger()
+        root_logger.setLevel(logging.INFO)
+        
+        # Cria o handler apontando para o TextCtrl do Console
+        # AppWindow -> panel_console -> txt_log
+        if hasattr(self.frame, 'panel_console'):
+            handler = WxLogHandler(self.frame.panel_console.txt_log)
+            
+            # Formatter simples
+            formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(name)s: %(message)s', datefmt='%H:%M:%S')
+            handler.setFormatter(formatter)
+            
+            root_logger.addHandler(handler)
+            logging.info("Logging system initialized and connected to GUI.")
+
+        return True
+
+if __name__ == '__main__':
+    app = ContextFlowApp(False)
+    app.MainLoop()
+
+
+==========================================
+Conteúdo de export_service.py (caminho: services\export_service.py):
+==========================================
+from typing import List, Callable
+import zipfile
+import logging
+from core.app_state import AppState
+from core.export_formatter import ExportFormatter
+
+logger = logging.getLogger("contextflow.export")
+
+class ExportService:
+    def __init__(self, app_state: AppState):
+        self.app_state = app_state
+
+    def export_batch(self, video_ids: List[str], format_type: str, output_path: str, progress_callback: Callable[[int, int, str], None] = None):
+        """
+        Executa exportação em lote.
+        progress_callback: Função (current, total, msg) -> None.
+        Nota: O callback deve ser thread-safe (usar wx.CallAfter se tocar na UI).
+        """
+        total = len(video_ids)
+        
+        try:
+            if format_type == "markdown_single":
+                with open(output_path, 'w', encoding='utf-8') as f:
+                    f.write(ExportFormatter.get_single_markdown_header())
+                    
+                    for i, vid in enumerate(video_ids):
+                        meta = self.app_state.get_video(vid)
+                        if meta:
+                            if progress_callback:
+                                progress_callback(i, total, f"Exportando: {meta['title']}")
+                            
+                            # Transcrição completa vem do DB
+                            t_data = self.app_state.db_handler.get_transcript(vid)
+                            full_text = t_data['full_text'] if t_data else ""
+                            
+                            md_content = ExportFormatter.format_video_markdown(meta, full_text)
+                            f.write(f"---\n\n{md_content}\n")
+                            
+            elif format_type == "zip":
+                 with zipfile.ZipFile(output_path, 'w') as zf:
+                    for i, vid in enumerate(video_ids):
+                        meta = self.app_state.get_video(vid)
+                        if meta:
+                            if progress_callback:
+                                progress_callback(i, total, f"Compactando: {meta['title']}")
+                                
+                            t_data = self.app_state.db_handler.get_transcript(vid)
+                            full_text = t_data['full_text'] if t_data else ""
+                            
+                            md_content = ExportFormatter.format_video_markdown(meta, full_text)
+                            filename = f"{ExportFormatter.get_safe_filename(meta['title'])}.md"
+                            
+                            zf.writestr(filename, md_content)
+            
+            if progress_callback:
+                progress_callback(total, total, "Concluído!")
+                
+        except Exception as e:
+            logger.error(f"Export Error: {e}")
+            if progress_callback:
+                progress_callback(total, total, f"Erro: {str(e)}")
+
+
+==========================================
+Conteúdo de utils.py (caminho: services\utils.py):
+==========================================
+# contextflow/services/utils.py
+
+def format_duration(seconds: int) -> str:
+    """
+    Formata segundos (int/float) para 'HH:MM:SS' ou 'MM:SS'.
+    Ex: 65 -> '00:01:05'
+    """
+    if not seconds:
+        return "00:00:00"
+    
+    try:
+        val = int(float(seconds))
+        m, s = divmod(val, 60)
+        h, m = divmod(m, 60)
+        return f"{h:02d}:{m:02d}:{s:02d}"
+    except (ValueError, TypeError):
+        return "00:00:00"
+
+
+==========================================
+Conteúdo de youtube_manager.py (caminho: services\youtube_manager.py):
+==========================================
+
+# contextflow/services/youtube_manager.py
+
+import yt_dlp
+import re
+import os
+import random
+import time
+import requests
+import logging
+from typing import Optional, Dict, Any, Tuple, List
+from youtube_transcript_api import YouTubeTranscriptApi
+
+logger = logging.getLogger("contextflow.youtube")
+
+class YouTubeManager:
+    """
+    Gerencia interações com o YouTube: Extração de metadados, thumbnails e download de transcrições.
+    Isolado de frameworks web (Flask) para uso desktop.
+    """
+    def __init__(self):
+        self.headers = self._get_realistic_headers()
+
+    def _get_realistic_headers(self) -> Dict[str, str]:
+        user_agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+             'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0'
+        ]
+        return {
+            'User-Agent': random.choice(user_agents),
+            'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+        }
+
+    def validate_url(self, url: str) -> bool:
+        youtube_regex = (
+            r'(https?://)?(www\.)?'
+            '(youtube|youtu|youtube-nocookie)\.(com|be)/'
+            '(watch\?v=|embed/|v/|playlist\?list=|.+\?v=)?([^&=%\?]{11}|[a-zA-Z0-9_-]+)'
+        )
+        return bool(re.match(youtube_regex, url))
+
+    def extract_video_id(self, url: str) -> Optional[str]:
+        patterns = [
+            r'(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=))([^"&?\/\s]{11})',
+            r'(?:youtu\.be\/|v\/|vi\/|u\/\w\/|embed\/)([^"&?\/\s]{11})'
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, url)
+            if match: return match.group(1)
+        return None
+
+    def get_video_metadata(self, url: str) -> Dict[str, Any]:
+        """Obtém metadados básicos sem baixar o vídeo."""
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'skip_download': True,
+        }
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                
+                duration_sec = info.get('duration', 0)
+                formatted_duration = self._format_duration(duration_sec)
+                
+                # Timestamp atual
+                import datetime
+                now_str = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+
+                return {
+                    'id': info.get('id'),
+                    'title': info.get('title', 'Unknown'),
+                    'url': url,
+                    'duration': formatted_duration, # Agora formatado HH:MM:SS
+                    'duration_seconds': duration_sec, # Mantemos o raw se precisar
+                    'upload_date': info.get('upload_date', ''),
+                    'thumbnail': info.get('thumbnail', ''),
+                    'uploader': info.get('uploader', ''),
+                    'channel_name': info.get('uploader') or info.get('channel') or info.get('channel_id') or 'Desconhecido',
+                    'added_at': now_str,
+                    'status': 'fetched'
+                }
+        except Exception as e:
+            logger.error(f"Metadata extraction failed for {url}: {e}")
+            video_id = self.extract_video_id(url)
+            return {'id': video_id, 'url': url, 'title': 'Metadata Error', 'status': 'error'}
+
+    def _format_duration(self, seconds: int) -> str:
+        """Converte segundos para HH:MM:SS"""
+        if not seconds: return "00:00:00"
+        m, s = divmod(seconds, 60)
+        h, m = divmod(m, 60)
+        return f"{h:02d}:{m:02d}:{s:02d}"
+
+    def get_transcript(self, video_id: str) -> Tuple[Optional[str], str]:
+        """
+        Tenta obter transcrição na seguinte ordem:
+        1. API (Manual - PT)
+        2. API (Manual - EN)
+        3. yt-dlp (Auto - PT)
+        4. yt-dlp (Auto - EN)
+        """
+        
+        # 1. API - Tentativa Manual
+        try:
+            # Tenta pegar lista de transcrições disponíveis
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            
+            # Tenta encontrar manual created em PT
+            try:
+                t = transcript_list.find_manually_created_transcript(['pt', 'pt-BR'])
+                return self._clean_text(" ".join([i['text'] for i in t.fetch()])), "api_manual_pt"
+            except:
+                pass
+
+            # Tenta manual EN e traduz? Não, por enquanto só pega original
+            try:
+                 t = transcript_list.find_manually_created_transcript(['en'])
+                 return self._clean_text(" ".join([i['text'] for i in t.fetch()])), "api_manual_en"
+            except:
+                pass
+                
+            # Fallback para generated se não achou manual (via API)
+            try:
+                t = transcript_list.find_generated_transcript(['pt', 'pt-BR'])
+                return self._clean_text(" ".join([i['text'] for i in t.fetch()])), "api_auto_pt"
+            except:
+                pass
+                
+        except Exception as e:
+            logger.warning(f"YouTubeTranscriptApi initial check failed: {e}")
+
+        # 2. Fallback via yt-dlp (Heavy methods)
+        # Tenta Auto PT
+        res, method = self._download_subtitles_fallback(video_id, langs=['pt', 'pt-BR'])
+        if res: return res, f"ytdlp_{method}"
+        
+        # Tenta Auto EN
+        res, method = self._download_subtitles_fallback(video_id, langs=['en'])
+        if res: return res, f"ytdlp_{method}"
+
+        return None, "failed"
+
+    def _download_subtitles_fallback(self, video_id: str, langs: List[str] = None) -> Tuple[Optional[str], str]:
+        if langs is None: langs = ["pt", "pt-BR", "en"]
+        
+        url = f"https://www.youtube.com/watch?v={video_id}"
+        ydl_opts = {
+            'skip_download': True,
+            'writesubtitles': True,
+            'writeautomaticsub': True,
+            'subtitleslangs': langs,
+            'subformat': 'json3',
+            'quiet': True
+        }
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                # Check standard subtitles first
+                subs = info.get('subtitles', {}) 
+                # Then auto captions
+                auto_subs = info.get('automatic_captions', {})
+                
+                target_url = None
+                
+                # Helper to find url in dict
+                def find_url(source, lang_list):
+                    for lang in lang_list:
+                         if lang in source:
+                            for fmt in source[lang]:
+                                if fmt.get('ext') in ['json3', 'srv3', 'vtt', 'ttml']:
+                                    return fmt['url']
+                    return None
+
+                target_url = find_url(subs, langs)
+                if not target_url:
+                    target_url = find_url(auto_subs, langs)
+                
+                if target_url:
+                    resp = requests.get(target_url, headers=self.headers)
+                    if resp.status_code == 200:
+                        return self._clean_downloaded_subs(resp.text), "fallback_ytdlp"
+        except Exception as e:
+            logger.error(f"Fallback download failed for {video_id} with langs {langs}: {e}")
+        return None, "failed"
+
+    def _clean_text(self, text: str) -> str:
+        text = re.sub(r'\s+', ' ', text)
+        return text.strip()
+
+    def _clean_downloaded_subs(self, raw_content: str) -> str:
+        """Limpa legendas que podem vir em XML, JSON3 ou VTT."""
+        import traceback
+        
+        # Log para debug extremo se falhar
+        # logger.debug(f"Cleaning content (preview): {raw_content[:200]}")
+        
+        # 1. Tentar JSON3 (Google Format)
+        try:
+            import json
+            possible_json = json.loads(raw_content)
+            
+            if possible_json and 'events' in possible_json:
+                segs = []
+                for event in possible_json['events']:
+                    if 'segs' in event:
+                        for s in event['segs']:
+                            if 'utf8' in s and s['utf8'].strip():
+                                segs.append(s['utf8'].strip())
+                return self._clean_text(" ".join(segs))
+        except Exception as e:
+            # logger.warning(f"JSON3 cleanup failed: {e}")
+            pass
+
+        # 2. Fallback (VTT/XML/Raw)
+        try:
+            text = re.sub(r'<[^>]+>', '', raw_content) # Remove XML tags
+            text = re.sub(r'WEBVTT', '', text)
+            # Remove timestamps VTT: 00:00:00.000 -> ...
+            text = re.sub(r'\d{1,2}:\d{1,2}:\d{1,2}[\.,]\d{3}.*', '', text) 
+            
+            # Se tiver cara de JSON mas falhou o load, tenta limpar chaves
+            if '{' in text and '}' in text:
+                 text = re.sub(r'[{:"},]', ' ', text)
+                 text = re.sub(r'wireMagic|pens|wsWinStyles|wpWinPositions|events|tStartMs|dDurationMs|utf8|acAsrConf', '', text)
+            
+            lines = [l.strip() for l in text.split('\n') if l.strip()]
+            clean_lines = [l for l in lines if not re.match(r'^\d+$', l) and '-->' not in l]
+            
+            return self._clean_text(" ".join(clean_lines))
+        except Exception as e:
+            logger.error(f"Fallback cleanup failed: {traceback.format_exc()}")
+            return ""
+
+    def get_playlist_info(self, url: str) -> Dict[str, Any]:
+        """Retorna info da playlist e vídeos."""
+        ydl_opts = {
+            'extract_flat': 'in_playlist',
+            'quiet': True,
+            'no_warnings': True,
+        }
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                if 'entries' in info:
+                    return {
+                        'id': info.get('id'),
+                        'title': info.get('title', 'Playlist'),
+                        'videos': [
+                            {'id': e['id'], 'title': e.get('title'), 'url': e.get('url')} 
+                            for e in info['entries'] if e.get('id')
+                        ]
+                    }
+        except Exception as e:
+            logger.error(f"Playlist info extraction failed: {e}")
+        return {}
+
+    def download_thumbnail(self, url: str, save_path: str) -> bool:
+        """Baixa e salva thumbnail, convertendo para JPG real via Pillow."""
+        from PIL import Image
+        from io import BytesIO
+
+        # Lista de tentativas: URL original (geralmente maxres) -> hqdefault (fallback)
+        urls_to_try = [url]
+        if "maxresdefault" in url:
+            urls_to_try.append(url.replace("maxresdefault", "hqdefault"))
+        
+        for target_url in urls_to_try:
+            try:
+                # Garantir que diretório existe
+                os.makedirs(os.path.dirname(save_path), exist_ok=True)
+                
+                resp = requests.get(target_url, headers=self.headers, stream=True, timeout=10)
+                if resp.status_code == 200:
+                    # Carrega na memória
+                    img_data = BytesIO(resp.content)
+                    
+                    # Abre e converte
+                    with Image.open(img_data) as img:
+                        img = img.convert("RGB") # Remove Alpha se houver (WebP/PNG)
+                        img.save(save_path, "JPEG", quality=90)
+                    
+                    return True
+                else:
+                    logger.warning(f"Thumbnail request failed ({resp.status_code}) for {target_url}")
+            except Exception as e:
+                logger.error(f"Thumbnail download failed for {target_url}: {e}")
+        
+        return False
+
+
+==========================================
+Conteúdo de db_handler.py (caminho: storage\db_handler.py):
+==========================================
+
+# contextflow/storage/db_handler.py
+import sqlite3
+import os
+import datetime
+from typing import Dict, Any, List, Optional
+from constants import DB_PATH
+
+class DatabaseHandler:
+    def __init__(self, db_path: str = DB_PATH):
+        self.db_path = db_path
+        self._init_db()
+        self._check_and_migrate_db()
+
+    def _get_connection(self):
+        return sqlite3.connect(self.db_path)
+
+    def _init_db(self):
+        """Cria as tabelas se não existirem."""
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        # Tabela de Vídeos (Metadados)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS videos (
+                id TEXT PRIMARY KEY,
+                url TEXT NOT NULL,
+                title TEXT,
+                channel_name TEXT,
+                duration INTEGER,
+                upload_date TEXT,
+                thumbnail_path TEXT, 
+                playlist_id TEXT,
+                playlist_title TEXT,
+                token_count INTEGER DEFAULT 0,
+                status TEXT DEFAULT 'pending', 
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # Tabela de Transcrições (Conteúdo Pesado)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS transcripts (
+                video_id TEXT PRIMARY KEY,
+                full_text TEXT,
+                summary TEXT,
+                FOREIGN KEY (video_id) REFERENCES videos(id)
+            )
+        ''')
+        
+        conn.commit()
+        conn.close()
+
+    def _check_and_migrate_db(self):
+        """Verifica se as novas colunas existem e as adiciona se necessário."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("PRAGMA table_info(videos)")
+            columns = [info[1] for info in cursor.fetchall()]
+            
+            if 'playlist_id' not in columns:
+                print("Migrando DB: Adicionando playlist_id...")
+                cursor.execute("ALTER TABLE videos ADD COLUMN playlist_id TEXT")
+                
+            if 'playlist_title' not in columns:
+                print("Migrando DB: Adicionando playlist_title...")
+                cursor.execute("ALTER TABLE videos ADD COLUMN playlist_title TEXT")
+
+            if 'channel_name' not in columns:
+                print("Migrando DB: Adicionando channel_name...")
+                cursor.execute("ALTER TABLE videos ADD COLUMN channel_name TEXT")
+
+            if 'added_at' not in columns:
+                print("Migrando DB: Adicionando added_at...")
+                cursor.execute("ALTER TABLE videos ADD COLUMN added_at TEXT")
+                
+            conn.commit()
+        except Exception as e:
+            print(f"Erro na migração de DB: {e}")
+        finally:
+            conn.close()
+
+    def add_video_entry(self, video_data: Dict[str, Any]):
+        """Insere ou atualiza um registro de vídeo."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            # created_at is NOT updated on conflict regarding requirement
+            cursor.execute('''
+                INSERT INTO videos (id, url, title, channel_name, duration, upload_date, thumbnail_path, playlist_id, playlist_title, status, created_at, added_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    title=excluded.title,
+                    channel_name=excluded.channel_name,
+                    playlist_id=excluded.playlist_id,
+                    playlist_title=excluded.playlist_title,
+                    status=excluded.status,
+                    thumbnail_path=excluded.thumbnail_path,
+                    duration=excluded.duration
+                    -- created_at e added_at NÃO são atualizados
+            ''', (
+                video_data['id'],
+                video_data['url'],
+                video_data.get('title', 'Unknown'),
+                video_data.get('channel_name', video_data.get('channel', '')), 
+                # Salva duration formatada ou raw? O ideal é salvar raw se possível, mas aqui estamos mantendo compatibilidade
+                # Se vier 'duration' formatado (str), salva. Se vier int, formata?
+                # O youtube_manager manda formatado em 'duration'.
+                # Vamos salvar o que vier em 'duration'.
+                video_data.get('duration', 0),
+                video_data.get('upload_date', ''),
+                video_data.get('thumbnail_path', ''),
+                video_data.get('playlist_id'),
+                video_data.get('playlist_title'),
+                video_data.get('status', 'pending'),
+                # created_at (novo registro)
+                datetime.datetime.now().isoformat(),
+                # added_at (novo registro) - Se vier no video_data, usa, senão usa agora
+                video_data.get('added_at') or datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+            ))
+            conn.commit()
+        except Exception as e:
+            print(f"DB Error (add_video): {e}")
+        finally:
+            conn.close()
+
+    def update_video_status(self, video_id: str, status: str, token_count: int = None):
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            if token_count is not None:
+                cursor.execute('UPDATE videos SET status = ?, token_count = ? WHERE id = ?', (status, token_count, video_id))
+            else:
+                cursor.execute('UPDATE videos SET status = ? WHERE id = ?', (status, video_id))
+            conn.commit()
+        finally:
+            conn.close()
+
+    def save_transcript(self, video_id: str, text: str, summary: str = ""):
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute('''
+                INSERT INTO transcripts (video_id, full_text, summary)
+                VALUES (?, ?, ?)
+                ON CONFLICT(video_id) DO UPDATE SET
+                    full_text=excluded.full_text,
+                    summary=excluded.summary
+            ''', (video_id, text, summary))
+            conn.commit()
+        finally:
+            conn.close()
+
+    def get_all_videos(self) -> List[Dict[str, Any]]:
+        conn = self._get_connection()
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        try:
+            # JOIN para pegar metadados + snippet da transcrição + resumo
+            # Usando LEFT JOIN para garantir que videos sem transcrição apareçam
+            query = '''
+                SELECT 
+                    v.*, 
+                    substr(t.full_text, 1, 100) as transcript_snippet,
+                    t.summary as summary_text
+                FROM videos v
+                LEFT JOIN transcripts t ON v.id = t.video_id
+                ORDER BY v.created_at DESC
+            '''
+            cursor.execute(query)
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
+        finally:
+            conn.close()
+
+    def get_transcript(self, video_id: str) -> Optional[Dict[str, Any]]:
+        conn = self._get_connection()
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        try:
+            cursor.execute('SELECT * FROM transcripts WHERE video_id = ?', (video_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+        finally:
+            conn.close()
+
+    def delete_video(self, video_id: str):
+        import os
+        conn = self._get_connection()
+        conn.row_factory = sqlite3.Row # Ensure we can access col names
+        cursor = conn.cursor()
+        try:
+            # 1. Obter caminho da thumbnail antes de deletar
+            cursor.execute('SELECT thumbnail_path FROM videos WHERE id = ?', (video_id,))
+            row = cursor.fetchone()
+            if row and row['thumbnail_path']:
+                thumb_path = row['thumbnail_path']
+                if os.path.exists(thumb_path):
+                    try:
+                        os.remove(thumb_path)
+                        # print(f"Arquivo deletado: {thumb_path}")
+                    except Exception as ex:
+                        print(f"Erro ao deletar arquivo {thumb_path}: {ex}")
+
+            # Transcripts tem FK, mas vamos garantir
+            cursor.execute('DELETE FROM transcripts WHERE video_id = ?', (video_id,))
+            cursor.execute('DELETE FROM videos WHERE id = ?', (video_id,))
+            conn.commit()
+        except Exception as e:
+            print(f"Erro ao deletar video {video_id}: {e}")
+        finally:
+            conn.close()
+
+    def get_video_ids_for_playlist(self, playlist_id: str) -> List[str]:
+        """Retorna lista de IDs de vídeo para uma dada playlist."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute('SELECT id FROM videos WHERE playlist_id = ?', (playlist_id,))
+            rows = cursor.fetchall()
+            return [r[0] for r in rows]
+        finally:
+            conn.close()
+
+    def delete_playlist(self, playlist_id: str):
+        import os
+        conn = self._get_connection()
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        try:
+            # 1. Pegar IDs e Thumbs para limpar
+            cursor.execute('SELECT id, thumbnail_path FROM videos WHERE playlist_id = ?', (playlist_id,))
+            rows = cursor.fetchall()
+            
+            vids = []
+            for r in rows:
+                vids.append(r['id'])
+                t_path = r['thumbnail_path']
+                if t_path and os.path.exists(t_path):
+                    try:
+                        os.remove(t_path)
+                    except: pass
+            
+            if vids:
+                placeholders = ','.join(['?'] * len(vids))
+                cursor.execute(f'DELETE FROM transcripts WHERE video_id IN ({placeholders})', vids)
+                
+            conn.commit()
+        except Exception as e:
+            print(f"Erro ao deletar playlist {playlist_id}: {e}")
+        finally:
+            conn.close()
+
+    def delete_orphaned_videos(self):
+        """Remove todos os vídeos que NÃO pertencem a uma playlist."""
+        import os
+        conn = self._get_connection()
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        try:
+            # 1. Pegar IDs e Thumbs
+            cursor.execute('SELECT id, thumbnail_path FROM videos WHERE playlist_id IS NULL OR playlist_id = ""')
+            rows = cursor.fetchall()
+            
+            vids = []
+            for r in rows:
+                vids.append(r['id'])
+                t_path = r['thumbnail_path']
+                if t_path and os.path.exists(t_path):
+                    try:
+                        os.remove(t_path)
+                    except: pass
+            
+            if vids:
+                placeholders = ','.join(['?'] * len(vids))
+                cursor.execute(f'DELETE FROM transcripts WHERE video_id IN ({placeholders})', vids)
+                cursor.execute(f'DELETE FROM videos WHERE id IN ({placeholders})', vids)
+                conn.commit()
+            return vids
+        except Exception as e:
+            print(f"Erro ao deletar orfãos: {e}")
+            return []
+        finally:
+            conn.close()
+
+
+==========================================
+Conteúdo de test_export_regression.py (caminho: tests\test_export_regression.py):
+==========================================
+import unittest
+import os
+import sys
+import shutil
+import zipfile
+import threading
+from unittest.mock import MagicMock, patch
+
+# Ensure we can import from root
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+# Mock wx before importing processor
+sys.modules['wx'] = MagicMock()
+import wx
+# Mock CallAfter to just execute the function immediately or pass
+def mock_call_after(func, *args, **kwargs):
+    func(*args, **kwargs)
+wx.CallAfter = mock_call_after
+
+from core.processor import Processor
+from services.export_service import ExportService
+from core.app_state import AppState
+
+GOLD_STANDARD_PATH = os.path.join(os.path.dirname(__file__), 'gold_standard.zip')
+TEST_OUTPUT_PATH = os.path.join(os.path.dirname(__file__), 'test_output.zip')
+
+class TestExportRegression(unittest.TestCase):
+    def setUp(self):
+        # Setup Mock AppState
+        self.mock_app_state = MagicMock(spec=AppState)
+        self.mock_db_handler = MagicMock()
+        self.mock_app_state.db_handler = self.mock_db_handler
+        
+        # Create deterministic 5 videos
+        self.videos = []
+        for i in range(5):
+            vid = {
+                'id': f'vid_{i}',
+                'title': f'Video Title {i}',
+                'url': f'http://youtube.com/watch?v=vid_{i}',
+                'channel_name': 'Test Channel',
+                'duration_seconds': 60 + i,
+                'token_count': 100 * i,
+                'upload_date': '20230101',
+                'playlist_title': 'Test Playlist'
+            }
+            self.videos.append(vid)
+            
+        # Mock get_video
+        def get_video_side_effect(vid_id):
+            for v in self.videos:
+                if v['id'] == vid_id:
+                    return v
+            return None
+        self.mock_app_state.get_video.side_effect = get_video_side_effect
+        
+        # Mock get_transcript
+        def get_transcript_side_effect(vid_id):
+            return {'full_text': f"Transcript content for {vid_id}.\nLine 2.\nLine 3."}
+        self.mock_db_handler.get_transcript.side_effect = get_transcript_side_effect
+
+        # Instantiate ExportService
+        self.export_service = ExportService(self.mock_app_state)
+    
+    def tearDown(self):
+        if os.path.exists(TEST_OUTPUT_PATH):
+            os.remove(TEST_OUTPUT_PATH)
+
+    def generate_gold_standard(self):
+        ids = [v['id'] for v in self.videos]
+        print(f"Generating Gold Standard ZIP to {GOLD_STANDARD_PATH}...")
+        self.export_service.export_batch(ids, "zip", GOLD_STANDARD_PATH, None)
+        print("Done.")
+
+    def test_regression(self):
+        if not os.path.exists(GOLD_STANDARD_PATH):
+            self.fail("Gold standard ZIP not found. Run this test with 'generate' argument first.")
+
+        ids = [v['id'] for v in self.videos]
+        self.export_service.export_batch(ids, "zip", TEST_OUTPUT_PATH, None)
+        
+        # Compare ZIP contents
+        with zipfile.ZipFile(GOLD_STANDARD_PATH, 'r') as gold, zipfile.ZipFile(TEST_OUTPUT_PATH, 'r') as test:
+            gold_files = sorted(gold.namelist())
+            test_files = sorted(test.namelist())
+            
+            self.assertEqual(gold_files, test_files, "File list in ZIP differs")
+            
+            for fname in gold_files:
+                with gold.open(fname) as f_gold, test.open(fname) as f_test:
+                    self.assertEqual(f_gold.read(), f_test.read(), f"Content of {fname} differs")
+
+if __name__ == '__main__':
+    # Simple CLI to generate gold standard
+    if len(sys.argv) > 1 and sys.argv[1] == 'generate':
+        t = TestExportRegression()
+        t.setUp()
+        t.generate_gold_standard()
+    else:
+        unittest.main()
+
+
+==========================================
+Conteúdo de test_virtual_table_perf.py (caminho: tests\test_virtual_table_perf.py):
+==========================================
+import time
+import sys
+import os
+from unittest.mock import MagicMock
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+# Mock wx
+mock_wx = MagicMock()
+sys.modules['wx'] = mock_wx
+sys.modules['wx.grid'] = MagicMock()
+
+# Patch GridTableBase to be a normal class so we can inherit
+class MockGridTableBase:
+    def __init__(self): pass
+    def GetAttr(self, row, col, kind): return MagicMock()
+
+mock_wx.grid.GridTableBase = MockGridTableBase
+mock_wx.grid.GridCellAttr = MagicMock
+
+from ui.virtual_table import VirtualVideoTable
+
+def run_perf_test():
+    print("Preparing 5000 items...")
+    data = []
+    for i in range(5000):
+        data.append({
+            'id': f'vid_{i}',
+            'title': f'Video Title {i} with some long text to simulate real data',
+            'url': f'http://youtube.com/watch?v=vid_{i}',
+            'duration': 125,
+            'token_count': 1500,
+            'status': 'completed',
+            'upload_date': '20230101',
+            'channel_name': 'Channel Name',
+            'added_at': '2023-01-01 12:00:00',
+            'playlist_title': 'Playlist X'
+        })
+    
+    # 1. Test Copy Speed (Simulate AppState.get_all_videos safe copy)
+    start = time.time()
+    # "Safe copy" usually means list of dicts. 
+    # Shallow copy of list is fast. Deep copy (dict(d)) is slower.
+    # Let's test the stricter requirement: [dict(d) for d in data]
+    snapshot = [dict(d) for d in data]
+    elapsed_copy = (time.time() - start) * 1000
+    print(f"Snapshot 5000 items: {elapsed_copy:.2f}ms")
+    
+    if elapsed_copy > 100: # Threshold is 100ms in doc (Critical) / 50ms (Goal)
+        print("FAIL: Snapshot too slow > 100ms")
+        sys.exit(1)
+
+    # 2. Test VirtualTable Access
+    table = VirtualVideoTable(snapshot)
+    
+    start = time.time()
+    # Simulate a full refresh of visible area (e.g., 50 rows) + buffer = 100 rows
+    # 11 columns
+    for r in range(100):
+        for c in range(11):
+            _ = table.GetValue(r, c)
+    elapsed_render = (time.time() - start) * 1000
+    print(f"Render 100 rows (1100 cells): {elapsed_render:.2f}ms")
+    
+    if elapsed_render > 50:
+        print("FAIL: Render too slow")
+        sys.exit(1)
+        
+    print("SUCCESS: Performance within limits.")
+
+if __name__ == '__main__':
+    run_perf_test()
+
+
+==========================================
+Conteúdo de verify_architecture.py (caminho: tests\verify_architecture.py):
+==========================================
+
+import unittest
+import threading
+import time
+import os
+import shutil
+from core.app_state import AppState
+from services.utils import format_duration
+
+# Mock or Configurable DB path would be ideal, but assuming AppState uses default.
+# We will use a unique ID for test data to avoid collision.
+
+class TestArchitecture(unittest.TestCase):
+    def setUp(self):
+        # Initialize AppState (Singleton)
+        self.app_state = AppState()
+        # Ensure we can run async operations
+        self.app_state._initialized = True # Force if needed, but Singleton handles it.
+        
+    def test_singleton(self):
+        state2 = AppState()
+        self.assertIs(self.app_state, state2)
+
+    def test_video_add_delete_flow(self):
+        # 1. Add Video
+        vid_id = "TEST_VID_001"
+        data = {
+            "id": vid_id,
+            "title": "Test Video Architecture",
+            "url": "http://test.com/vid1",
+            "status": "downloaded",
+            "created_at": "2023-01-01 10:00:00"
+        }
+        
+        self.app_state.add_or_update_video(data)
+        
+        # Verify in memory
+        v = self.app_state.get_video(vid_id)
+        self.assertIsNotNone(v)
+        self.assertEqual(v['title'], "Test Video Architecture")
+        
+        # Verify persistence (give it a moment for the thread)
+        time.sleep(1) 
+        # We would need to check DB directly or reload AppState.
+        # Since AppState loads from DB on init, and it's singleton...
+        # We can trust the internal logic or use a fresh DB handler to check.
+        from storage.db_handler import DatabaseHandler
+        db = DatabaseHandler()
+        all_vids = db.get_all_videos()
+        rows = [v for v in all_vids if v['id'] == vid_id]
+        self.assertTrue(rows, "Video should be in DB")
+        
+        # 2. Add Active Task (Phantom Data check)
+        task_uuid = "TASK_UUID_999"
+        task_data = {"uuid": task_uuid, "status": "downloading", "progress": 50}
+        self.app_state.add_active_task(task_uuid, task_data)
+        
+        active = self.app_state.get_active_downloads()
+        self.assertTrue(any(t['uuid'] == task_uuid for t in active))
+        
+        # 3. Delete Video while Task is Active
+        self.app_state.delete_videos([vid_id])
+        
+        # Video should be gone
+        self.assertIsNone(self.app_state.get_video(vid_id))
+        
+        # Task should STILL be there (Decoupling success)
+        active_after = self.app_state.get_active_downloads()
+        match = [t for t in active_after if t['uuid'] == task_uuid]
+        self.assertTrue(match, "Active task should persist after unrelated video deletion")
+        
+        # Cleanup
+        self.app_state.remove_active_task(task_uuid)
+        # DB deletion is async
+        time.sleep(1)
+        all_vids_after = db.get_all_videos()
+        rows_after = [v for v in all_vids_after if v['id'] == vid_id]
+        self.assertFalse(rows_after, "Video should be removed from DB")
+
+if __name__ == '__main__':
+    unittest.main()
+
+
+==========================================
+Conteúdo de app_window.py (caminho: ui\app_window.py):
+==========================================
+
+# contextflow/ui/app_window.py
+import wx
+import threading
+import os
+from constants import APP_NAME, APP_VERSION
+from core.token_engine import get_encoder_info
+from core.app_state import AppState
+
+# Real implementations
+from ui.panel_grid import GridPanel
+from ui.panel_detail import DetailPanel
+from ui.panel_console import ConsolePanel
+from ui.sidebar import Sidebar
+from ui.panel_table import PanelTable
+from storage.db_handler import DatabaseHandler
+
+class AppWindow(wx.Frame):
+    def __init__(self, parent, title=f"{APP_NAME} v{APP_VERSION}"):
+        super().__init__(parent, title=title, size=(1280, 850))
+        
+        # Initialize App State Singleton
+        self.app_state = AppState()
+        self.db_handler = self.app_state.db_handler # Shortcut for compatibility if needed
+        
+        self._init_ui()
+        self.Maximize() # Inicia maximizado
+        self.Show(True)
+        
+        # Log inicial
+        self.panel_console.log("Sistema iniciado. Pronto.", "SYSTEM")
+
+    def _init_ui(self):
+        # 1. Main Splitter (Vertical: Sidebar | Workspace+Console)
+        self.main_splitter = wx.SplitterWindow(self, style=wx.SP_BORDER | wx.SP_LIVE_UPDATE)
+        
+        # 1.1 Sidebar (Left) - Inject AppState
+        self.sidebar = Sidebar(self.main_splitter, self.on_sidebar_selection, self.on_sidebar_data_changed, app_state=self.app_state)
+
+        # 1.2 Right Area Container (will be a Splitter too)
+        self.right_splitter = wx.SplitterWindow(self.main_splitter, style=wx.SP_BORDER | wx.SP_LIVE_UPDATE)
+        
+        # 2. Workspace (Top Right) - Notebook
+        self.notebook = wx.Notebook(self.right_splitter)
+        
+        # 3. Console (Bottom Right)
+        self.panel_console = ConsolePanel(self.right_splitter)
+        
+        # 4. Criar Abas do Notebook
+        # Aba 1: Grid de Dados - Inject AppState
+        # Passamos self.log_to_console como callback
+        self.panel_grid = GridPanel(self.notebook, 
+                                    on_data_changed=self.on_grid_data_changed,
+                                    log_callback=self.log_to_console,
+                                    app_state=self.app_state)
+        
+        # Aba 2: Tabela: Vídeos (Nova Aba) - Inject AppState
+        self.panel_table = PanelTable(self.notebook, on_selection_callback=self.on_table_selection, app_state=self.app_state)
+        
+        # Aba 3: Detalhes / Conteúdo
+        self.panel_detail = DetailPanel(self.notebook)
+        
+        self.notebook.AddPage(self.panel_grid, "Dados (Batch)")
+        self.notebook.AddPage(self.panel_table, "Tabela: Vídeos")
+        self.notebook.AddPage(self.panel_detail, "Conteúdo (Leitura)")
+
+        # Configurar Splitters
+        # Right Splitter: Top (Notebook) vs Bottom (Console)
+        self.right_splitter.SplitHorizontally(self.notebook, self.panel_console, -150) # 150px altura console
+        self.right_splitter.SetSashGravity(1.0) # Ao redimensionar janela, console fica fixo em baixo
+        self.right_splitter.SetMinimumPaneSize(100)
+        
+        # Main Splitter: Left (Sidebar) vs Right (Splitter2)
+        self.main_splitter.SplitVertically(self.sidebar, self.right_splitter, 250) # 250px largura sidebar
+        self.main_splitter.SetMinimumPaneSize(150)
+
+        # 5. Menus e Toolbar
+        self.create_menubar()
+        
+    def create_menubar(self):
+        menubar = wx.MenuBar()
+        file_menu = wx.Menu()
+        file_menu.Append(wx.ID_EXIT, "Sair", "Encerrar aplicação")
+        menubar.Append(file_menu, "&Arquivo")
+        self.SetMenuBar(menubar)
+        
+        self.Bind(wx.EVT_MENU, self.on_exit, id=wx.ID_EXIT)
+        self.Bind(wx.EVT_CLOSE, self.on_close)
+
+        # View Menu
+        view_menu = wx.Menu()
+        self.item_view_logs = view_menu.AppendCheckItem(2001, "Exibir Logs/Console")
+        self.item_view_logs.Check(True) # Default True
+        menubar.Append(view_menu, "&Exibir")
+        
+        self.Bind(wx.EVT_MENU, self.on_toggle_logs, id=2001)
+
+        # Tools Menu
+        tools_menu = wx.Menu()
+        tools_menu.Append(3001, "Reprocessar Erros", "Tenta baixar novamente vídeos com status de erro")
+        menubar.Append(tools_menu, "&Ferramentas")
+        
+        self.Bind(wx.EVT_MENU, self.on_reprocess_errors, id=3001)
+
+    # --- Callbacks e Lógica ---
+
+    def on_toggle_logs(self, event):
+        show = self.item_view_logs.IsChecked()
+        if show:
+            self.panel_console.Show()
+            self.right_splitter.SplitHorizontally(self.notebook, self.panel_console, -150)
+        else:
+            self.panel_console.Hide()
+            self.right_splitter.Unsplit(self.panel_console)
+        self.right_splitter.Layout()
+
+    def log_to_console(self, msg, level="INFO"):
+        self.panel_console.log(msg, level)
+
+    def on_sidebar_selection(self, video_id):
+        """Ao selecionar na árvore, focar na aba de Leitura e carregar."""
+        # Carrega dados via AppState
+        video_meta = self.app_state.get_video(video_id)
+        transcript_data = self.app_state.db_handler.get_transcript(video_id)
+        
+        if video_meta and transcript_data:
+            self.panel_detail.load_video(video_meta, transcript_data['full_text'])
+            # Muda para a aba de conteúdo
+            self.notebook.SetSelection(2) # Index 2 is Detail
+            self.log_to_console(f"Visualizando: {video_meta.get('title')}", "NAV")
+
+    def on_grid_data_changed(self):
+        """Chamado quando o GridPanel recebe novos dados/processamento."""
+        self.sidebar.load_history()
+        self.panel_table.load_data() # Update table as well
+
+    def on_table_selection(self, video_id):
+        # Reuse logic
+        self.on_sidebar_selection(video_id)
+
+    def on_sidebar_data_changed(self, action=None, affected_ids=None):
+        """Called when data is deleted from Sidebar."""
+        
+        # Grid Update Strategy - With AppState, maybe we don't need this explicit propagation 
+        # if GridPanel observes AppState? 
+        # But for now, we keep it to force reloads if observer implementation is pending or minimal.
+        
+        if action in ["delete_video", "delete_playlist"] and affected_ids:
+            # Surgical update
+            if hasattr(self.panel_grid, "remove_items"):
+                self.panel_grid.remove_items(affected_ids)
+            else:
+                self.panel_grid.load_data()
+        else:
+            self.panel_grid.load_data()
+            
+        self.panel_table.load_data()
+
+    def on_exit(self, event):
+        self.Close()
+        
+    def on_close(self, event):
+        if hasattr(self.panel_grid, 'processor') and self.panel_grid.processor:
+            self.panel_grid.processor.stop_processing()
+        event.Skip()
+
+    def on_reprocess_errors(self, event):
+        """Busca vídeos com erro no AppState e re-enfileira."""
+        all_videos = self.app_state.get_all_videos()
+        error_urls = [v['url'] for v in all_videos if v.get('status') == 'ERROR']
+        
+        if not error_urls:
+            wx.MessageBox("Nenhum vídeo com erro encontrado.", "Info")
+            return
+            
+        confirm = wx.MessageBox(f"Encontrados {len(error_urls)} vídeos com erro. Deseja tentar novamente?", "Confirmação", wx.YES_NO | wx.ICON_QUESTION)
+        
+        if confirm == wx.YES:
+            # Join URLs
+            text_block = "\n".join(error_urls)
+            # Envia para o processador (via GridPanel que tem a instância OU AppState poderia ter método de retry)
+            # Mas a entrada de tasks está no GridPanel/Processor. Assumindo que GridPanel expõe método.
+            self.panel_grid.txt_input.SetValue(text_block)
+            self.panel_grid.on_click_process(None)
+            self.log_to_console(f"Reiniciando processamento de {len(error_urls)} itens.", "SYSTEM")
+
+
+==========================================
+Conteúdo de panel_console.py (caminho: ui\panel_console.py):
+==========================================
+
+# contextflow/ui/panel_console.py
+import wx
+import datetime
+
+class ConsolePanel(wx.Panel):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self._init_ui()
+
+    def _init_ui(self):
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        
+        # Log Text Area
+        # TE_READONLY = User cannot edit
+        # TE_RICH2 = Allows some formatting (colors) if needed
+        self.txt_log = wx.TextCtrl(self, style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_RICH2)
+        
+        # Styling: Monospace font, dark background optional
+        font = wx.Font(9, wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL)
+        self.txt_log.SetFont(font)
+        
+        # Configurar cores básicas para parecer terminal (opcional, pode ser padrão do sistema)
+        # self.txt_log.SetBackgroundColour("#1e1e1e")
+        # self.txt_log.SetForegroundColour("#d4d4d4")
+        
+        sizer.Add(self.txt_log, 1, wx.EXPAND | wx.ALL, 0)
+        self.SetSizer(sizer)
+
+    def log(self, message: str, level: str = "INFO"):
+        """
+        Adiciona mensagem ao log.
+        Pode ser chamado de threads (use wx.CallAfter no chamador ou garanta aqui).
+        """
+        # Garante execução na main thread
+        if not wx.IsMainThread():
+            wx.CallAfter(self.log, message, level)
+            return
+
+        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+        formatted_msg = f"[{timestamp}] [{level}] {message}\n"
+        
+        self.txt_log.AppendText(formatted_msg)
+
+import logging
+class WxLogHandler(logging.Handler):
+    """
+    Handler customizado do logging que escreve no TextCtrl da GUI.
+    """
+    def __init__(self, text_ctrl):
+        super().__init__()
+        self.text_ctrl = text_ctrl
+        
+    def emit(self, record):
+        msg = self.format(record)
+        # Garante que vai para a main thread
+        if wx.GetApp():
+             # Precisa acessar o método log do painel pai OU escrever direto?
+             # Vamos escrever direto ou chamar log?
+             # O log method do ConsolePanel formata de novo.
+             # Vamos chamar direto o append para evitar duplo timestamp se o formatter padrão já tiver.
+             # Mas aqui vamos usar o Panel.log para consistência se possível, 
+             # mas Panel.log espera mensagem crua.
+             # Vamos extrair a mensagem e chamar ConsolePanel.log
+             
+             # Melhor: Vamos fazer o handler escrever direto, já formatado pelo logging system
+             wx.CallAfter(self._write, msg + "\n")
+
+    def _write(self, msg):
+        try:
+            if self.text_ctrl:
+                self.text_ctrl.AppendText(msg)
+        except:
+            pass
+
+
+==========================================
+Conteúdo de panel_detail.py (caminho: ui\panel_detail.py):
+==========================================
+
+# contextflow/ui/panel_detail.py
+import wx
+import wx.html2
+import os
+from constants import THUMBNAILS_DIR
+
+class DetailPanel(wx.Panel):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self._init_ui()
+
+    def _init_ui(self):
+        main_sizer = wx.BoxSizer(wx.VERTICAL)
+        
+        # 1. Header (Info Area)
+        header_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        
+        # Thumbnail Image
+        self.img_thumb = wx.StaticBitmap(self, size=(160, 90)) # 16:9 ratio approx
+        self.set_default_image()
+        header_sizer.Add(self.img_thumb, 0, wx.ALL, 5)
+        
+        # Meta Info
+        meta_sizer = wx.BoxSizer(wx.VERTICAL)
+        self.lbl_title = wx.StaticText(self, label="Selecione um vídeo")
+        title_font = self.lbl_title.GetFont()
+        title_font.SetPointSize(12)
+        title_font.SetWeight(wx.FONTWEIGHT_BOLD)
+        self.lbl_title.SetFont(title_font)
+        
+        self.lbl_meta = wx.StaticText(self, label="")
+        
+        meta_sizer.Add(self.lbl_title, 0, wx.BOTTOM, 5)
+        meta_sizer.Add(self.lbl_meta, 0)
+        
+        header_sizer.Add(meta_sizer, 1, wx.EXPAND | wx.ALL, 5)
+        main_sizer.Add(header_sizer, 0, wx.EXPAND | wx.BOTTOM, 10)
+        
+        # 2. Content (WebView for Rich Text)
+        if wx.html2.WebView.IsBackendAvailable(wx.html2.WebViewBackendDefault):
+            self.browser = wx.html2.WebView.New(self)
+            main_sizer.Add(self.browser, 1, wx.EXPAND | wx.ALL, 0)
+        else:
+            self.txt_content = wx.TextCtrl(self, style=wx.TE_MULTILINE | wx.TE_READONLY)
+            # Fix Low Contrast (Dark Theme Friendly)
+            self.txt_content.SetBackgroundColour(wx.Colour(30, 30, 30)) # Dark Gray BG
+            self.txt_content.SetForegroundColour(wx.Colour(240, 240, 240)) # Light Gray Text
+            main_sizer.Add(self.txt_content, 1, wx.EXPAND | wx.ALL, 0)
+            self.browser = None
+            
+        # 3. Footer (Stats/Actions)
+        footer_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.lbl_stats = wx.StaticText(self, label="Tokens: - | Custo Est.: -")
+        footer_sizer.Add(self.lbl_stats, 1, wx.ALIGN_CENTER_VERTICAL)
+        
+        main_sizer.Add(footer_sizer, 0, wx.EXPAND | wx.ALL, 5)
+        
+        self.SetSizer(main_sizer)
+
+    def set_default_image(self):
+        # Placeholder cinza ou similar
+        img = wx.Image(160, 90)
+        img.Replace(0,0,0, 200,200,200) # Preenche cinza
+        self.img_thumb.SetBitmap(wx.Bitmap(img))
+
+    def load_video(self, video_data: dict, transcript_text: str):
+        # Update Meta
+        self.lbl_title.SetLabel(video_data.get('title', 'Unknown'))
+        
+        pl_title = video_data.get('playlist_title') or "Nenhuma"
+        meta_text = f"ID: {video_data.get('id')} | Playlist: {pl_title}\n"
+        meta_text += f"Upload: {video_data.get('upload_date')} | Duração: {video_data.get('duration')}s"
+        self.lbl_meta.SetLabel(meta_text)
+        
+        # Update Image
+        thumb_path = video_data.get('thumbnail_path')
+        if thumb_path and os.path.exists(thumb_path):
+            try:
+                # Tenta carregar ignorando erros de log do wx que poluem o console
+                log_level = wx.Log.GetLogLevel()
+                wx.Log.SetLogLevel(0) # Silencia temporariamente
+                
+                img = wx.Image(thumb_path, wx.BITMAP_TYPE_ANY)
+                
+                wx.Log.SetLogLevel(log_level) # Restaura log
+                
+                if img.IsOk():
+                    img = img.Scale(160, 90, wx.IMAGE_QUALITY_HIGH)
+                    self.img_thumb.SetBitmap(wx.Bitmap(img))
+                else:
+                    print(f"Erro: Imagem inválida ou corrompida: {thumb_path}")
+                    self.set_default_image()
+            except Exception as e:
+                print(f"Erro ao carregar thumbnail {thumb_path}: {e}")
+                self.set_default_image()
+        else:
+            self.set_default_image()
+
+        # Update Content
+        # Formatando texto para HTML simples para leitura agradável
+        if self.browser:
+            html_content = f"""
+            <html>
+            <body style='font-family: sans-serif; line-height: 1.6; padding: 10px; background-color: #1e1e1e; color: #f0f0f0;'>
+            <h3>Transcrição</h3>
+            <p>{transcript_text.replace(chr(10), '<br>')}</p>
+            </body>
+            </html>
+            """
+            self.browser.SetPage(html_content, "")
+        else:
+            self.txt_content.SetValue(transcript_text)
+
+        # Update Stats
+        t_count = video_data.get('token_count', 0)
+        self.lbl_stats.SetLabel(f"Tokens: {t_count} (Estimado)")
+
+
+==========================================
+Conteúdo de panel_excel.py (caminho: ui\panel_excel.py):
+==========================================
+# contextflow/ui/panel_excel.py
+import wx
+import wx.grid
+from storage.db_handler import DatabaseHandler
+from util import format_seconds
+import os
+
+class ExcelPanel(wx.Panel):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.db_handler = DatabaseHandler()
+        self.row_map_id = {}
+        
+        self._init_ui()
+        self.refresh_data()
+
+    def _init_ui(self):
+        main_sizer = wx.BoxSizer(wx.VERTICAL)
+
+        # Header Actions
+        action_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        lbl = wx.StaticText(self, label="2. Tabela Excel")
+        font = lbl.GetFont()
+        font.SetWeight(wx.FONTWEIGHT_BOLD)
+        lbl.SetFont(font)
+        
+        self.btn_delete = wx.Button(self, label="Excluir Selecionados")
+        self.btn_delete.Bind(wx.EVT_BUTTON, self.on_delete_selected)
+        
+        action_sizer.Add(lbl, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 20)
+        action_sizer.Add(self.btn_delete, 0, wx.ALIGN_CENTER_VERTICAL)
+        
+        main_sizer.Add(action_sizer, 0, wx.ALL, 10)
+
+        # GRID
+        self.grid = wx.grid.Grid(self)
+        self.grid.CreateGrid(0, 7) # 7 Colunas
+        
+        # Colunas: [x], Thumb, Link, Título, Playlist, Tempo, Tokens
+        cols = [" [x] ", "Thumb", "Link", "Título", "Playlist", "Tempo (HH:MM:SS)", "Tokens"]
+        for i, c in enumerate(cols):
+            self.grid.SetColLabelValue(i, c)
+        
+        # Configurar Tamanhos e Tipos
+        self.grid.SetColFormatBool(0) 
+        self.grid.SetColSize(0, 40)
+        self.grid.SetColSize(1, 100) # Thumb
+        self.grid.SetColSize(2, 200) # Link
+        self.grid.SetColSize(3, 300) # Titulo
+        self.grid.SetColSize(4, 150) # Playlist
+        self.grid.SetColSize(5, 100) # Tempo
+        self.grid.SetColSize(6, 80)  # Tokens
+        
+        self.grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_CLICK, self.on_header_click)
+        
+        main_sizer.Add(self.grid, 1, wx.EXPAND | wx.ALL, 5)
+        self.SetSizer(main_sizer)
+
+    def refresh_data(self):
+        if self.grid.GetNumberRows() > 0:
+            self.grid.DeleteRows(0, self.grid.GetNumberRows())
+            
+        videos = self.db_handler.get_all_videos()
+        videos.sort(key=lambda x: x['created_at'], reverse=True)
+        
+        self.grid.AppendRows(len(videos))
+        self.row_map_id = {}
+        
+        for i, v in enumerate(videos):
+            vid = v['id']
+            self.row_map_id[i] = vid
+            
+            # 0. Checkbox
+            # FIX: WxGrid Bool Renderer expects "" (empty string) for False, "1" for True. "0" causes assertions.
+            self.grid.SetCellValue(i, 0, "")
+            
+            # 1. Thumbnail
+            self.grid.SetCellValue(i, 1, "[Imagem]") 
+            self.grid.SetReadOnly(i, 1, True)
+            
+            # 2. Link
+            self.grid.SetCellValue(i, 2, v.get('url', ''))
+            self.grid.SetReadOnly(i, 2, True)
+            
+            # 3. Título
+            self.grid.SetCellValue(i, 3, v.get('title', ''))
+            self.grid.SetReadOnly(i, 3, True)
+            
+            # 4. Playlist
+            self.grid.SetCellValue(i, 4, v.get('playlist_title') or "-")
+            self.grid.SetReadOnly(i, 4, True)
+            
+            # 5. Tempo (HH:MM:SS)
+            dur = v.get('duration')
+            self.grid.SetCellValue(i, 5, format_seconds(dur))
+            self.grid.SetReadOnly(i, 5, True)
+            
+            # 6. Tokens
+            t = v.get('token_count', 0)
+            self.grid.SetCellValue(i, 6, str(t))
+            self.grid.SetReadOnly(i, 6, True)
+
+    def on_header_click(self, event):
+        if event.GetCol() == 0:
+            rows = self.grid.GetNumberRows()
+            if rows == 0: return
+            # Verificar se o primeiro está marcado ("1") ou não ("")
+            first_val = self.grid.GetCellValue(0, 0)
+            new_val = "" if first_val == "1" else "1"
+            
+            for i in range(rows):
+                self.grid.SetCellValue(i, 0, new_val)
+            self.grid.ForceRefresh()
+        else:
+            event.Skip()
+
+    def on_delete_selected(self, event):
+        ids = []
+        for i in range(self.grid.GetNumberRows()):
+            if self.grid.GetCellValue(i, 0) == "1":
+                ids.append(self.row_map_id[i])
+        
+        if not ids: return
+        
+        if wx.MessageBox(f"Apagar {len(ids)} itens?", "Confirmar", wx.YES_NO) == wx.ID_YES:
+            for vid in ids:
+                self.db_handler.delete_video(vid)
+            self.refresh_data()
+
+
+==========================================
+Conteúdo de panel_grid.py (caminho: ui\panel_grid.py):
+==========================================
+import wx
+import wx.grid
+import webbrowser
+import threading
+from core.processor import Processor
+from core.app_state import AppState
+from core.pubsub import PubSub
+from services.export_service import ExportService
+from ui.virtual_table import VirtualVideoTable
+
+class GridPanel(wx.Panel):
+    def __init__(self, parent, on_data_changed=None, log_callback=None, app_state=None):
+        super().__init__(parent)
+        self.app_state = app_state or AppState()
+        self.db_handler = self.app_state.db_handler
+
+        self.table = VirtualVideoTable()
+        
+        self.app_state.register_observer(self.on_app_state_updated)
+        
+        # PubSub Subscriptions
+        PubSub.subscribe('TASK_PROGRESS', self.on_task_progress)
+        PubSub.subscribe('TASK_ERROR', self.on_task_error)
+        PubSub.subscribe('TASK_COMPLETED', self.on_task_completed)
+        
+        self.processor = Processor(self.app_state)
+        self.processor.start_processing() 
+        
+        self._init_ui()
+        self.refresh_table()
+
+    def _init_ui(self):
+        main_sizer = wx.BoxSizer(wx.VERTICAL)
+        
+        # Header
+        lbl = wx.StaticText(self, label="Dashboard")
+        lbl.SetFont(wx.Font(12, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
+        main_sizer.Add(lbl, 0, wx.ALL, 10)
+
+        # Input
+        input_sizer = wx.StaticBoxSizer(wx.VERTICAL, self, "Adicionar URLs")
+        self.txt_input = wx.TextCtrl(self, style=wx.TE_MULTILINE, size=(-1, 60))
+        input_sizer.Add(self.txt_input, 1, wx.EXPAND | wx.ALL, 5)
+        
+        btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        btn_proc = wx.Button(self, label="Processar Fila", size=(180, 40))
+        btn_proc.Bind(wx.EVT_BUTTON, self.on_click_process)
+        btn_sizer.Add(btn_proc, 0, wx.RIGHT, 5)
+        btn_clear = wx.Button(self, label="Limpar", size=(180, 40))
+        btn_clear.Bind(wx.EVT_BUTTON, lambda e: self.txt_input.Clear())
+        btn_sizer.Add(btn_clear, 0)
+        input_sizer.Add(btn_sizer, 0, wx.EXPAND | wx.ALL, 5)
+        main_sizer.Add(input_sizer, 0, wx.EXPAND | wx.ALL, 5)
+
+        # Grid
+        self.grid = wx.grid.Grid(self)
+        self.grid.SetTable(self.table, takeOwnership=True)
+        # Default Sizes
+        sizes = [40, 80, 200, 300, 150, 90, 120, 150, 70, 60, 100]
+        for i, s in enumerate(sizes):
+            self.grid.SetColSize(i, s)
+        
+        self.grid.Bind(wx.grid.EVT_GRID_CELL_LEFT_CLICK, self.on_cell_click)
+        self.grid.GetGridWindow().Bind(wx.EVT_MOTION, self.on_grid_motion)
+        
+        main_sizer.Add(self.grid, 1, wx.EXPAND | wx.ALL, 5)
+        
+        # Actions
+        action_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.lbl_status = wx.StaticText(self, label="Pronto.")
+        action_sizer.Add(self.lbl_status, 1, wx.ALIGN_CENTER_VERTICAL)
+        
+        for label, handler in [("Excluir", self.on_delete), ("Unificar (.md)", self.on_unify), ("Exportar (ZIP)", self.on_export)]:
+            btn = wx.Button(self, label=label)
+            btn.Bind(wx.EVT_BUTTON, handler)
+            action_sizer.Add(btn, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
+        
+        main_sizer.Add(action_sizer, 0, wx.EXPAND | wx.ALL, 5)
+        self.SetSizer(main_sizer)
+
+    def refresh_table(self):
+        full_data = self.app_state.get_active_downloads() + self.app_state.get_all_videos()
+        self.table.UpdateData(full_data)
+        self.grid.ForceRefresh()
+
+    def on_app_state_updated(self, event_type, data):
+        if not wx.IsMainThread():
+            wx.CallAfter(self.on_app_state_updated, event_type, data)
+            return
+        self.refresh_table()
+
+    def on_click_process(self, event):
+        txt = self.txt_input.GetValue().strip()
+        if txt:
+            self.processor.add_urls(txt)
+            self.txt_input.Clear()
+
+    def on_cell_click(self, event):
+        row, col = event.GetRow(), event.GetCol()
+        if col == 0:
+            val = self.table.GetValue(row, 0)
+            self.table.SetValue(row, 0, "0" if val == "1" else "1")
+            self.grid.ForceRefresh()
+        elif col == 2:
+            url = self.table.GetValue(row, 2)
+            if url.startswith('http'): webbrowser.open(url)
+        event.Skip()
+
+    def on_grid_motion(self, event):
+        x, y = self.grid.CalcUnscrolledPosition(event.GetX(), event.GetY())
+        row, col = self.grid.XYToCell(x, y)
+        if col == 2 and row >= 0:
+            self.grid.SetCursor(wx.Cursor(wx.CURSOR_HAND))
+        else:
+            self.grid.SetCursor(wx.Cursor(wx.CURSOR_ARROW))
+        event.Skip()
+    
+    def on_delete(self, event):
+        ids = list(self.table.selected_ids)
+        if ids and wx.MessageBox(f"Apagar {len(ids)}?", "Confirma", wx.YES_NO) == wx.YES:
+            self.app_state.delete_videos(ids)
+            self.table.selected_ids.clear()
+            self.refresh_table()
+
+    def on_unify(self, event): self._run_export("markdown_single", "*.md")
+    def on_export(self, event): self._run_export("zip", "*.zip")
+
+    # PubSub Handlers
+    def on_task_progress(self, video_id, status_msg):
+        wx.CallAfter(self.lbl_status.SetLabel, f"[{video_id}] {status_msg}")
+
+    def on_task_error(self, video_id, error_msg):
+        wx.CallAfter(self.lbl_status.SetLabel, f"Erro [{video_id}]: {error_msg}")
+
+    def on_task_completed(self, video_id, data_dict):
+        wx.CallAfter(self.lbl_status.SetLabel, f"Concluído: {data_dict.get('title')}")
+
+    def _run_export(self, fmt, wildcard):
+        ids = list(self.table.selected_ids)
+        if not ids: return
+        with wx.FileDialog(self, "Salvar", wildcard=wildcard, style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT) as dlg:
+            if dlg.ShowModal() == wx.ID_OK:
+                self.run_export_thread(ids, fmt, dlg.GetPath())
+
+    def run_export_thread(self, ids, fmt, path):
+        pd = wx.ProgressDialog("Exportando...", "Iniciando...", maximum=len(ids), parent=self, style=wx.PD_APP_MODAL | wx.PD_AUTO_HIDE)
+        def update_progress(current, total, msg):
+            def _ui():
+                if pd: 
+                    pd.Update(current, msg)
+                    if current >= total: wx.MessageBox("Concluído!", "Sucesso")
+            wx.CallAfter(_ui)
+        
+        service = ExportService(self.app_state)
+        threading.Thread(target=service.export_batch, args=(ids, fmt, path, update_progress), daemon=True).start()
+
+==========================================
+Conteúdo de panel_table.py (caminho: ui\panel_table.py):
+==========================================
+
+import wx
+import wx.dataview
+import os
+import datetime
+import webbrowser
+from core.app_state import AppState
+from core.export_formatter import ExportFormatter
+
+class PanelTable(wx.Panel):
+    def __init__(self, parent, on_selection_callback=None, app_state: AppState = None):
+        super().__init__(parent)
+        self.on_selection = on_selection_callback
+        self.app_state = app_state or AppState()
+        
+        # Processor se for necessário (mas idealmente via AppState ou Service)
+        from core.processor import Processor
+        self.processor = Processor(app_state=self.app_state)
+        
+        self.video_map = {} # Map index or object to video data
+        
+        self._init_ui()
+        
+        self.app_state.register_observer(self._on_state_change)
+        
+        self.load_data()
+
+    def _on_state_change(self, event_type, data):
+        if event_type in ['VIDEO_UPDATED', 'VIDEOS_DELETED', 'TASK_COMPLETE']:
+            self.load_data()
+
+    def _init_ui(self):
+        main_sizer = wx.BoxSizer(wx.VERTICAL)
+
+        # --- Toolbar ---
+        toolbar_panel = wx.Panel(self)
+        toolbar_panel.SetBackgroundColour(wx.Colour(253, 253, 253))
+        
+        toolbar_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        
+        # Search
+        self.search_ctrl = wx.SearchCtrl(toolbar_panel, style=wx.TE_PROCESS_ENTER)
+        self.search_ctrl.SetDescriptiveText("🔍 Filtrar nesta tabela...")
+        self.search_ctrl.SetMinSize((250, -1))
+        self.search_ctrl.Bind(wx.EVT_TEXT, self.on_filter_text)
+        toolbar_sizer.Add(self.search_ctrl, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 10)
+        
+        # Buttons
+        self.btn_summarize = wx.Button(toolbar_panel, label="✨ Resumir")
+        self.btn_summarize.Bind(wx.EVT_BUTTON, self.on_summarize)
+        toolbar_sizer.Add(self.btn_summarize, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
+        
+        self.btn_export = wx.Button(toolbar_panel, label="Exportar MD")
+        self.btn_export.Bind(wx.EVT_BUTTON, self.on_export_md)
+        toolbar_sizer.Add(self.btn_export, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 15)
+        
+        # Checkbox Hide Thumbs
+        self.chk_thumbs = wx.CheckBox(toolbar_panel, label="Ocultar Thumbnails")
+        self.chk_thumbs.Bind(wx.EVT_CHECKBOX, self.on_toggle_thumbs)
+        toolbar_sizer.Add(self.chk_thumbs, 0, wx.ALIGN_CENTER_VERTICAL)
+
+        # Set Sizer for Toolbar Panel
+        tp_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        tp_sizer.Add(toolbar_sizer, 1, wx.ALL, 6)
+        toolbar_panel.SetSizer(tp_sizer)
+        
+        main_sizer.Add(toolbar_panel, 0, wx.EXPAND | wx.BOTTOM, 1)
+
+        # --- Data View Ctrl ---
+        self.dv_ctrl = wx.dataview.DataViewListCtrl(self, style=wx.dataview.DV_ROW_LINES | wx.dataview.DV_HORIZ_RULES | wx.dataview.DV_VERT_RULES)
+        self.dv_ctrl.SetRowHeight(50) # Altura maior para thumbnails e texto
+        
+        # Colunas
+        # 0: CheckBox
+        self.col_check = self.dv_ctrl.AppendToggleColumn(" [x] ", mode=wx.dataview.DATAVIEW_CELL_ACTIVATABLE, width=40)
+        
+        # 1: Thumbnail (IconText because ListCtrl handles it better than raw Bitmap column)
+        self.col_thumb = self.dv_ctrl.AppendIconTextColumn("Thumb", width=90, mode=wx.dataview.DATAVIEW_CELL_INERT)
+            
+        # 2: Título
+        self.dv_ctrl.AppendTextColumn("Título", width=220, mode=wx.dataview.DATAVIEW_CELL_INERT)
+        
+        # 3: Canal
+        self.dv_ctrl.AppendTextColumn("Canal", width=120, mode=wx.dataview.DATAVIEW_CELL_INERT)
+        
+        # 4: Duração
+        self.dv_ctrl.AppendTextColumn("Duração", width=80, mode=wx.dataview.DATAVIEW_CELL_INERT)
+        
+        # 5: Transcrição (Trecho)
+        self.dv_ctrl.AppendTextColumn("Transcrição", width=280, mode=wx.dataview.DATAVIEW_CELL_INERT)
+        
+        # 6: Resumo
+        self.dv_ctrl.AppendTextColumn("Resumo", width=200, mode=wx.dataview.DATAVIEW_CELL_INERT)
+        
+        # 7: Link (URL) 
+        self.dv_ctrl.AppendTextColumn("Link", width=150, mode=wx.dataview.DATAVIEW_CELL_INERT)
+        
+        self.dv_ctrl.Bind(wx.dataview.EVT_DATAVIEW_ITEM_ACTIVATED, self.on_item_activated)
+        
+        main_sizer.Add(self.dv_ctrl, 1, wx.EXPAND)
+        self.SetSizer(main_sizer)
+        self.Layout() # Ensure layout
+
+        
+        self.all_videos = []
+        self.filtered_videos = []
+
+    def on_toggle_thumbs(self, event):
+        # DataViewColumn visibility
+        if self.chk_thumbs.GetValue():
+            self.col_thumb.SetWidth(0)
+            self.col_thumb.SetMinWidth(0)
+        else:
+            self.col_thumb.SetWidth(90)
+            self.col_thumb.SetMinWidth(90)
+        self.dv_ctrl.Refresh()
+
+    def format_duration(self, seconds):
+        if not seconds: return "00:00:00"
+        try:
+            val = float(seconds)
+            return str(datetime.timedelta(seconds=int(val)))
+        except:
+            return str(seconds)
+
+    def load_data(self):
+        self.dv_ctrl.DeleteAllItems()
+        self.all_videos = self.app_state.get_all_videos()
+        self.all_videos.sort(key=lambda x: x.get('created_at') or "", reverse=True)
+        self.apply_filter()
+
+    def apply_filter(self):
+        query = self.search_ctrl.GetValue().lower()
+        self.filtered_videos = []
+        
+        if not query:
+            self.filtered_videos = self.all_videos
+        else:
+            self.filtered_videos = [
+                v for v in self.all_videos 
+                if query in (v.get('title') or "").lower() or 
+                   query in (v.get('channel_name') or "").lower()
+            ]
+            
+        self.populate_list()
+
+    def populate_list(self):
+        self.dv_ctrl.DeleteAllItems()
+        self.video_map = {}
+        
+        # Prepared default entries
+        for i, v in enumerate(self.filtered_videos):
+            # 0: Check (False)
+            # 1: IconText (for Thumbnail)
+            thumb_path = v.get('thumbnail_path')
+            bmp = wx.NullBitmap
+            if thumb_path and os.path.exists(thumb_path):
+                try:
+                    img = wx.Image(thumb_path, wx.BITMAP_TYPE_ANY)
+                    if img.IsOk():
+                        img = img.Scale(80, 45, wx.IMAGE_QUALITY_HIGH)
+                        bmp = wx.Bitmap(img)
+                except:
+                    pass
+            
+            if not bmp.IsOk():
+                # Default gray
+                default_img = wx.Image(80, 45)
+                default_img.Replace(0,0,0, 200,200,200)
+                bmp = wx.Bitmap(default_img)
+            
+            # Convert Bitmap to Icon for IconText
+            icon = wx.Icon()
+            icon.CopyFromBitmap(bmp)
+            icon_text = wx.dataview.DataViewIconText("", icon)
+
+            title = v.get('title') or "Sem Título"
+            channel = v.get('channel_name') or v.get('channel') or "-"
+            duration = self.format_duration(v.get('duration'))
+            transcript = v.get('transcript_snippet') or "..."
+            summary = v.get('summary_text') or "Clique em Resumir"
+            link = v.get('url') or ""
+            
+            # Append data: [Check, IconText, Title, Channel, Duration, Transcript, Summary, Link]
+            data = [False, icon_text, title, channel, duration, transcript, summary, link]
+            self.dv_ctrl.AppendItem(data)
+            
+            # Map Row to Video ID (Using index)
+            self.video_map[i] = v
+
+    def on_filter_text(self, event):
+        self.apply_filter()
+
+    def on_item_activated(self, event):
+        # Double click
+        item = event.GetItem()
+        if not item.IsOk(): return
+        
+        row = self.dv_ctrl.ItemToRow(item)
+        if 0 <= row < len(self.filtered_videos):
+            # Check if clicked on Link Column (Index 7)
+            # DataViewEvent doesn't easily give Column index on activation in ListCtrl mode sometimes,
+            # but we can assume activation generally opens details.
+            # Special case: user wants link column to open browser.
+            # We can handle selection logic:
+            
+            video = self.filtered_videos[row]
+            
+            # For simplicity: Double click ANYWHERE opens details.
+            # To handle link specific: we could check column or add button.
+            # Let's check selection context if possible, or just open details.
+            
+            # If user explicitly wants link opening, we can simulate or check mouse pos,
+            # but standard UI practice: double click row = details. 
+            # Context menu or specific action = link.
+            
+            # Let's trigger "Open Details" by default.
+            if self.on_selection:
+                self.on_selection(video['id'])
+
+    def get_checked_videos(self):
+        checked = []
+        count = self.dv_ctrl.GetItemCount()
+        for i in range(count):
+            # Check col 0 value
+            is_checked = self.dv_ctrl.GetValue(i, 0) # Row i, Col 0
+            if is_checked:
+                if i < len(self.filtered_videos):
+                    checked.append(self.filtered_videos[i])
+        return checked
+
+    def on_summarize(self, event):
+        videos = self.get_checked_videos()
+        if not videos:
+            wx.MessageBox("Selecione vídeos na coluna [x].", "Aviso")
+            return
+            
+        wx.MessageBox(f"Resumindo {len(videos)} vídeos...", "Info")
+        # Logic to call processor (mocked)
+        # In real implementation:
+        # self.processor.summarize_batch([v['id'] for v in videos])
+
+    def on_export_md(self, event):
+        videos = self.get_checked_videos()
+        # If none checked, export ALL visible (filtered)
+        if not videos:
+             videos = self.filtered_videos
+             
+        if not videos:
+            wx.MessageBox("Nenhum vídeo para exportar.", "Aviso")
+            return
+
+        # Fetch FULL transcripts for these videos
+        
+        md_content = ExportFormatter.get_single_markdown_header()
+        
+        for v in videos:
+            v_id = v['id']
+            full_data = self.app_state.db_handler.get_transcript(v_id)
+            
+            full_text = ""
+            if full_data and full_data.get('full_text'):
+                full_text = full_data['full_text']
+            
+            md_content += ExportFormatter.format_video_markdown(v, full_text)
+            md_content += "\n---\n\n"
+            
+        with wx.FileDialog(self, "Salvar Markdown", wildcard="Markdown (*.md)|*.md",
+                           style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT) as dlg:
+            if dlg.ShowModal() == wx.ID_OK:
+                path = dlg.GetPath()
+                try:
+                    with open(path, 'w', encoding='utf-8') as f:
+                        f.write(md_content)
+                    wx.MessageBox(f"Arquivo salvo: {path}", "Sucesso")
+                except Exception as e:
+                    wx.LogError(f"Erro ao salvar: {e}")
+
+
+
+==========================================
+Conteúdo de sidebar.py (caminho: ui\sidebar.py):
+==========================================
+
+# contextflow/ui/sidebar.py
+import wx
+import collections
+from core.app_state import AppState
+
+class Sidebar(wx.Panel):
+    def __init__(self, parent, on_selection_callback, on_data_changed_callback=None, app_state: AppState = None):
+        super().__init__(parent)
+        self.on_selection = on_selection_callback
+        self.on_data_changed = on_data_changed_callback
+        self.app_state = app_state # Expected to be injected
+        
+        # If not injected (legacy fallback?), get singleton
+        if not self.app_state:
+            self.app_state = AppState()
+            
+        self._init_ui()
+        
+        # Register Observer
+        self.app_state.register_observer(self._on_state_change)
+        
+        self.load_history()
+
+    def _init_ui(self):
+        # Re-implementing init to bind right click
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        
+        # Header
+        header = wx.StaticText(self, label="Histórico")
+        font = header.GetFont()
+        font.SetWeight(wx.FONTWEIGHT_BOLD)
+        header.SetFont(font)
+        sizer.Add(header, 0, wx.ALL, 5)
+
+        # Search Bar
+        self.search_ctrl = wx.SearchCtrl(self, style=wx.TE_PROCESS_ENTER)
+        self.search_ctrl.ShowCancelButton(True)
+        self.search_ctrl.SetDescriptiveText("🔍 Pesquisar nos títulos...")
+        self.search_ctrl.Bind(wx.EVT_TEXT, self.on_search_text)
+        self.search_ctrl.Bind(wx.EVT_SEARCHCTRL_CANCEL_BTN, self.on_search_cancel)
+        sizer.Add(self.search_ctrl, 0, wx.EXPAND | wx.ALL, 5)
+        
+        # Tree
+        self.tree = wx.TreeCtrl(self, style=wx.TR_DEFAULT_STYLE | wx.TR_HIDE_ROOT)
+        self.root = self.tree.AddRoot("Root")
+        
+        sizer.Add(self.tree, 1, wx.EXPAND | wx.ALL, 0)
+        
+        self.SetSizer(sizer)
+
+        self.Bind(wx.EVT_TREE_SEL_CHANGED, self.on_tree_selection, self.tree)
+        # Right Click
+        self.tree.Bind(wx.EVT_TREE_ITEM_MENU, self.on_right_click)
+
+    def _on_state_change(self, event_type, data):
+        """Callback do AppState Observer."""
+        # Refresh tree on relevant changes
+        relevant_events = ['VIDEO_UPDATED', 'VIDEOS_DELETED', 'PLAYLIST_DELETED', 'TASK_COMPLETE'] 
+        # TASK_COMPLETE is usually same as VIDEO_UPDATED (status: completed)
+        
+        # Optimization: We could be smarter, but reloading tree is fast enough for <1000 items usually
+        # But let's filter a bit.
+        if event_type in ['VIDEOS_DELETED', 'PLAYLIST_DELETED', 'VIDEO_UPDATED']:
+             # Use CallAfter just in case, though notify uses it already.
+             # Refreshing tree might lose expansion state...
+             # For now, let's keep simple: full reload.
+             self.load_history(self.search_ctrl.GetValue())
+
+    def on_right_click(self, event):
+        item = event.GetItem()
+        if not item.IsOk() or item == self.root:
+            return
+            
+        self._action_item = item
+        menu = wx.Menu()
+        
+        data = self.tree.GetItemData(item)
+        
+        if data and isinstance(data, dict):
+            dtype = data.get("type")
+            if dtype == "video":
+                menu.Append(1001, "Excluir Vídeo")
+                self.Bind(wx.EVT_MENU, self.on_delete_video, id=1001)
+                
+                menu.AppendSeparator()
+                menu.Append(1003, "Exportar Markdown (Único)")
+                self.Bind(wx.EVT_MENU, lambda e: self.on_export_action(e, "markdown_single"), id=1003)
+                
+            elif dtype == "playlist":
+                menu.Append(1002, "Excluir Playlist (Todos os vídeos)")
+                self.Bind(wx.EVT_MENU, self.on_delete_playlist, id=1002)
+                
+                menu.AppendSeparator()
+                menu.Append(1004, "Exportar ZIP (Todos)")
+                self.Bind(wx.EVT_MENU, lambda e: self.on_export_action(e, "zip"), id=1004)
+                menu.Append(1005, "Exportar Markdown (Único)")
+                self.Bind(wx.EVT_MENU, lambda e: self.on_export_action(e, "markdown_single"), id=1005)
+                
+                menu.AppendSeparator()
+                menu.Append(1006, "Copiar Link da Playlist")
+                self.Bind(wx.EVT_MENU, self.on_copy_link, id=1006)
+                
+            elif dtype == "folder" and data.get("id") == "orphans":
+                menu.Append(1007, "Excluir Tudo")
+                self.Bind(wx.EVT_MENU, self.on_delete_orphans, id=1007)
+                
+                menu.AppendSeparator()
+                menu.Append(1008, "Exportar Tudo (ZIP)")
+                self.Bind(wx.EVT_MENU, lambda e: self.on_export_action(e, "zip"), id=1008)
+        
+        if menu.GetMenuItemCount() > 0:
+            self.PopupMenu(menu)
+        menu.Destroy()
+
+    def on_delete_video(self, event):
+        item = self._action_item
+        data = self.tree.GetItemData(item)
+        if data and data.get("type") == "video":
+            video_id = data["id"]
+            dlg = wx.MessageDialog(self, "Tem certeza que deseja excluir este vídeo?", "Confirmar Exclusão", wx.YES_NO | wx.ICON_QUESTION)
+            if dlg.ShowModal() == wx.ID_YES:
+                self.app_state.delete_videos([video_id]) 
+                # Observer will trigger refresh
+            dlg.Destroy()
+
+    def on_delete_playlist(self, event):
+        item = self._action_item
+        data = self.tree.GetItemData(item)
+        if data and data.get("type") == "playlist":
+            pid = data["id"]
+            
+            dlg = wx.MessageDialog(self, "Tem certeza que deseja excluir esta Playlist e TODOS os seus vídeos?", "Confirmar Exclusão em Massa", wx.YES_NO | wx.ICON_WARNING)
+            if dlg.ShowModal() == wx.ID_YES:
+                self.app_state.delete_playlist(pid)
+                # Observer refresh
+            dlg.Destroy()
+
+    def on_delete_orphans(self, event):
+        dlg = wx.MessageDialog(self, "Tem certeza que deseja excluir TODOS os vídeos sem playlist (Individuais)?", "Confirmar Exclusão em Massa", wx.YES_NO | wx.ICON_WARNING)
+        if dlg.ShowModal() == wx.ID_YES:
+            self.app_state.delete_orphans()
+        dlg.Destroy()
+
+    def on_copy_link(self, event):
+        item = self._action_item
+        data = self.tree.GetItemData(item)
+        if data and data.get("type") == "playlist":
+            pid = data['id']
+            url = f"https://www.youtube.com/playlist?list={pid}"
+            if wx.TheClipboard.Open():
+                wx.TheClipboard.SetData(wx.TextDataObject(url))
+                wx.TheClipboard.Close()
+                wx.MessageBox(f"Link copiado para a área de transferência:\n{url}", "Sucesso")
+            else:
+                 wx.MessageBox("Não foi possível acessar a área de transferência.", "Erro")
+
+
+    def on_search_text(self, event):
+        text = self.search_ctrl.GetValue()
+        self.load_history(filter_text=text)
+
+    def on_search_cancel(self, event):
+        self.search_ctrl.SetValue("")
+        self.load_history()
+
+    def load_history(self, filter_text=""):
+        # Save expansion state if possible? Too complex for now.
+        self.tree.DeleteChildren(self.root)
+        
+        # Use AppState
+        videos = self.app_state.get_all_videos()
+        
+        # Filter if needed
+        if filter_text:
+            ft = filter_text.lower()
+            videos = [v for v in videos if ft in (v.get('title') or "").lower()]
+
+        # Agrupar por Playlist
+        playlists = collections.defaultdict(list)
+        single_videos = []
+        
+        for v in videos:
+            pid = v.get('playlist_id')
+            if pid:
+                playlists[pid].append(v)
+            else:
+                single_videos.append(v)
+        
+        # Adicionar Playlists
+        for pid, v_list in playlists.items():
+            # Tenta pegar título da playlist do primeiro vídeo
+            ptitle = v_list[0].get('playlist_title') or f"Playlist {pid}"
+            
+            pl_node = self.tree.AppendItem(self.root, ptitle)
+            # Salva ID da playlist
+            self.tree.SetItemData(pl_node, {"type": "playlist", "id": pid}) 
+            
+            for v in v_list:
+                item = self.tree.AppendItem(pl_node, v['title'])
+                self.tree.SetItemData(item, {"type": "video", "id": v['id']})
+                
+        # Adicionar Vídeos Soltos
+        if single_videos:
+            orphans_node = self.tree.AppendItem(self.root, "Vídeos Individuais")
+            self.tree.SetItemData(orphans_node, {"type": "folder", "id": "orphans"})
+            
+            for v in single_videos:
+                item = self.tree.AppendItem(orphans_node, v['title'])
+                self.tree.SetItemData(item, {"type": "video", "id": v['id']})
+                
+        self.tree.ExpandAll()
+
+    def refresh(self):
+        """Alias para load_history, compatibilidade com interface de refresh."""
+        self.load_history()
+
+    def on_export_action(self, event, fmt):
+        item = self._action_item
+        data = self.tree.GetItemData(item)
+        if not data: return
+        
+        ids = []
+        default_name = "export"
+        
+        if data['type'] == 'video':
+            ids = [data['id']]
+            v = self.app_state.get_video(data['id'])
+            if v:
+                from core.export_formatter import ExportFormatter
+                default_name = ExportFormatter.get_safe_filename(v['title'])
+                
+        elif data['type'] == 'playlist':
+            # Get videos from AppState memory
+            all_v = self.app_state.get_all_videos()
+            ids = [x['id'] for x in all_v if x.get('playlist_id') == data['id']]
+            default_name = f"playlist_{data['id']}"
+            
+        elif data['type'] == 'folder' and data['id'] == 'orphans':
+             # Get all orphans
+             all_v = self.app_state.get_all_videos()
+             ids = [v['id'] for v in all_v if not v.get('playlist_id')]
+             default_name = "videos_individuais"
+
+        if not ids:
+            wx.MessageBox("Nenhum vídeo para exportar.", "Aviso")
+            return
+
+        wildcard = "Markdown files (*.md)|*.md" if fmt == "markdown_single" else "ZIP files (*.zip)|*.zip"
+        ext = ".md" if fmt == "markdown_single" else ".zip"
+        
+        with wx.FileDialog(self, "Salvar Exportação", wildcard=wildcard,
+                           style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT, defaultFile=default_name + ext) as fileDialog:
+            if fileDialog.ShowModal() == wx.ID_CANCEL:
+                return
+            path = fileDialog.GetPath()
+            self.run_export_thread(ids, fmt, path)
+
+    def run_export_thread(self, ids, fmt, path):
+        # Progress Dialog
+        pd = wx.ProgressDialog("Exportando...", "Iniciando...", maximum=len(ids), parent=self, style=wx.PD_APP_MODAL | wx.PD_AUTO_HIDE)
+        
+        def update_progress(current, total, msg):
+            if pd:
+                try:
+                    pd.Update(current, msg)
+                    if current >= total:
+                        wx.MessageBox(f"Exportação salva em:\n{path}", "Sucesso")
+                except:
+                    pass
+        
+        # Use Processor just to access run_export? 
+        # Ideally export logic should be in Service or AppState.
+        # But for now Processor has `export_batch`.
+        # Create a temp processor instance IS BAD for AppState?
+        # Processor __init__ creates new stuff.
+        # We should probably move export logic to AppState or dedicated service.
+        # But Processor needs to injected AppState.
+        
+        from core.processor import Processor
+        proc = Processor(app_state=self.app_state)
+        
+        import threading
+        t = threading.Thread(target=proc.export_batch, args=(ids, fmt, path, update_progress), daemon=True)
+        t.start()
+
+    def on_tree_selection(self, event):
+        item = event.GetItem()
+        if not item.IsOk() or item == self.root: return
+
+        data = self.tree.GetItemData(item)
+        
+        # Só notifica seleção se for vídeo
+        if data and isinstance(data, dict) and data.get("type") == "video":
+            self.on_selection(data["id"])
+
+
+==========================================
+Conteúdo de tab_batch.py (caminho: ui\tab_batch.py):
+==========================================
+
+# contextflow/ui/tab_batch.py
+import wx
+import wx.dataview as dv
+from core.processor import Processor
+from storage.db_handler import DatabaseHandler
+
+class BatchTab(wx.Panel):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.processor = Processor()
+        self.db_handler = DatabaseHandler()
+        
+        # Conecta callbacks do processador
+        self.processor.on_task_update = self.on_task_update
+        self.processor.on_task_complete = self.on_task_complete
+        self.processor.on_error = self.on_task_error
+        
+        self.processor.start_processing() # Inicia thread de worker
+        
+        self._init_ui()
+        self.load_data()
+
+    def _init_ui(self):
+        main_sizer = wx.BoxSizer(wx.VERTICAL)
+        
+        # 1. Área de Input (Topo)
+        input_sizer = wx.StaticBoxSizer(wx.VERTICAL, self, "Entrada de Links (Vídeos ou Playlists - Um por linha)")
+        self.txt_input = wx.TextCtrl(self, style=wx.TE_MULTILINE, size=(-1, 100))
+        input_sizer.Add(self.txt_input, 1, wx.EXPAND | wx.ALL, 5)
+        
+        btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.btn_process = wx.Button(self, label="Adicionar à Fila e Processar", size=(180, 40))
+        self.btn_process.Bind(wx.EVT_BUTTON, self.on_click_process)
+        
+        self.btn_clear_input = wx.Button(self, label="Limpar Input", size=(180, 40))
+        self.btn_clear_input.Bind(wx.EVT_BUTTON, lambda e: self.txt_input.Clear())
+
+        btn_sizer.Add(self.btn_process, 0, wx.RIGHT, 5)
+        btn_sizer.Add(self.btn_clear_input, 0)
+        
+        input_sizer.Add(btn_sizer, 0, wx.EXPAND | wx.ALL, 5)
+        main_sizer.Add(input_sizer, 0, wx.EXPAND | wx.ALL, 5)
+
+        # 2. Tabela de Resultados (Centro)
+        self.dvc = dv.DataViewListCtrl(self)
+        self.dvc.AppendTextColumn("ID", width=100)
+        self.dvc.AppendTextColumn("Título", width=300)
+        self.dvc.AppendTextColumn("Status", width=100)
+        self.dvc.AppendTextColumn("Tokens", width=80)
+        self.dvc.AppendTextColumn("Data", width=150)
+        
+        # Estilização básica alternada (se suportado pelo SO)
+        self.dvc.SetMinSize((400, 300))
+        
+        main_sizer.Add(self.dvc, 1, wx.EXPAND | wx.ALL, 5)
+        
+        # 3. Rodapé de Ações em Massa
+        action_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.btn_export = wx.Button(self, label="Exportar Selecionados (Markdown/ZIP)")
+        self.btn_export.Bind(wx.EVT_BUTTON, self.on_export)
+        
+        self.lbl_status = wx.StaticText(self, label="Pronto.")
+        
+        action_sizer.Add(self.lbl_status, 1, wx.ALIGN_CENTER_VERTICAL)
+        action_sizer.Add(self.btn_export, 0, wx.ALIGN_CENTER_VERTICAL)
+        
+        main_sizer.Add(action_sizer, 0, wx.EXPAND | wx.ALL, 5)
+        
+        self.SetSizer(main_sizer)
+
+    def load_data(self):
+        """Carrega dados do banco na tabela."""
+        self.dvc.DeleteAllItems()
+        videos = self.db_handler.get_all_videos()
+        for v in videos:
+            self.dvc.AppendItem([
+                v['id'],
+                v['title'],
+                v['status'],
+                str(v['token_count']),
+                v['created_at']
+            ])
+
+    def on_click_process(self, event):
+        raw_text = self.txt_input.GetValue()
+        if not raw_text.strip():
+            wx.MessageBox("Cole pelo menos uma URL.", "Aviso", wx.ICON_WARNING)
+            return
+            
+        self.lbl_status.SetLabel("Enfileirando tarefas...")
+        self.processor.add_urls(raw_text)
+        self.txt_input.Clear()
+        self.lbl_status.SetLabel("Processamento iniciado em segundo plano.")
+
+    def on_task_update(self, video_id, status):
+        """Chamado pelo Processor via wx.CallAfter"""
+        self.lbl_status.SetLabel(f"[{video_id}] {status}")
+        # O ideal seria atualizar a linha específica na tabela, mas por simplicidade recarregamos
+        # Em produção, usaríamos um DataViewModel real para updates parciais rápidos.
+        self.load_data() 
+
+    def on_task_complete(self, data):
+        self.lbl_status.SetLabel(f"Concluído: {data['title']}")
+        wx.MessageBox(f"Processamento concluído: {data['title']}", "Sucesso", wx.ICON_INFORMATION)
+        self.load_data()
+
+    def on_task_error(self, video_id, error_msg):
+        self.lbl_status.SetLabel(f"Erro [{video_id}]: {error_msg}")
+        self.load_data()
+
+    def on_export(self, event):
+        selection = self.dvc.GetSelections() # Retorna objetos DataViewItem
+        if not selection:
+            wx.MessageBox("Selecione pelo menos um vídeo na tabela.", "Aviso")
+            return
+        
+        # Mapeia seleção para IDs
+        # DataViewListCtrl é simples, mas recuperar dados da seleção requer index mapping
+        # Como hack rápido, vamos pegar TODOS por enquanto ou melhorar isso
+        # DataViewListCtrl.ItemToRow(item)
+        
+        selected_ids = []
+        for item in selection:
+            row = self.dvc.ItemToRow(item)
+            val = self.dvc.GetValue(row, 0) # Coluna 0 é ID
+            selected_ids.append(val)
+            
+        if not selected_ids: return
+
+        zip_path = self.processor.export_data(selected_ids, "markdown")
+        
+        if zip_path:
+            wx.MessageBox(f"Exportação concluída!\nArquivo salvo em:\n{zip_path}", "Sucesso")
+            # Abre a pasta (Windows)
+            import subprocess
+            subprocess.Popen(f'explorer /select,"{zip_path}"')
+        else:
+            wx.MessageBox("Erro na exportação.", "Erro", wx.ICON_ERROR)
+
+
+==========================================
+Conteúdo de tab_view.py (caminho: ui\tab_view.py):
+==========================================
+
+# contextflow/ui/tab_view.py
+import wx
+import os
+
+class ViewTab(wx.Panel):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self._init_ui()
+
+    def _init_ui(self):
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        
+        # Header Info
+        self.lbl_title = wx.StaticText(self, label="Nenhum vídeo selecionado")
+        font = wx.Font(14, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD)
+        self.lbl_title.SetFont(font)
+        sizer.Add(self.lbl_title, 0, wx.ALL, 10)
+        
+        # Details
+        grid = wx.FlexGridSizer(2, 2, 5, 10)
+        grid.Add(wx.StaticText(self, label="ID:"), 0, wx.FONTWEIGHT_BOLD)
+        self.lbl_id = wx.StaticText(self, label="-")
+        grid.Add(self.lbl_id, 1)
+        
+        grid.Add(wx.StaticText(self, label="Tokens:"), 0, wx.FONTWEIGHT_BOLD)
+        self.lbl_tokens = wx.StaticText(self, label="-")
+        grid.Add(self.lbl_tokens, 1)
+        
+        sizer.Add(grid, 0, wx.LEFT | wx.BOTTOM, 10)
+        
+        # Content Area
+        self.txt_content = wx.TextCtrl(self, style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_RICH2)
+        # Font Monospaced pra código/texto bruto
+        self.txt_content.SetFont(wx.Font(10, wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
+        
+        sizer.Add(self.txt_content, 1, wx.EXPAND | wx.ALL, 5)
+        
+        self.SetSizer(sizer)
+
+    def load_video(self, video_data: dict, transcript_text: str):
+        self.lbl_title.SetLabel(video_data.get('title', 'Unknown'))
+        self.lbl_id.SetLabel(video_data.get('id', '-'))
+        self.lbl_tokens.SetLabel(str(video_data.get('token_count', 0)))
+        
+        self.txt_content.SetValue(transcript_text)
+
+
+==========================================
+Conteúdo de virtual_table.py (caminho: ui\virtual_table.py):
+==========================================
+import wx
+import wx.grid
+from services.utils import format_duration
+
+class VirtualVideoTable(wx.grid.GridTableBase):
+    def __init__(self, data=None):
+        super().__init__()
+        self.data = data or []
+        self.selected_ids = set()
+        
+        self.col_labels = [
+            " [x] ", "ID", "Link", "Título", "Canal", 
+            "Publicado", "Adicionado", "Playlist", "Duração", "Tokens", "Status"
+        ]
+
+    def UpdateData(self, new_data):
+        # Notify Grid about change
+        # Bruteforce approach: Tells grid the table has changed size or content
+        self.data = new_data
+        
+        if self.GetView():
+            self.GetView().BeginBatch()
+            
+            # Reset view if possible, or inform rows
+            current_rows = self.GetNumberRows()
+            
+            # This logic is tricky. The easiest way to refresh a Virtual Grid 
+            # is normally ProcessTableMessage(RESET) or telling it rows changed.
+            # But the documentation implies we should just set the data and the grid will query GetValue.
+            # However, row count might change.
+            
+            msg = wx.grid.GridTableMessage(self, wx.grid.GRIDTABLE_NOTIFY_ROWS_DELETED, 0, self.GetView().GetNumberRows())
+            self.GetView().ProcessTableMessage(msg)
+            
+            msg = wx.grid.GridTableMessage(self, wx.grid.GRIDTABLE_NOTIFY_ROWS_APPENDED, len(self.data))
+            self.GetView().ProcessTableMessage(msg)
+            
+            self.GetView().EndBatch()
+            self.GetView().ForceRefresh()
+
+    def GetNumberRows(self):
+        return len(self.data)
+
+    def GetNumberCols(self):
+        return len(self.col_labels)
+
+    def GetColLabelValue(self, col):
+        return self.col_labels[col]
+
+    def GetValue(self, row, col):
+        try:
+            if row >= len(self.data): return ""
+            item = self.data[row]
+            
+            if col == 0: # Checkbox
+                vid = item.get('id') or item.get('uuid')
+                return "1" if vid in self.selected_ids else "0"
+                
+            elif col == 1: # ID
+                return str(item.get('id') or item.get('uuid') or "...")
+                
+            elif col == 2: # Link
+                return str(item.get('url', ''))
+                
+            elif col == 3: # Title
+                return str(item.get('title', 'Aguardando...'))
+                
+            elif col == 4: # Channel
+                return str(item.get('channel_name') or "-")
+                
+            elif col == 5: # Published
+                raw = str(item.get('upload_date') or "")
+                if len(raw) == 8 and raw.isdigit():
+                    return f"{raw[6:8]}/{raw[4:6]}/{raw[0:4]}"
+                return raw
+                
+            elif col == 6: # Added
+                return str(item.get('added_at') or "")
+                
+            elif col == 7: # Playlist
+                return str(item.get('playlist_title') or "-")
+                
+            elif col == 8: # Duration
+                dur = item.get('duration_seconds') or item.get('duration')
+                return format_duration(dur)
+                
+            elif col == 9: # Tokens
+                return str(item.get('token_count', 0))
+                
+            elif col == 10: # Status
+                return str(item.get('status', 'pending'))
+        except:
+            pass
+        return ""
+
+    def SetValue(self, row, col, value):
+        if col == 0:
+            if row >= len(self.data): return
+            item = self.data[row]
+            vid = item.get('id') or item.get('uuid')
+            if vid:
+                # Toggle logic
+                # Grid passes "1" or "0" usually if checkbox
+                # But sometimes it passes empty or we handle click.
+                # Standard Text Editor passes string.
+                # bool check
+                if value in ["1", "True", "true", 1]:
+                    self.selected_ids.add(vid)
+                else:
+                    self.selected_ids.discard(vid)
+
+    def GetAttr(self, row, col, kind):
+        attr = wx.grid.GridCellAttr()
+        
+        # Read-only default for all except Checkbox (col 0)
+        # Actually, if we use custom renderer for checkbox, we might need read-only=False
+        if col != 0:
+            attr.SetReadOnly(True)
+        else:
+            attr.SetReadOnly(False)
+            
+        # Specific styling
+        if col == 2: # Link
+            attr.SetTextColour(wx.BLUE)
+            
+        elif col == 10: # Status
+             if row < len(self.data):
+                status = self.data[row].get('status', '')
+                if status == 'ERROR':
+                    attr.SetTextColour(wx.RED)
+                elif status in ['completed', 'downloaded']:
+                    attr.SetTextColour(wx.BLACK)
+                else:
+                    attr.SetTextColour(wx.Colour(200, 100, 0)) # Orange-ish
+
+        # Align center for most
+        if col not in [2, 3, 7]: # Link, Title, Playlist left aligned
+            attr.SetAlignment(wx.ALIGN_CENTER, wx.ALIGN_CENTER)
+            
+        attr.IncRef()
+        return attr
+
+
+
+==========================================
+Estrutura de pastas (relativa à Entrada):
+==========================================
+├── contextflow-5.5
+├── __pycache__
+├── constants.py
+├── contexto
+├── core
+│   ├── __pycache__
+│   ├── app_state.py
+│   ├── export_formatter.py
+│   ├── processor.py
+│   ├── pubsub.py
+│   ├── scanner.py
+│   ├── token_engine.py
+│   └── tree_logic.py
+├── data
+│   └── thumbs
+├── debug_transcript.py
+├── docs
+│   └── DECISIONS
+├── main.py
+├── services
+│   ├── __pycache__
+│   ├── export_service.py
+│   ├── utils.py
+│   └── youtube_manager.py
+├── storage
+│   ├── __pycache__
+│   └── db_handler.py
+├── tests
+│   ├── test_export_regression.py
+│   ├── test_virtual_table_perf.py
+│   └── verify_architecture.py
+└── ui
+    ├── __pycache__
+    ├── app_window.py
+    ├── panel_console.py
+    ├── panel_detail.py
+    ├── panel_excel.py
+    ├── panel_grid.py
+    ├── panel_table.py
+    ├── sidebar.py
+    ├── tab_batch.py
+    ├── tab_view.py
+    └── virtual_table.py

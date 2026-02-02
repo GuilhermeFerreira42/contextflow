@@ -117,6 +117,24 @@ class AppState:
         with self._lock:
             return list(self._active_downloads.values())
 
+    def get_unified_data(self) -> List[Dict[str, Any]]:
+        """
+        [ATOMIC UNIFICATION & DEDUPLICATION]
+        Garante que a união de tarefas e vídeos ocorra sob um único lock.
+        Resolve o problema de duplicação visual durante a promoção filtrando tarefas 
+        que já possuem registro persistente correspondente via UUID.
+        """
+        with self._lock:
+            persistent = list(self._videos.values())
+            active = self._active_downloads.values()
+            
+            # Conjunto de UUIDs que já estão no banco para evitar "fantasmas" durante a transição
+            promoted_uuids = {v.get('uuid') for v in persistent if v.get('uuid')}
+            
+            filtered_active = [a for a in active if a.get('uuid') not in promoted_uuids]
+            
+            return filtered_active + persistent
+
     # --- Mutations (Async to DB, Sync to Memory) ---
 
     def add_or_update_video(self, video_data: Dict[str, Any]):
@@ -150,6 +168,31 @@ class AppState:
         update_payload.update(kwargs)
         self.add_or_update_video(update_payload)
 
+    def promote_task_to_video(self, uuid_str: str, video_data: Dict[str, Any]):
+        """
+        [PROMOÇÃO ATÔMICA]
+        Move uma tarefa de 'active_downloads' para 'videos' sob o mesmo lock.
+        Isso evita a duplicação visual na grade durante a unificação SSOT.
+        """
+        video_id = video_data.get('id')
+        if not video_id: return
+
+        with self._lock:
+            # 1. Adiciona ao dicionário de vídeos persistentes
+            existing = self._videos.get(video_id, {})
+            merged = {**existing, **video_data}
+            self._videos[video_id] = merged
+            
+            # 2. Remove da lista de tarefas ativas (UUID)
+            if uuid_str in self._active_downloads:
+                del self._active_downloads[uuid_str]
+        
+        # Persistência Assíncrona
+        threading.Thread(target=self._persist_video_worker, args=(merged,)).start()
+        
+        # Notificação única para evitar refrescos duplicados
+        self._notify('VIDEO_PROMOTED', {'video_id': video_id, 'uuid': uuid_str})
+
     def add_active_task(self, uuid_str: str, data: Dict[str, Any]):
         """Registra uma tarefa temporária (antes de ter ID de vídeo ou enquanto está na fila)."""
         with self._lock:
@@ -172,17 +215,43 @@ class AppState:
                 del self._active_downloads[uuid_str]
                 self._notify('TASK_REMOVED', uuid_str)
 
-    def delete_videos(self, video_ids: List[str]):
-        """Remove videos from memory and DB."""
+    def delete_videos(self, ids: List[str]):
+        """
+        Remove itens da memória e do banco.
+        [POLIVALENTE Sênior] Trata IDs reais e UUIDs de forma adaptativa.
+        Se um UUID for passado mas o vídeo já foi promovido, localiza pelo campo 'uuid'.
+        """
+        sql_ids = []
         with self._lock:
-            for vid in video_ids:
+            for vid in ids:
+                target_id = None
+                
+                # 1. Busca direta por ID real no banco de memória
                 if vid in self._videos:
-                    del self._videos[vid]
+                    target_id = vid
+                
+                # 2. Busca direta por UUID em tarefas ativas
+                elif vid in self._active_downloads:
+                    del self._active_downloads[vid]
+                    # Nota: pode ser que esse UUID já tenha registro no banco (parcial), 
+                    # mas se não está em _videos, não geramos delete SQL ainda.
+                
+                # 3. Busca por UUID dentro do banco de vídeos (Recuperação de Promoção)
+                else:
+                    for db_id, data in self._videos.items():
+                        if data.get('uuid') == vid:
+                            target_id = db_id
+                            break
+                
+                if target_id:
+                    del self._videos[target_id]
+                    sql_ids.append(target_id)
         
-        # Persist Deletion
-        threading.Thread(target=self._delete_worker, args=(video_ids,)).start()
+        # Persiste deleção no banco (apenas IDs reais mapeados)
+        if sql_ids:
+            threading.Thread(target=self._delete_worker, args=(sql_ids,)).start()
         
-        self._notify('VIDEOS_DELETED', video_ids)
+        self._notify('VIDEOS_DELETED', ids)
 
     def _delete_worker(self, video_ids):
         for vid in video_ids:

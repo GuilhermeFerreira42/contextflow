@@ -112,10 +112,11 @@ class YouTubeManager:
         
         # 1. API - Tentativa Manual
         try:
-            # Check proxies for requests if needed, but Transcript API is different.
-            # We don't have easy proxy support for youtube_transcript_api without global mock.
-            # For now focus on ytdlp fallback which is the main extractor.
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            # [REGRESSÃO FIX] Injeção de Proxy para a Transcript API
+            proxies_dict = {"http": proxy, "https": proxy} if proxy else None
+            
+            # YouTubeTranscriptApi.list_transcripts aceita parâmetro proxies
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id, proxies=proxies_dict)
             
             # Tenta encontrar manual created em PT
             try:
@@ -207,15 +208,9 @@ class YouTubeManager:
     def _clean_downloaded_subs(self, raw_content: str) -> str:
         """
         Limpa legendas que podem vir em XML, JSON3 ou VTT.
-        [HEURÍSTICA] O YouTube envelopa legendas de formas imprevisíveis.
-        Se o parse JSON falhar, usamos Regex agressivo para extrair apenas texto humano.
+        [HEURÍSTICA v5.5] O YouTube envelopa legendas de formas imprevisíveis.
+        Se o parse JSON falhar, usamos o motor de limpeza Regex resiliente da v5.5.
         """
-        import traceback
-
-        
-        # Log para debug extremo se falhar
-        # logger.debug(f"Cleaning content (preview): {raw_content[:200]}")
-        
         # 1. Tentar JSON3 (Google Format)
         try:
             import json
@@ -229,28 +224,31 @@ class YouTubeManager:
                             if 'utf8' in s and s['utf8'].strip():
                                 segs.append(s['utf8'].strip())
                 return self._clean_text(" ".join(segs))
-        except Exception as e:
-            # logger.warning(f"JSON3 cleanup failed: {e}")
+        except:
             pass
 
-        # 2. Fallback (VTT/XML/Raw)
+        # 2. Fallback Resiliente (Lógica da v5.5)
         try:
-            text = re.sub(r'<[^>]+>', '', raw_content) # Remove XML tags
-            text = re.sub(r'WEBVTT', '', text)
-            # Remove timestamps VTT: 00:00:00.000 -> ...
+            # Limpeza agressiva para formatos XML/VTT/JSON corrompidos
+            text = re.sub(r'<[^>]+>', '', raw_content) # Remove tags XML
+            text = re.sub(r'WEBVTT', '', text) # Remove cabeçalhos VTT
+            # Remove timestamps: 00:00:10.000 ou 00:00:10,000
             text = re.sub(r'\d{1,2}:\d{1,2}:\d{1,2}[\.,]\d{3}.*', '', text) 
             
-            # Se tiver cara de JSON mas falhou o load, tenta limpar chaves
+            # Se houver resíduos de chaves JSON (casos de parse parcial ou erro de extrator)
             if '{' in text and '}' in text:
                 text = re.sub(r'[{:"},]', ' ', text)
+                # Remove palavras-chave técnicas do JSON3
                 text = re.sub(r'wireMagic|pens|wsWinStyles|wpWinPositions|events|tStartMs|dDurationMs|utf8|acAsrConf', '', text)
             
+            # Limpeza de linhas e join
             lines = [l.strip() for l in text.split('\n') if l.strip()]
+            # Filtra IDs de linha únicos e setas de direção VTT
             clean_lines = [l for l in lines if not re.match(r'^\d+$', l) and '-->' not in l]
             
             return self._clean_text(" ".join(clean_lines))
         except Exception as e:
-            logger.error(f"Fallback cleanup failed: {traceback.format_exc()}")
+            logger.error(f"Fallback cleanup critical error: {e}")
             return ""
 
     def get_playlist_info(self, url: str) -> Dict[str, Any]:

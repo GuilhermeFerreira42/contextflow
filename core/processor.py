@@ -90,12 +90,16 @@ class Processor:
             task = ProcessingTask(url, pl_id, pl_title)
             self.task_queue.put(task)
             
+            import datetime
+            now_str = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+            
             self.app_state.add_active_task(task.uuid, {
                 'uuid': task.uuid,
                 'url': url,
                 'status': 'queued',
                 'title': 'Aguardando...',
-                'playlist_id': pl_id
+                'playlist_id': pl_id,
+                'added_at': now_str
             })
             
             PubSub.publish('TASK_QUEUED', uuid=task.uuid, url=task.url)
@@ -109,7 +113,10 @@ class Processor:
                 remaining = cooldown.get_remaining_cooldown()
                 # [VISIBILIDADE] Log claro conforme PHASE_5_8_LOGICAL_SYNC
                 # [REGRA ALPHA] Proteção Cooldown Ativa
-                logger.info(f"SYSTEM COOLDOWN ACTIVE. Waiting... ({remaining}s remaining)")
+                msg = f"SYSTEM COOLDOWN ACTIVE. Waiting... ({remaining}s remaining before retry)"
+                logger.info(msg)
+                # Opcional: Notificar via PubSub se a UI tiver um status bar global
+                PubSub.publish('TASK_PROGRESS', video_id="COOLDOWN", status_msg=msg)
                 time.sleep(10) # Wait and check again
                 continue
 
@@ -216,7 +223,8 @@ class Processor:
             transcript, source = self.yt_manager.get_transcript(task.video_id, proxy=active_proxy)
             metrics.tracker.stop('fetch')
 
-            if not transcript: raise Exception("Transcrição indisponível")
+            if not transcript:
+                raise Exception("Transcrição indisponível (Tente usar Cookies ou verifique se o vídeo possui legendas).")
             
             # --- AI STEP (Governance) ---
             metrics.tracker.start('llm')
@@ -226,8 +234,13 @@ class Processor:
             metrics.tracker.stop('llm')
 
             self.app_state.db_handler.save_transcript(task.video_id, transcript)
-            self.app_state.update_video_status(task.video_id, "completed", token_count=token_count)
-            self.app_state.remove_active_task(task.uuid)
+            
+            # [PROMOÇÃO ATÔMICA SSoT] 
+            # Evita duplicação visual na grade garantindo que a troca 
+            # de UUID para ID ocorra em uma única transação de memória.
+            video_data['status'] = 'completed'
+            video_data['token_count'] = token_count
+            self.app_state.promote_task_to_video(task.uuid, video_data)
             
             # --- FINAL TELEMETRY LOG ---
             final_metrics = metrics.finalize()
