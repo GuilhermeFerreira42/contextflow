@@ -1,8 +1,38 @@
 # contextflow/ui/virtual_table.py
 import wx
 import wx.grid
+import os
 from services.utils import format_duration
 from core.app_state import AppState
+
+class ImageRenderer(wx.grid.GridCellRenderer):
+    """Renderer customizado para exibir miniaturas (Thumbnails)."""
+    def Draw(self, grid, attr, dc, rect, row, col, isSelected):
+        dc.SetBackgroundMode(wx.TRANSPARENT)
+        dc.SetBrush(wx.Brush(grid.GetDefaultCellBackgroundColour()))
+        dc.SetPen(wx.TRANSPARENT_PEN)
+        dc.DrawRectangle(rect)
+        
+        table = grid.GetTable()
+        if row < len(table.data):
+            img_path = table.data[row].get('thumbnail_path')
+            if img_path and os.path.exists(img_path):
+                try:
+                    bmp = wx.Bitmap(img_path, wx.BITMAP_TYPE_ANY)
+                    img = bmp.ConvertToImage()
+                    # Rescale to fit cell
+                    img = img.Rescale(rect.width-2, rect.height-2, wx.IMAGE_QUALITY_HIGH)
+                    bmp = wx.Bitmap(img)
+                    dc.DrawBitmap(bmp, rect.x + 1, rect.y + 1)
+                    return
+                except: pass
+        
+        # Placeholder
+        dc.SetBrush(wx.Brush(wx.Colour(50, 50, 50)))
+        dc.DrawRectangle(rect.x + 2, rect.y + 2, rect.width - 4, rect.height - 4)
+
+    def GetBestSize(self, grid, attr, dc, row, col): return wx.Size(40, 40)
+    def Clone(self): return ImageRenderer()
 
 class VirtualVideoTable(wx.grid.GridTableBase):
     """
@@ -10,97 +40,124 @@ class VirtualVideoTable(wx.grid.GridTableBase):
     Implementa o padrão Sempre-Virtual para suportar 10.000+ itens.
     Regra: Renderização de célula < 0.1ms [3].
     """
-    def __init__(self, data=None):
+    def __init__(self, data=None, col_labels=None):
         super().__init__()
         self.app_state = AppState()
         self.data = data or []
         self.selected_ids = set()
         
-        # Colunas oficiais conforme PRD e specs de Triagem [5]
-        self.col_labels = [
-            " [x] ", "ID", "Título", "Canal", 
-            "Duração", "Tokens", "Status", "Link"
-        ]
+        # Colunas customizáveis (Aba 1 vs Aba 2)
+        if col_labels:
+            self.col_labels = col_labels
+        else:
+            # [SSOT] Ordem das 11 colunas mandatória conforme PRD Fase 5.8
+            self.col_labels = [
+                " # ", " [x] ", "Link", "Título", "Canal", 
+                "Publicado", "Adicionado", "Playlist", "Duração", 
+                "Tokens", "Status"
+            ]
 
     def UpdateData(self, new_data):
-        """
-        Atualiza o snapshot de dados e notifica a Grid.
-        Mantém a persistência da visualização durante o debouncing [6].
-        """
-        self.data = new_data
         if self.GetView():
             self.GetView().BeginBatch()
-            # Notifica a Grid que o número de linhas mudou para atualizar a ScrollBar
-            msg = wx.grid.GridTableMessage(self, wx.grid.GRIDTABLE_NOTIFY_ROWS_DELETED, 0, self.GetView().GetNumberRows())
-            self.GetView().ProcessTableMessage(msg)
-            msg = wx.grid.GridTableMessage(self, wx.grid.GRIDTABLE_NOTIFY_ROWS_APPENDED, len(self.data))
-            self.GetView().ProcessTableMessage(msg)
+            old_rows = self.GetNumberRows() # Pega contagem ANTES da troca
+            self.data = new_data
+            new_rows = len(self.data)
+            
+            if new_rows < old_rows:
+                msg = wx.grid.GridTableMessage(self, wx.grid.GRIDTABLE_NOTIFY_ROWS_DELETED, 0, old_rows - new_rows)
+                self.GetView().ProcessTableMessage(msg)
+            elif new_rows > old_rows:
+                msg = wx.grid.GridTableMessage(self, wx.grid.GRIDTABLE_NOTIFY_ROWS_APPENDED, new_rows - old_rows)
+                self.GetView().ProcessTableMessage(msg)
+                
             self.GetView().EndBatch()
             self.GetView().ForceRefresh()
+        else:
+            self.data = new_data
 
-    def GetNumberRows(self):
-        return len(self.data)
-
-    def GetNumberCols(self):
-        return len(self.col_labels)
-
-    def GetColLabelValue(self, col):
-        return self.col_labels[col]
+    def GetNumberRows(self): return len(self.data)
+    def GetNumberCols(self): return len(self.col_labels)
+    def GetColLabelValue(self, col): return self.col_labels[col]
 
     def GetValue(self, row, col):
-        """
-        [PERFORMANCE] Método ultra-rápido para renderização sob demanda.
-        Busca apenas o campo necessário do snapshot em memória [3].
-        """
         try:
             if row >= len(self.data): return ""
             item = self.data[row]
+            label = self.col_labels[col].strip()
             
-            if col == 0: # Checkbox
-                vid = item.get('id') or item.get('uuid')
+            if label == "#": return str(row + 1)
+            if label == "[x]":
+                vid = item.get('uuid') or item.get('id')
                 return "1" if vid in self.selected_ids else "0"
-            elif col == 1: # ID
-                return str(item.get('id') or item.get('uuid') or "...")
-            elif col == 2: # Título
-                return str(item.get('title', 'Aguardando...'))
-            elif col == 3: # Canal
-                return str(item.get('channel_name') or "-")
-            elif col == 4: # Duração
+            if label == "Thumb": return "" 
+            
+            mapping = {
+                'Link': 'url',
+                'Título': 'title',
+                'Canal': 'channel_name',
+                'Publicado': 'upload_date',
+                'Adicionado': 'added_at',
+                'Playlist': 'playlist_title',
+                'Tokens': 'token_count',
+                'Status': 'status'
+            }
+            
+            if label in mapping:
+                val = item.get(mapping[label])
+                if label == 'Status': return str(val or "pending").upper()
+                if label == 'Link': return str(val or "")
+                return str(val or "-")
+            
+            if label == 'Duração':
                 dur = item.get('duration_seconds') or item.get('duration')
-                return format_duration(dur)
-            elif col == 5: # Tokens
-                return str(item.get('token_count', 0))
-            elif col == 6: # Status
-                return str(item.get('status', 'pending')).upper()
-            elif col == 7: # Link
-                return str(item.get('url', ''))
+                if isinstance(dur, (int, float)): return format_duration(dur)
+                return str(dur or "00:00:00")
+                
+            return ""
         except Exception:
             return ""
 
     def SetValue(self, row, col, value):
-        """Gerencia a seleção de linhas (Checkbox)."""
-        if col == 0 and row < len(self.data):
+        label = self.col_labels[col].strip()
+        if label == "[x]" and row < len(self.data):
             item = self.data[row]
-            vid = item.get('id') or item.get('uuid')
-            if value in ["1", "True", 1]:
-                self.selected_ids.add(vid)
+            vid = item.get('uuid') or item.get('id')
+            if value in ["1", "True", 1, True]:
+                if vid: self.selected_ids.add(vid)
             else:
                 self.selected_ids.discard(vid)
 
     def GetAttr(self, row, col, kind):
-        """Aplica telemetria visual (Cores de Status) [7]."""
         attr = wx.grid.GridCellAttr()
-        attr.SetReadOnly(col != 0) # Apenas checkbox é editável
+        label = self.col_labels[col].strip()
         
-        if col == 6 and row < len(self.data): # Status
+        if label == "[x]":
+            attr.SetRenderer(wx.grid.GridCellBoolRenderer())
+            attr.SetEditor(wx.grid.GridCellBoolEditor())
+            attr.SetReadOnly(False)
+        elif label == "Thumb":
+            attr.SetRenderer(ImageRenderer())
+            attr.SetReadOnly(True)
+        else:
+            attr.SetReadOnly(True)
+        
+        if label == 'Status' and row < len(self.data):
             status = str(self.data[row].get('status', '')).upper()
-            if status == 'ERROR':
-                attr.SetTextColour(wx.RED)
-            elif status in ['COMPLETED', 'DOWNLOADED']:
-                attr.SetTextColour(wx.Colour(0, 150, 0)) # Verde
+            color_map = {
+                'ERROR': wx.RED,
+                'COMPLETED': wx.Colour(0, 150, 0),
+                'SUCCESS': wx.Colour(0, 150, 0),
+                'DOWNLOADED': wx.Colour(0, 150, 0),
+                'DOWNLOADING': wx.BLUE,
+                'PROCESSING': wx.BLUE
+            }
+            if status in color_map:
+                attr.SetTextColour(color_map[status])
         
-        if col == 7: # Link
+        if label == 'Link':
+            # [AFFORDANCE] Estética de hiperlink
             attr.SetTextColour(wx.BLUE)
-            
+        
         attr.IncRef()
         return attr

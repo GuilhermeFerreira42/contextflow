@@ -36,6 +36,9 @@ class Processor:
         self.thread = None
         self.yt_manager = YouTubeManager()
         os.makedirs(THUMBNAILS_DIR, exist_ok=True)
+        
+        # [SSOT] Reconexão Lógica: Inscreve o processador no barramento global
+        PubSub.subscribe('REQUEST_BATCH_PROCESSING', self.add_urls)
 
     def start_processing(self):
         if not self.active:
@@ -72,9 +75,15 @@ class Processor:
                             v_url = vid_info.get('url') or f"https://www.youtube.com/watch?v={vid_info['id']}"
                             self._enqueue_video(v_url, pl_id, pl_title)
                 else:
-                    self._enqueue_video(line)
+                    if self.yt_manager.validate_url(line):
+                        self._enqueue_video(line)
+                    else:
+                        # [RESILIÊNCIA] Notifica erro de validação imediatamente
+                        logger.error(f"URL Inválida: {line}")
+                        PubSub.publish('TASK_ERROR', video_id="URL-VAL", error_msg=f"URL Inválida: {line}")
             except Exception as e:
-                print(f"Erro ao resolver URL {line}: {e}")
+                logger.error(f"Erro ao resolver URL {line}: {e}")
+                PubSub.publish('TASK_ERROR', video_id="URL-RESOLVE", error_msg=str(e))
 
     def _enqueue_video(self, url: str, pl_id: str = None, pl_title: str = None):
         if self.yt_manager.validate_url(url):
@@ -98,7 +107,9 @@ class Processor:
         while self.active:
             if cooldown.is_cooling_down():
                 remaining = cooldown.get_remaining_cooldown()
-                # logger.info(f"SYSTEM COOLDOWN ACTIVE. Waiting... ({remaining}s remaining)")
+                # [VISIBILIDADE] Log claro conforme PHASE_5_8_LOGICAL_SYNC
+                # [REGRA ALPHA] Proteção Cooldown Ativa
+                logger.info(f"SYSTEM COOLDOWN ACTIVE. Waiting... ({remaining}s remaining)")
                 time.sleep(10) # Wait and check again
                 continue
 

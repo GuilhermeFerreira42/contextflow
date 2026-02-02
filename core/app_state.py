@@ -12,7 +12,7 @@ class AppState:
     """
     Singleton que gerencia o Estado Global da Aplicação.
     
-    [THREAD SAFETY] Utiliza RLock internamente para garantir 'Single Source of Truth'
+    [THREAD SAFETY] Utiliza RLock internamente para garantir [SSOT]
     em operações concorrentes (Processor Thread vs UI Thread).
     """
     _instance = None

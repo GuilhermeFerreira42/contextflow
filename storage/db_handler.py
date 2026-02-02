@@ -8,11 +8,16 @@ from constants import DB_PATH
 
 class DatabaseHandler:
     def __init__(self, db_path: str = DB_PATH):
-        self.db_path = db_path
+        # [ROBUSTEZ] Normalização absoluta do caminho para evitar erros em threads/CWDs variados
+        self.db_path = os.path.abspath(db_path)
         self._init_db()
         self._check_and_migrate_db()
 
     def _get_connection(self):
+        # [FIX] Garante que o diretório existe antes de tentar abrir
+        db_dir = os.path.dirname(self.db_path)
+        if not os.path.exists(db_dir):
+            os.makedirs(db_dir, exist_ok=True)
         return sqlite3.connect(self.db_path)
 
     def _init_db(self):
