@@ -24,11 +24,10 @@ AI_PRICES_PATH = os.path.join(CONFIG_DIR, "ai_prices.json")
 PROXY_LIST_PATH = os.path.join(CONFIG_DIR, "proxies.txt")
 COOKIES_PATH = os.path.join(BASE_DIR, "cookies.txt")
 
-# --- UI Colors (Dark Theme) ---
-# [DESIGN SYSTEM] Cores centralizadas para garantir consistência visual.
-# Alterar COLOR_ACCENT muda a identidade visual (botões, focos) globalmente.
-COLOR_BG = wx.Colour(30, 30, 30)
-COLOR_FG = wx.Colour(220, 220, 220)
-COLOR_HIGHLIGHT = wx.Colour(70, 70, 70)
+# --- UI Colors (Light Mode) ---
+# [DESIGN SYSTEM] Cores centralizadas para Tema Claro.
+COLOR_BG = wx.Colour(255, 255, 255)  # White
+COLOR_FG = wx.Colour(40, 40, 40)      # Dark Gray
+COLOR_HIGHLIGHT = wx.Colour(240, 240, 240) # Light highlight
 COLOR_ACCENT = wx.Colour(0, 120, 215)  # Blue accent
 

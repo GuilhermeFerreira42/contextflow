@@ -43,9 +43,9 @@ class DetailPanel(wx.Panel):
             main_sizer.Add(self.browser, 1, wx.EXPAND | wx.ALL, 0)
         else:
             self.txt_content = wx.TextCtrl(self, style=wx.TE_MULTILINE | wx.TE_READONLY)
-            # Fix Low Contrast (Dark Theme Friendly)
-            self.txt_content.SetBackgroundColour(wx.Colour(30, 30, 30)) # Dark Gray BG
-            self.txt_content.SetForegroundColour(wx.Colour(240, 240, 240)) # Light Gray Text
+            # Adapt to Light Mode using System Defaults
+            self.txt_content.SetBackgroundColour(wx.SystemSettings.GetColour(wx.SYS_COLOUR_WINDOW))
+            self.txt_content.SetForegroundColour(wx.SystemSettings.GetColour(wx.SYS_COLOUR_WINDOWTEXT))
             main_sizer.Add(self.txt_content, 1, wx.EXPAND | wx.ALL, 0)
             self.browser = None
             
@@ -98,11 +98,11 @@ class DetailPanel(wx.Panel):
             self.set_default_image()
 
         # Update Content
-        # Formatando texto para HTML simples para leitura agradável
+        # Formatando texto para HTML simples para leitura agradável (Light Mode)
         if self.browser:
             html_content = f"""
             <html>
-            <body style='font-family: sans-serif; line-height: 1.6; padding: 10px; background-color: #1e1e1e; color: #f0f0f0;'>
+            <body style='font-family: sans-serif; line-height: 1.6; padding: 10px; background-color: white; color: #282828;'>
             <h3>Transcrição</h3>
             <p>{transcript_text.replace(chr(10), '<br>')}</p>
             </body>

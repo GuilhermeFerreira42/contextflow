@@ -70,15 +70,16 @@ class TabBatch(wx.Panel):
         self.grid.SetTable(self.table, takeOwnership=True)
         self.grid.SelectionMode = wx.grid.Grid.GridSelectRows
         
-        # Configuração Estética HeidiSQL
+        # Configuração Estética HeidiSQL (Light Mode)
         self.grid.SetColLabelSize(25)
         self.grid.SetRowLabelSize(0)
         self.grid.EnableGridLines(True)
+        self.grid.SetGridLineColour(wx.Colour(220, 220, 220)) # Cinza claro para contraste no branco
         
         # [AFFORDANCE] Define larguras conforme SSoT de Usabilidade
         self.grid.SetColSize(0, 40)   # #
         self.grid.SetColSize(1, 40)   # [x]
-        self.grid.SetColSize(2, 250)  # Link
+        self.grid.SetColSize(2, 40)   # Link (Mandato 5.9: 40px)
         self.grid.SetColSize(3, 400)  # Título
         self.grid.SetColSize(10, 100) # Status
         
