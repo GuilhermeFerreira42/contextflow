@@ -8,6 +8,9 @@ from constants import THUMBNAILS_DIR
 class DetailPanel(wx.Panel):
     def __init__(self, parent):
         super().__init__(parent)
+        from constants import COLOR_BG, COLOR_FG
+        self.SetBackgroundColour(COLOR_BG)
+        self.SetForegroundColour(COLOR_FG)
         self._init_ui()
 
     def _init_ui(self):
@@ -102,9 +105,23 @@ class DetailPanel(wx.Panel):
         if self.browser:
             html_content = f"""
             <html>
-            <body style='font-family: sans-serif; line-height: 1.6; padding: 10px; background-color: white; color: #282828;'>
+            <head>
+                <style>
+                    body {{
+                        font-family: 'Segoe UI', sans-serif;
+                        line-height: 1.6;
+                        padding: 20px;
+                        background-color: white;
+                        color: #282828;
+                        margin: 0;
+                    }}
+                    h3 {{ color: #0078d7; border-bottom: 1px solid #eee; padding-bottom: 10px; }}
+                    p {{ white-space: pre-wrap; }}
+                </style>
+            </head>
+            <body>
             <h3>Transcrição</h3>
-            <p>{transcript_text.replace(chr(10), '<br>')}</p>
+            <p>{transcript_text}</p>
             </body>
             </html>
             """

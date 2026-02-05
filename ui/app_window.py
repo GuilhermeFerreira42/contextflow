@@ -36,12 +36,14 @@ class AppWindow(wx.Frame):
     def _init_ui(self):
         # 1. Splitter Principal (Vertical: Sidebar | Workspace+Console)
         self.main_splitter = wx.SplitterWindow(self, style=wx.SP_BORDER | wx.SP_LIVE_UPDATE)
+        self.main_splitter.SetMinimumPaneSize(50) # [REVERSIBILIDADE v5.9]
         
         # 1.1 Sidebar (Esquerda)
         self.sidebar = Sidebar(self.main_splitter, self.on_sidebar_selection, app_state=self.app_state)
         
         # 1.2 Container da Área Direita (Splitter Horizontal: Notebook | Console)
         self.right_splitter = wx.SplitterWindow(self.main_splitter, style=wx.SP_BORDER | wx.SP_LIVE_UPDATE)
+        self.right_splitter.SetMinimumPaneSize(50) # [REVERSIBILIDADE v5.9]
         
         # 2. Notebook (Topologia de 3 Abas conforme ARCHITECTURE.md)
         self.notebook = wx.Notebook(self.right_splitter)
@@ -92,6 +94,9 @@ class AppWindow(wx.Frame):
         
         # Menu Exibir (Controle de Visibilidade conforme US05)
         view_menu = wx.Menu()
+        self.item_view_sidebar = view_menu.AppendCheckItem(2000, "Exibir Sidebar (Histórico)")
+        self.item_view_sidebar.Check(True)
+        
         self.item_view_logs = view_menu.AppendCheckItem(2001, "Exibir Logs/Console")
         self.item_view_logs.Check(True)
         menubar.Append(view_menu, "&Exibir")
@@ -102,6 +107,7 @@ class AppWindow(wx.Frame):
         menubar.Append(tools_menu, "&Ferramentas")
         
         self.SetMenuBar(menubar)
+        self.Bind(wx.EVT_MENU, self.on_toggle_sidebar, id=2000)
         self.Bind(wx.EVT_MENU, self.on_toggle_logs, id=2001)
         self.Bind(wx.EVT_MENU, self.on_reprocess_errors, id=3001)
 
@@ -129,6 +135,12 @@ class AppWindow(wx.Frame):
 
     def log_to_console(self, msg, level="INFO"):
         self.panel_console.log(msg, level)
+
+    def on_toggle_sidebar(self, event):
+        if self.item_view_sidebar.IsChecked():
+            self.main_splitter.SplitVertically(self.sidebar, self.right_splitter, 250)
+        else:
+            self.main_splitter.Unsplit(self.sidebar)
 
     def on_toggle_logs(self, event):
         if self.item_view_logs.IsChecked():

@@ -44,6 +44,14 @@ class BitmapCache:
 
 # --- RENDERIZADORES CUSTOMIZADOS (Phase 5.9) ---
 
+class SafeTextRenderer(wx.grid.GridCellStringRenderer):
+    """Renderer de texto padrão com Clipping Region obrigatória para evitar overflow."""
+    def Draw(self, grid, attr, dc, rect, row, col, isSelected):
+        dc.SetClippingRegion(rect)
+        super().Draw(grid, attr, dc, rect, row, col, isSelected)
+        dc.DestroyClippingRegion()
+    def Clone(self): return SafeTextRenderer()
+
 class ThumbnailRenderer(wx.grid.GridCellRenderer):
     """
     Renderizador de alta fidelidade com cantos arredondados e LRU Cache.
@@ -89,16 +97,20 @@ class ThumbnailRenderer(wx.grid.GridCellRenderer):
 
     def _draw_bitmap_rich(self, dc, rect, bmp):
         """Usa GraphicsContext para renderização com Antialiasing."""
+        # [CRÍTICO] Clipping no DC antes de iniciar o GC para evitar crash em certas versões
+        dc.SetClippingRegion(rect)
         gc = wx.GraphicsContext.Create(dc)
         if gc:
-            # [REGRA 5.9] Clipping obrigatório para evitar overlap
-            gc.Clip(rect.x, rect.y, rect.width, rect.height)
-            
-            # Caminho arredondado (Rounded Clipping)
+            # [REGRA 5.9] Clipping secundário no GC para arredondamento
             path = gc.CreatePath()
             path.AddRoundedRectangle(rect.x + 4, rect.y + 4, 80, 45, 4)
-            gc.Clip(path)
+            # gc.Clip(path) <- Isso causa crash em wxWidgets 3.2.8. 
+            # Usamos Clip(rect) e desenhamos dentro do path se possível, 
+            # ou apenas desenhamos o bitmap se o arredondamento for visual via path.
+            # Para segurança absoluta:
+            gc.Clip(rect.x, rect.y, rect.width, rect.height)
             gc.DrawBitmap(bmp, rect.x + 4, rect.y + 4, 80, 45)
+        dc.DestroyClippingRegion()
 
     def _async_load(self, grid, path, row, col):
         """Carregamento em thread separada com redimensionamento forçado 80x45."""
@@ -182,7 +194,8 @@ class ChipTagRenderer(wx.grid.GridCellRenderer):
 
         gc = wx.GraphicsContext.Create(dc)
         if gc:
-            # [REGRA 5.9] Clipping obrigatório
+            # [REGRA 5.9] Clipping obrigatório utilizando DC Clipping Region antes (mais seguro)
+            dc.SetClippingRegion(rect)
             gc.Clip(rect.x, rect.y, rect.width, rect.height)
             
             x_offset = rect.x + 5
@@ -205,6 +218,8 @@ class ChipTagRenderer(wx.grid.GridCellRenderer):
             
             if len(tags) > 2:
                 gc.DrawText(f"+{len(tags)-2}", x_offset, y_pos + 4)
+            
+        dc.DestroyClippingRegion()
 
     def GetBestSize(self, grid, attr, dc, row, col): return wx.Size(100, 45)
     def Clone(self): return ChipTagRenderer()
@@ -292,6 +307,10 @@ class VirtualVideoTable(wx.grid.GridTableBase):
                 "Publicado", "Adicionado", "Playlist", "Duração", 
                 "Tokens", "Status"
             ]
+        
+        # [ESTADO DE ORDENAÇÃO]
+        self.sort_col = -1
+        self.sort_ascending = True
 
     def UpdateData(self, new_data):
         if self.GetView():
@@ -339,7 +358,8 @@ class VirtualVideoTable(wx.grid.GridTableBase):
                 'Playlist': 'playlist_title',
                 'Tokens': 'token_count',
                 'Status': 'status',
-                'Resumo': 'transcript_snippet' # Placeholder do snippet para Aba 2
+                'Duração': 'duration', # Fallback
+                'Resumo': 'transcript_snippet'
             }
             
             if label in mapping:
@@ -377,7 +397,8 @@ class VirtualVideoTable(wx.grid.GridTableBase):
         attr.SetBackgroundColour(COLOR_BG)
         attr.SetTextColour(COLOR_FG)
 
-        is_ana_tab = "Preview" in self.col_labels # Heurística simples para identificar Aba 2
+        # [REQUISITO ABA 2] Heurística de Identificação Analítica
+        is_ana_tab = ("Preview" in self.col_labels)
 
         if label == "[x]":
             attr.SetRenderer(wx.grid.GridCellBoolRenderer())
@@ -409,6 +430,7 @@ class VirtualVideoTable(wx.grid.GridTableBase):
                 attr.SetTextColour(COLOR_ACCENT) # Azul para o CTA de resumir
             attr.SetReadOnly(True)
         else:
+            attr.SetRenderer(SafeTextRenderer())
             attr.SetReadOnly(True)
         
         attr.IncRef()

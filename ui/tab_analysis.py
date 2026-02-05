@@ -21,7 +21,7 @@ class TabAnalysis(wx.Panel):
         
         # Colunas Analíticas [Specs 5.9 Expansion]
         self.col_labels = [
-            " # ", "Preview", "Título", "Canal", "Duração", 
+            " [x] ", " # ", "Preview", "Título", "Canal", "Duração", 
             "Tags", "Link", "Status", "Resumo"
         ]
         self.table = VirtualVideoTable(col_labels=self.col_labels)
@@ -53,16 +53,16 @@ class TabAnalysis(wx.Panel):
         btn_summarize.SetForegroundColour(wx.WHITE)
         btn_summarize.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
         
-        btn_export = wx.Button(self.toolbar, label="📁 Export ZIP/MD")
-        btn_export.SetBackgroundColour(wx.Colour(50, 50, 50))
-        btn_export.SetForegroundColour(COLOR_FG)
+        self.btn_export = wx.Button(self.toolbar, label="📁 Export ZIP/MD")
+        self.btn_export.SetBackgroundColour(wx.Colour(230, 230, 230))
+        self.btn_export.SetForegroundColour(COLOR_FG)
         
         self.search = wx.SearchCtrl(self.toolbar)
         self.search.SetDescriptiveText("Filtro rápido...")
         self.search.ShowCancelButton(True)
         
         tb_sizer.Add(btn_summarize, 0, wx.CENTER | wx.LEFT, 10)
-        tb_sizer.Add(btn_export, 0, wx.CENTER | wx.LEFT, 5)
+        tb_sizer.Add(self.btn_export, 0, wx.CENTER | wx.LEFT, 5)
         tb_sizer.AddStretchSpacer()
         tb_sizer.Add(self.search, 0, wx.CENTER | wx.RIGHT, 10)
         
@@ -72,6 +72,8 @@ class TabAnalysis(wx.Panel):
         # --- SPLITTER WINDOW (Master-Detail) ---
         self.splitter = wx.SplitterWindow(self, style=wx.SP_3D | wx.SP_LIVE_UPDATE | wx.SP_NO_XP_THEME)
         self.splitter.SetBackgroundColour(wx.Colour(230, 230, 230)) # COLOR_BORDER Light
+        self.splitter.SetSashGravity(0.5) # [MANDATO 5.9] Redimensionamento proporcional
+        self.splitter.SetMinimumPaneSize(50) # [REVERSIBILIDADE v5.9]
         
         # MASTER PANEL (Top)
         self.pnl_master = wx.Panel(self.splitter)
@@ -86,18 +88,19 @@ class TabAnalysis(wx.Panel):
         self.grid.SetColLabelSize(32)
         self.grid.SetRowLabelSize(0)
         self.grid.SetDefaultRowSize(52) # Conforto para Preview 80x45
-        self.grid.SetGridLineColour(wx.Colour(40, 40, 40))
+        self.grid.SetGridLineColour(wx.Colour(220, 220, 220)) # Light Gray lines for Light Mode
         
         # Larguras Fixas
-        self.grid.SetColSize(0, 40)   # #
-        self.grid.SetColSize(1, 90)   # Preview
-        self.grid.SetColSize(2, 280)  # Título
-        self.grid.SetColSize(3, 120)  # Canal
-        self.grid.SetColSize(4, 70)   # Duração
-        self.grid.SetColSize(5, 120)  # Tags
-        self.grid.SetColSize(6, 40)   # Link
-        self.grid.SetColSize(7, 60)   # Status
-        self.grid.SetColSize(8, 300)  # Resumo
+        self.grid.SetColSize(0, 40)   # [x]
+        self.grid.SetColSize(1, 40)   # #
+        self.grid.SetColSize(2, 90)   # Preview
+        self.grid.SetColSize(3, 380)  # Título (Aumentado para Modo Rico)
+        self.grid.SetColSize(4, 120)  # Canal
+        self.grid.SetColSize(5, 70)   # Duração
+        self.grid.SetColSize(6, 120)  # Tags
+        self.grid.SetColSize(7, 40)   # Link
+        self.grid.SetColSize(8, 60)   # Status
+        self.grid.SetColSize(9, 300)  # Resumo
         
         master_sizer.Add(self.grid, 1, wx.EXPAND)
         self.pnl_master.SetSizer(master_sizer)
@@ -145,13 +148,19 @@ class TabAnalysis(wx.Panel):
         
         main_sizer.Add(self.splitter, 1, wx.EXPAND)
         self.SetSizer(main_sizer)
+        self.Layout()
 
     def _bind_events(self):
         self.grid.Bind(wx.grid.EVT_GRID_SELECT_CELL, self.on_select_video)
-        self.grid.Bind(wx.grid.EVT_GRID_CELL_LEFT_CLICK, self.on_grid_click)
+        self.grid.Bind(wx.grid.EVT_GRID_CELL_RIGHT_CLICK, self.on_right_click)
         self.btn_close_viewer.Bind(wx.EVT_BUTTON, lambda e: self.splitter.Unsplit(self.pnl_detail))
-        self.Bind(wx.EVT_TIMER, self.on_debounce_tick, self.debounce_timer)
         self.search.Bind(wx.EVT_TEXT, self.on_search)
+        
+        # [FUNCIONALIDADE v5.9] Ativação do Botão Exportar
+        self.btn_export.Bind(wx.EVT_BUTTON, self.on_export_batch)
+        
+        self.Bind(wx.EVT_TIMER, self.on_debounce_tick, self.debounce_timer)
+        self.grid.GetGridWindow().Bind(wx.EVT_MOTION, self.on_grid_motion)
 
     def on_state_mutation(self, event_type, data=None):
         if event_type in ['VIDEO_ADDED', 'VIDEO_UPDATED', 'TASK_COMPLETED', 'DATA_LOADED']:
@@ -168,10 +177,11 @@ class TabAnalysis(wx.Panel):
 
     def _refresh_grid(self):
         query = self.search.GetValue().lower()
-        all_videos = self.app_state.get_all_videos()
+        # [SSOT v5.9] Usa dados unificados para visibilidade total do pipeline
+        all_videos = self.app_state.get_unified_data()
         
         if query:
-            filtered = [v for v in all_videos if query in v.get('title', '').lower() or query in v.get('channel_name', '').lower()]
+            filtered = [v for v in all_videos if query in str(v.get('title', '')).lower() or query in str(v.get('channel_name', '')).lower()]
             self.table.UpdateData(filtered)
         else:
             self.table.UpdateData(all_videos)
@@ -181,11 +191,117 @@ class TabAnalysis(wx.Panel):
     def on_search(self, event):
         self._refresh_grid()
 
+    def on_label_click(self, event):
+        col = event.GetCol()
+        if col == 0: # Check All
+             if not self.table.data: return
+             is_first_selected = (self.table.GetValue(0, 0) == "1")
+             new_selection = set()
+             if not is_first_selected:
+                 for item in self.table.data:
+                     vid = item.get('id') or item.get('uuid')
+                     if vid: new_selection.add(vid)
+             self.table.selected_ids = new_selection
+             self.grid.ForceRefresh()
+             return
+        
+        # Sort Column
+        if col >= 0:
+            self._sort_grid(col)
+        event.Skip()
+
+    def _sort_grid(self, col):
+        if not self.table.data: return
+        if self.table.sort_col == col:
+            self.table.sort_ascending = not self.table.sort_ascending
+        else:
+            self.table.sort_col = col
+            self.table.sort_ascending = True
+
+        label = self.table.col_labels[col].strip()
+        mapping = {
+            'Título': 'title',
+            'Canal': 'channel_name',
+            'Duração': 'duration',
+            'Status': 'status'
+        }
+        key = mapping.get(label)
+        if key:
+            self.table.data.sort(key=lambda x: str(x.get(key, "")).lower(), reverse=not self.table.sort_ascending)
+            self.grid.ForceRefresh()
+
+    def on_grid_motion(self, event):
+        pos = event.GetPosition()
+        coords = self.grid.XYToCell(self.grid.CalcUnscrolledPosition(pos).x, 
+                                     self.grid.CalcUnscrolledPosition(pos).y)
+        col = coords.GetCol()
+        if col >= 0 and self.col_labels[col].strip() == "Link":
+            self.grid.GetGridWindow().SetCursor(wx.Cursor(wx.CURSOR_HAND))
+        else:
+            self.grid.GetGridWindow().SetCursor(wx.Cursor(wx.CURSOR_ARROW))
+        event.Skip()
+
+    def on_right_click(self, event):
+        row = event.GetRow()
+        if row < 0 or row >= len(self.table.data): return
+        
+        self.grid.SelectRow(row)
+        video_data = self.table.data[row]
+        
+        menu = wx.Menu()
+        m_del = menu.Append(wx.ID_ANY, "🗑️ Excluir")
+        m_link = menu.Append(wx.ID_ANY, "🔗 Abrir Link")
+        m_copy = menu.Append(wx.ID_ANY, "📋 Copiar Link")
+        m_md = menu.Append(wx.ID_ANY, "📄 Baixar como MD")
+        m_sum = menu.Append(wx.ID_ANY, "✨ Resumir (IA)")
+        
+        def on_del(e):
+            if wx.MessageBox(f"Excluir '{video_data.get('title')}'?", "Confirmar", wx.YES_NO) == wx.YES:
+                self.app_state.delete_videos([video_data.get('id') or video_data.get('uuid')])
+        
+        self.Bind(wx.EVT_MENU, on_del, m_del)
+        self.Bind(wx.EVT_MENU, lambda e: webbrowser.open(video_data.get('url')), m_link)
+        self.Bind(wx.EVT_MENU, lambda e: self._copy_to_clipboard(video_data.get('url')), m_copy)
+        self.Bind(wx.EVT_MENU, lambda e: self._direct_export_md(video_data), m_md)
+        self.Bind(wx.EVT_MENU, lambda e: wx.MessageBox("Funcionalidade da Fase 6 (Placeholder).", "AI Summary"), m_sum)
+        
+        self.PopupMenu(menu)
+        menu.Destroy()
+
+    def _copy_to_clipboard(self, text):
+        if not text: return
+        if wx.TheClipboard.Open():
+            wx.TheClipboard.SetData(wx.TextDataObject(text))
+            wx.TheClipboard.Close()
+
+    def _direct_export_md(self, video_data):
+        vid = video_data.get('id') or video_data.get('uuid')
+        title = video_data.get('title', 'video')
+        from core.export_formatter import ExportFormatter
+        safe_name = ExportFormatter.get_safe_filename(title)
+        
+        with wx.FileDialog(self, "Exportar Markdown", wildcard="Markdown files (*.md)|*.md",
+                           defaultFile=f"{safe_name}.md",
+                           style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT) as fileDialog:
+            if fileDialog.ShowModal() == wx.ID_CANCEL:
+                return
+            path = fileDialog.GetPath()
+            from services.export_service import ExportService
+            exp = ExportService(self.app_state)
+            exp.export_batch([vid], "markdown_single", path)
+            wx.MessageBox("Arquivo exportado com sucesso!", "Sucesso", wx.OK)
+
     def on_grid_click(self, event):
         """Implementação de navegação direta via ícone [MANDATO v5.9]."""
         row, col = event.GetRow(), event.GetCol()
         label = self.col_labels[col].strip()
         
+        if label == "[x]":
+            val = self.table.GetValue(row, col)
+            self.table.SetValue(row, col, "0" if val == "1" else "1")
+            self.grid.ForceRefresh()
+            return
+            
         if label == "Link":
             url = self.table.data[row].get('url')
             if url: webbrowser.open(url)
@@ -235,3 +351,22 @@ class TabAnalysis(wx.Panel):
                     self.splitter.SplitHorizontally(self.pnl_master, self.pnl_detail, -300)
             
         event.Skip()
+
+    def on_export_batch(self, event):
+        """Dispara exportação para itens selecionados via ExportService."""
+        ids = list(self.table.selected_ids)
+        if not ids:
+            wx.MessageBox("Nenhum item selecionado para exportação.", "Aviso", wx.OK | wx.ICON_WARNING)
+            return
+            
+        # Reutiliza lógica de exportação (Poderia usar PubSub ou instanciar Service)
+        from services.export_service import ExportService
+        exp = ExportService(self.app_state)
+        
+        with wx.FileDialog(self, "Exportar Selecionados (ZIP)", wildcard="ZIP files (*.zip)|*.zip",
+                           style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT) as fileDialog:
+            if fileDialog.ShowModal() == wx.ID_CANCEL:
+                return
+            path = fileDialog.GetPath()
+            exp.export_batch(ids, "zip", path)
+            wx.MessageBox("Exportação concluída!", "Sucesso", wx.OK)

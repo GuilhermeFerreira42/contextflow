@@ -81,6 +81,7 @@ class TabBatch(wx.Panel):
         self.grid.SetColSize(1, 40)   # [x]
         self.grid.SetColSize(2, 40)   # Link (Mandato 5.9: 40px)
         self.grid.SetColSize(3, 400)  # Título
+        self.grid.SetColSize(4, 150)  # Canal
         self.grid.SetColSize(10, 100) # Status
         
         grid_sizer.Add(self.grid, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 10)
@@ -114,6 +115,7 @@ class TabBatch(wx.Panel):
         # [USABILIDADE] Eventos de Grade de Baixa Latência
         self.grid.Bind(wx.grid.EVT_GRID_CELL_LEFT_CLICK, self.on_grid_click)
         self.grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_CLICK, self.on_label_click)
+        self.grid.Bind(wx.grid.EVT_GRID_CELL_RIGHT_CLICK, self.on_right_click)
         self.grid.GetGridWindow().Bind(wx.EVT_MOTION, self.on_grid_motion)
 
     def on_grid_click(self, event):
@@ -151,7 +153,92 @@ class TabBatch(wx.Panel):
             
             self.table.selected_ids = new_selection
             self.grid.ForceRefresh()
+            return
+
+        # [ORDENAÇÃO v5.9]
+        col = event.GetCol()
+        if col >= 0:
+            self._sort_grid(col)
         event.Skip()
+
+    def _sort_grid(self, col):
+        if not self.table.data: return
+        
+        # Toggle ascending/descending
+        if self.table.sort_col == col:
+            self.table.sort_ascending = not self.table.sort_ascending
+        else:
+            self.table.sort_col = col
+            self.table.sort_ascending = True
+
+        label = self.table.col_labels[col].strip()
+        
+        # Mapeamento de label para chave do dado
+        mapping = {
+            'Link': 'url',
+            'Título': 'title',
+            'Canal': 'channel_name',
+            'Publicado': 'upload_date',
+            'Adicionado': 'added_at',
+            'Playlist': 'playlist_title',
+            'Tokens': 'token_count',
+            'Status': 'status'
+        }
+        
+        key = mapping.get(label, None)
+        if label == "#": 
+             # No-op or sort by original order if we had one
+             return
+
+        if key:
+            self.table.data.sort(key=lambda x: str(x.get(key, "")).lower(), reverse=not self.table.sort_ascending)
+            self.grid.ForceRefresh()
+
+    def on_right_click(self, event):
+        row, col = event.GetRow(), event.GetCol()
+        if row < 0 or row >= len(self.table.data): return
+        
+        self.grid.SelectRow(row)
+        video_data = self.table.data[row]
+        vid = video_data.get('id') or video_data.get('uuid')
+        
+        menu = wx.Menu()
+        m_del = menu.Append(wx.ID_ANY, "🗑️ Excluir")
+        m_link = menu.Append(wx.ID_ANY, "🔗 Abrir Link")
+        m_copy = menu.Append(wx.ID_ANY, "📋 Copiar Link")
+        m_md = menu.Append(wx.ID_ANY, "📄 Baixar como MD")
+        m_sum = menu.Append(wx.ID_ANY, "✨ Resumir (IA)")
+        
+        self.Bind(wx.EVT_MENU, lambda e: self.on_delete_selected(None), m_del)
+        self.Bind(wx.EVT_MENU, lambda e: webbrowser.open(video_data.get('url')), m_link)
+        self.Bind(wx.EVT_MENU, lambda e: self._copy_to_clipboard(video_data.get('url')), m_copy)
+        self.Bind(wx.EVT_MENU, lambda e: self._direct_export_md(video_data), m_md)
+        self.Bind(wx.EVT_MENU, lambda e: wx.MessageBox("Funcionalidade da Fase 6 (Placeholder).", "AI Summary"), m_sum)
+        
+        self.PopupMenu(menu)
+        menu.Destroy()
+
+    def _copy_to_clipboard(self, text):
+        if not text: return
+        if wx.TheClipboard.Open():
+            wx.TheClipboard.SetData(wx.TextDataObject(text))
+            wx.TheClipboard.Close()
+            # self.app_state.notify_user("Link copiado!") # Opcional: feedback visual via StatusBar ou Toast
+
+    def _direct_export_md(self, video_data):
+        vid = video_data.get('id') or video_data.get('uuid')
+        title = video_data.get('title', 'video')
+        from core.export_formatter import ExportFormatter
+        safe_name = ExportFormatter.get_safe_filename(title)
+        
+        with wx.FileDialog(self, "Exportar Markdown", wildcard="Markdown files (*.md)|*.md",
+                           defaultFile=f"{safe_name}.md",
+                           style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT) as fileDialog:
+            if fileDialog.ShowModal() == wx.ID_CANCEL:
+                return
+            path = fileDialog.GetPath()
+            self.export_service.export_batch([vid], "markdown_single", path)
+            wx.MessageBox("Arquivo exportado com sucesso!", "Sucesso", wx.OK)
 
     def on_grid_motion(self, event):
         """Muda o cursor sobre o Link para Hand Affordance."""
