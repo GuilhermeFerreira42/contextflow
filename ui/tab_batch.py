@@ -207,7 +207,7 @@ class TabBatch(wx.Panel):
         m_link = menu.Append(wx.ID_ANY, "🔗 Abrir Link")
         m_copy = menu.Append(wx.ID_ANY, "📋 Copiar Link")
         m_md = menu.Append(wx.ID_ANY, "📄 Baixar como MD")
-        m_sum = menu.Append(wx.ID_ANY, "✨ Resumir (IA)")
+        m_sum = menu.Append(wx.ID_ANY, "✨ Resumir")
         
         self.Bind(wx.EVT_MENU, lambda e: self.on_delete_selected(None), m_del)
         self.Bind(wx.EVT_MENU, lambda e: webbrowser.open(video_data.get('url')), m_link)

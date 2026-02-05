@@ -142,9 +142,9 @@ class TabAnalysis(wx.Panel):
         detail_sizer.Add(self.txt_summary, 1, wx.EXPAND | wx.ALL, 10)
         self.pnl_detail.SetSizer(detail_sizer)
         
-        # [SMART SHOW] Inicializa oculto
+        # [SMART SHOW] Inicializa oculto (Mandato 5.9)
         self.splitter.SplitHorizontally(self.pnl_master, self.pnl_detail, -280)
-        self.splitter.Unsplit(self.pnl_detail)
+        wx.CallAfter(self.splitter.Unsplit, self.pnl_detail)
         
         main_sizer.Add(self.splitter, 1, wx.EXPAND)
         self.SetSizer(main_sizer)
@@ -159,8 +159,10 @@ class TabAnalysis(wx.Panel):
         # [FUNCIONALIDADE v5.9] Ativação do Botão Exportar
         self.btn_export.Bind(wx.EVT_BUTTON, self.on_export_batch)
         
+        self.grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_CLICK, self.on_label_click)
         self.Bind(wx.EVT_TIMER, self.on_debounce_tick, self.debounce_timer)
         self.grid.GetGridWindow().Bind(wx.EVT_MOTION, self.on_grid_motion)
+        self.grid.Bind(wx.grid.EVT_GRID_CELL_LEFT_CLICK, self.on_grid_click)
 
     def on_state_mutation(self, event_type, data=None):
         if event_type in ['VIDEO_ADDED', 'VIDEO_UPDATED', 'TASK_COMPLETED', 'DATA_LOADED']:
@@ -247,19 +249,16 @@ class TabAnalysis(wx.Panel):
         
         self.grid.SelectRow(row)
         video_data = self.table.data[row]
+        vid = video_data.get('id') or video_data.get('uuid')
         
         menu = wx.Menu()
         m_del = menu.Append(wx.ID_ANY, "🗑️ Excluir")
         m_link = menu.Append(wx.ID_ANY, "🔗 Abrir Link")
         m_copy = menu.Append(wx.ID_ANY, "📋 Copiar Link")
         m_md = menu.Append(wx.ID_ANY, "📄 Baixar como MD")
-        m_sum = menu.Append(wx.ID_ANY, "✨ Resumir (IA)")
+        m_sum = menu.Append(wx.ID_ANY, "✨ Resumir")
         
-        def on_del(e):
-            if wx.MessageBox(f"Excluir '{video_data.get('title')}'?", "Confirmar", wx.YES_NO) == wx.YES:
-                self.app_state.delete_videos([video_data.get('id') or video_data.get('uuid')])
-        
-        self.Bind(wx.EVT_MENU, on_del, m_del)
+        self.Bind(wx.EVT_MENU, lambda e: self.app_state.delete_videos([vid]), m_del)
         self.Bind(wx.EVT_MENU, lambda e: webbrowser.open(video_data.get('url')), m_link)
         self.Bind(wx.EVT_MENU, lambda e: self._copy_to_clipboard(video_data.get('url')), m_copy)
         self.Bind(wx.EVT_MENU, lambda e: self._direct_export_md(video_data), m_md)

@@ -97,18 +97,12 @@ class ThumbnailRenderer(wx.grid.GridCellRenderer):
 
     def _draw_bitmap_rich(self, dc, rect, bmp):
         """Usa GraphicsContext para renderização com Antialiasing."""
-        # [CRÍTICO] Clipping no DC antes de iniciar o GC para evitar crash em certas versões
+        # [MANDATO 5.9] Clipping absoluto via DC antes do GC para estabilidade
         dc.SetClippingRegion(rect)
         gc = wx.GraphicsContext.Create(dc)
         if gc:
-            # [REGRA 5.9] Clipping secundário no GC para arredondamento
-            path = gc.CreatePath()
-            path.AddRoundedRectangle(rect.x + 4, rect.y + 4, 80, 45, 4)
-            # gc.Clip(path) <- Isso causa crash em wxWidgets 3.2.8. 
-            # Usamos Clip(rect) e desenhamos dentro do path se possível, 
-            # ou apenas desenhamos o bitmap se o arredondamento for visual via path.
-            # Para segurança absoluta:
-            gc.Clip(rect.x, rect.y, rect.width, rect.height)
+            # [REGRA 5.9] Clipping secundário no GC via Rect (evita crash do path.Clip)
+            gc.Clip(rect.x + 4, rect.y + 4, 80, 45)
             gc.DrawBitmap(bmp, rect.x + 4, rect.y + 4, 80, 45)
         dc.DestroyClippingRegion()
 
@@ -143,11 +137,9 @@ class RichTitleRenderer(wx.grid.GridCellRenderer):
         
         item = table.data[row]
         title = item.get('title', '-')
-        channel = item.get('channel_name', '-')
         
         # Cores baseadas na seleção
         txt_color = COLOR_FG if not isSelected else wx.WHITE
-        sub_color = wx.Colour(140, 140, 140) if not isSelected else wx.Colour(220, 220, 220)
         
         # Limpa fundo
         bg_color = grid.GetDefaultCellBackgroundColour() if not isSelected else grid.GetSelectionBackground()
@@ -155,18 +147,17 @@ class RichTitleRenderer(wx.grid.GridCellRenderer):
         dc.SetPen(wx.TRANSPARENT_PEN)
         dc.DrawRectangle(rect)
 
-        # [REGRA 5.9] Clipping manual no DC para evitar overlap em colunas estreitas
+        # [REQUISITO 5.9] Clipping manual e Título Puro (Sem Canal)
         dc.SetClippingRegion(rect)
         
         # Renderiza Título (Negrito)
         dc.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
         dc.SetTextForeground(txt_color)
-        dc.DrawText(title, rect.x + 5, rect.y + 5)
         
-        # Renderiza Canal (Itálico/Menor)
-        dc.SetFont(wx.Font(8, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_ITALIC, wx.FONTWEIGHT_NORMAL))
-        dc.SetTextForeground(sub_color)
-        dc.DrawText(channel, rect.x + 5, rect.y + 22)
+        # Alinhamento vertical centralizado para o título único
+        tw, th = dc.GetTextExtent(title)
+        y_pos = rect.y + (rect.height - th) // 2
+        dc.DrawText(title, rect.x + 5, y_pos)
         
         dc.DestroyClippingRegion()
 
@@ -409,11 +400,9 @@ class VirtualVideoTable(wx.grid.GridTableBase):
             attr.SetReadOnly(True)
         elif label == "Título":
             if is_ana_tab:
-                # Aba 2: Título Rico (Título + Canal)
                 attr.SetRenderer(RichTitleRenderer())
             else:
-                # Aba 1: Texto Simples conforme MANDATO 5.8
-                attr.SetReadOnly(True)
+                attr.SetRenderer(SafeTextRenderer())
             attr.SetReadOnly(True)
         elif label == "Tags":
             attr.SetRenderer(ChipTagRenderer())

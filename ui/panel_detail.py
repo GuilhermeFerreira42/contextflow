@@ -8,9 +8,8 @@ from constants import THUMBNAILS_DIR
 class DetailPanel(wx.Panel):
     def __init__(self, parent):
         super().__init__(parent)
-        from constants import COLOR_BG, COLOR_FG
-        self.SetBackgroundColour(COLOR_BG)
-        self.SetForegroundColour(COLOR_FG)
+        self.SetBackgroundColour(wx.WHITE)
+        self.SetForegroundColour(wx.Colour(40, 40, 40)) # COLOR_FG
         self._init_ui()
 
     def _init_ui(self):
