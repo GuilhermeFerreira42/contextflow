@@ -42,12 +42,13 @@ class DetailPanel(wx.Panel):
         # 2. Content (WebView for Rich Text)
         if wx.html2.WebView.IsBackendAvailable(wx.html2.WebViewBackendDefault):
             self.browser = wx.html2.WebView.New(self)
+            # [QA2 REFINE] Evita Flash Preto: Injeta fundo branco imediatamente
+            self.browser.SetPage("<html><body style='background-color:white;'></body></html>", "")
             main_sizer.Add(self.browser, 1, wx.EXPAND | wx.ALL, 0)
         else:
-            self.txt_content = wx.TextCtrl(self, style=wx.TE_MULTILINE | wx.TE_READONLY)
-            # Adapt to Light Mode using System Defaults
-            self.txt_content.SetBackgroundColour(wx.SystemSettings.GetColour(wx.SYS_COLOUR_WINDOW))
-            self.txt_content.SetForegroundColour(wx.SystemSettings.GetColour(wx.SYS_COLOUR_WINDOWTEXT))
+            self.txt_content = wx.TextCtrl(self, style=wx.TE_MULTILINE | wx.TE_READONLY | wx.NO_BORDER)
+            self.txt_content.SetBackgroundColour(wx.WHITE)
+            self.txt_content.SetForegroundColour(wx.Colour(40, 40, 40))
             main_sizer.Add(self.txt_content, 1, wx.EXPAND | wx.ALL, 0)
             self.browser = None
             

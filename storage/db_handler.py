@@ -149,13 +149,14 @@ class DatabaseHandler:
         try:
             # created_at is NOT updated on conflict regarding requirement
             cursor.execute('''
-                INSERT INTO videos (id, url, title, channel_name, duration, upload_date, thumbnail_path, playlist_id, playlist_title, status, created_at, added_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO videos (id, url, title, channel_name, duration, upload_date, thumbnail_path, playlist_id, playlist_title, token_count, status, created_at, added_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     title=excluded.title,
                     channel_name=excluded.channel_name,
                     playlist_id=excluded.playlist_id,
                     playlist_title=excluded.playlist_title,
+                    token_count=excluded.token_count,
                     status=excluded.status,
                     thumbnail_path=excluded.thumbnail_path,
                     duration=excluded.duration
@@ -165,15 +166,12 @@ class DatabaseHandler:
                 video_data['url'],
                 video_data.get('title', 'Unknown'),
                 video_data.get('channel_name', video_data.get('channel', '')), 
-                # Salva duration formatada ou raw? O ideal é salvar raw se possível, mas aqui estamos mantendo compatibilidade
-                # Se vier 'duration' formatado (str), salva. Se vier int, formata?
-                # O youtube_manager manda formatado em 'duration'.
-                # Vamos salvar o que vier em 'duration'.
                 video_data.get('duration', 0),
                 video_data.get('upload_date', ''),
                 video_data.get('thumbnail_path', ''),
                 video_data.get('playlist_id'),
                 video_data.get('playlist_title'),
+                video_data.get('token_count', 0),
                 video_data.get('status', 'pending'),
                 # created_at (novo registro)
                 datetime.datetime.now().isoformat(),

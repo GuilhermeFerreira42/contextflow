@@ -236,14 +236,26 @@ class BadgeStatusRenderer(wx.grid.GridCellRenderer):
         color = wx.Colour(100, 100, 100)
         if status in ['COMPLETED', 'SUCCESS', 'DONE']: color = wx.Colour(40, 167, 69)
         elif status == 'ERROR': color = wx.Colour(220, 53, 69)
-        elif status in ['PROCESSING', 'DOWNLOADING']: color = COLOR_ACCENT
+        elif status in ['PROCESSING', 'DOWNLOADING', 'QUEUED']: color = COLOR_ACCENT
         
         dc.SetBrush(wx.Brush(color))
         dc.SetPen(wx.Pen(wx.WHITE, 1))
         
-        center_x = rect.x + rect.width // 2
-        center_y = rect.y + rect.height // 2
-        dc.DrawCircle(center_x, center_y, 5)
+        # Desenha Círculo à esquerda
+        circle_x = rect.x + 10
+        circle_y = rect.y + rect.height // 2
+        dc.DrawCircle(circle_x, circle_y, 4)
+        
+        # Desenha Texto à direita do círculo
+        text = table.GetValue(row, col)
+        dc.SetTextForeground(wx.BLACK if not isSelected else wx.WHITE)
+        dc.SetFont(wx.Font(8, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
+        
+        # Se for progresso, usamos cor de destaque
+        if "⏳" in text:
+            dc.SetTextForeground(COLOR_ACCENT if not isSelected else wx.WHITE)
+            
+        dc.DrawText(text, circle_x + 10, rect.y + (rect.height // 2 - 7))
         
         dc.DestroyClippingRegion()
 
@@ -261,7 +273,9 @@ class LinkIconRenderer(wx.grid.GridCellRenderer):
         # [REGRA 5.9] Clipping
         dc.SetClippingRegion(rect)
 
-        dc.SetTextForeground(COLOR_ACCENT)
+        # [QA2 REFINE] Se estiver selecionado, muda para branco para contraste sobre fundo azul
+        icon_color = COLOR_ACCENT if not isSelected else wx.WHITE
+        dc.SetTextForeground(icon_color)
         dc.SetFont(wx.Font(10, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
         
         # [ALINHAMENTO CENTRAL ABSOLUTO]
@@ -311,13 +325,18 @@ class VirtualVideoTable(wx.grid.GridTableBase):
             self.data = new_data
             
             if new_rows < old_rows:
-                msg = wx.grid.GridTableMessage(self, wx.grid.GRIDTABLE_NOTIFY_ROWS_DELETED, 0, old_rows - new_rows)
+                # Deletamos o excedente
+                num_del = old_rows - new_rows
+                msg = wx.grid.GridTableMessage(self, wx.grid.GRIDTABLE_NOTIFY_ROWS_DELETED, new_rows, num_del)
                 self.GetView().ProcessTableMessage(msg)
             elif new_rows > old_rows:
-                msg = wx.grid.GridTableMessage(self, wx.grid.GRIDTABLE_NOTIFY_ROWS_APPENDED, new_rows - old_rows)
+                # Acrescentamos novos
+                num_add = new_rows - old_rows
+                msg = wx.grid.GridTableMessage(self, wx.grid.GRIDTABLE_NOTIFY_ROWS_APPENDED, num_add)
                 self.GetView().ProcessTableMessage(msg)
             
             self.GetView().EndBatch()
+            # [QA2 REFINE] Força recalcule total da grade para evitar 'rows fantasmas'
             self.GetView().ForceRefresh()
         else:
             self.data = new_data
@@ -355,20 +374,51 @@ class VirtualVideoTable(wx.grid.GridTableBase):
             
             if label in mapping:
                 val = item.get(mapping[label])
+                
+                # [QA2 REFINE] Estabilidade de Células: Retorna '-' se vazio
+                if val is None or str(val).strip() == "":
+                    # Exceção para Resumo que tem CTA próprio
+                    if label == 'Resumo': return "Clique para Resumir..."
+                    return "-"
+                
+                # [QA4] Formatação de Milhares para Tokens
+                if label == 'Tokens':
+                    try:
+                        num = int(val)
+                        return f"{num:,}".replace(",", ".")
+                    except:
+                        return str(val)
+                    if label == 'Resumo': return "✨ Clique aqui para resumir"
+                    return "-"
+
                 if label == 'Resumo': 
-                    # [USABILIDADE v5.9] CTA para o usuário se não houver resumo
-                    if not val: return "✨ Clique aqui para resumir"
                     return str(val)[:100]
-                return str(val or "")
+                
+                # [QA2 REFINE] Formatação de Data: YYYYMMDD -> DD/MM/AAAA
+                if label == 'Publicado':
+                    d_str = str(val).strip()
+                    if len(d_str) == 8 and d_str.isdigit():
+                        return f"{d_str[6:8]}/{d_str[4:6]}/{d_str[0:4]}"
+                
+                # [QA2 REFINE] Feedback Dinâmico de Status
+                if label == 'Status':
+                    status_val = str(val).upper()
+                    if status_val == 'DOWNLOADING':
+                        prog = item.get('progress_msg')
+                        return f"⏳ {prog}" if prog else "⏳ Baixando..."
+                    return status_val
+
+                return str(val)
             
             if label == 'Duração':
                 dur = item.get('duration_seconds') or item.get('duration')
+                if dur is None or str(dur).strip() == "": return "-"
                 if isinstance(dur, (int, float)): return format_duration(dur)
-                return str(dur or "00:00:00")
+                return str(dur)
                 
-            return ""
+            return "-"
         except Exception:
-            return ""
+            return "-"
 
     def SetValue(self, row, col, value):
         label = self.col_labels[col].strip()

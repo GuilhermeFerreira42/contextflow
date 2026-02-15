@@ -68,6 +68,7 @@ class AppWindow(wx.Frame):
         
         self.main_splitter.SplitVertically(self.sidebar, self.right_splitter, 250)
         
+        self._init_toolbar() # [QA2 REFINE] Toolbar superior para reversibilidade
         self.create_menubar()
 
     def _init_status_bar(self):
@@ -78,11 +79,32 @@ class AppWindow(wx.Frame):
         self.SetStatusText("RAM: < 200MB (Alvo)", 1)
         self.SetStatusText("VIRTUALIZAÇÃO: OK", 2)
 
+    def _init_toolbar(self):
+        """Toolbar moderna para controle de visibilidade [QA2]."""
+        self.toolbar = self.CreateToolBar(wx.TB_HORIZONTAL | wx.TB_FLAT)
+        self.toolbar.SetToolBitmapSize((24, 24))
+        
+        # Como não temos ícones físicos, usamos labels de texto nos botões da toolbar (style wx.TB_TEXT)
+        # Ou simplesmente criamos botões na toolbar.
+        
+        tsb = self.toolbar.AddTool(2000, "Sidebar", wx.ArtProvider.GetBitmap(wx.ART_LIST_VIEW, wx.ART_TOOLBAR))
+        tlog = self.toolbar.AddTool(2001, "Logs", wx.ArtProvider.GetBitmap(wx.ART_REPORT_VIEW, wx.ART_TOOLBAR))
+        
+        self.toolbar.Realize()
+
     def _bind_events(self):
         # Escuta sinais globais via PubSub para o StatusBar [3, 7]
         PubSub.subscribe('TASK_PROGRESS', self.on_global_progress)
         PubSub.subscribe('TASK_ERROR', self.on_global_error)
         PubSub.subscribe('TASK_QUEUED', self.on_task_queued)
+        
+        # [QA3] Novos Sinais de Interatividade
+        PubSub.subscribe('REQUEST_SIDEBAR_TOGGLE', self.on_sidebar_toggle_signal)
+        PubSub.subscribe('REQUEST_VIEW_VIDEO', self.on_request_view_video)
+
+        # Toolbar Events [QA2]
+        self.Bind(wx.EVT_TOOL, self.on_sidebar_toggle_signal, id=2000)
+        self.Bind(wx.EVT_TOOL, self.on_toggle_logs_toolbar, id=2001)
 
     def create_menubar(self):
         menubar = wx.MenuBar()
@@ -141,6 +163,30 @@ class AppWindow(wx.Frame):
             self.main_splitter.SplitVertically(self.sidebar, self.right_splitter, 250)
         else:
             self.main_splitter.Unsplit(self.sidebar)
+
+    def on_sidebar_toggle_signal(self, event=None):
+        """[QA3] Handler para o sinal disparado pelo botão ☰ na Sidebar."""
+        is_visible = self.main_splitter.IsSplit()
+        if is_visible:
+            self.main_splitter.Unsplit(self.sidebar)
+            self.item_view_sidebar.Check(False)
+        else:
+            self.main_splitter.SplitVertically(self.sidebar, self.right_splitter, 250)
+            self.item_view_sidebar.Check(True)
+
+    def on_request_view_video(self, video_id):
+        """[QA3] Handler para navegação imediata para Aba 3."""
+        wx.CallAfter(self.on_sidebar_selection, video_id)
+
+    def on_toggle_logs_toolbar(self, event):
+        """Alterna visibilidade dos logs via toolbar."""
+        is_visible = self.right_splitter.IsSplit()
+        if is_visible:
+            self.right_splitter.Unsplit(self.panel_console)
+            self.item_view_logs.Check(False)
+        else:
+            self.right_splitter.SplitHorizontally(self.notebook, self.panel_console, -150)
+            self.item_view_logs.Check(True)
 
     def on_toggle_logs(self, event):
         if self.item_view_logs.IsChecked():

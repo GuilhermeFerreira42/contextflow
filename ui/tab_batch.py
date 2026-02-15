@@ -82,7 +82,14 @@ class TabBatch(wx.Panel):
         self.grid.SetColSize(2, 40)   # Link (Mandato 5.9: 40px)
         self.grid.SetColSize(3, 400)  # Título
         self.grid.SetColSize(4, 150)  # Canal
+        self.grid.SetColSize(5, 80)   # Duração
+        self.grid.SetColSize(6, 160)  # [QA4] Adicionado (Expansão para evitar corte)
+        self.grid.SetColSize(7, 120)  # Playlist
+        self.grid.SetColSize(8, 80)   # Tokens
         self.grid.SetColSize(10, 100) # Status
+        
+        # [QA2 REFINE] Trava de Layout: Desabilita redimensionamento manual de linhas
+        self.grid.DisableDragRowSize()
         
         grid_sizer.Add(self.grid, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 10)
         main_sizer.Add(grid_sizer, 1, wx.EXPAND)
@@ -93,11 +100,14 @@ class TabBatch(wx.Panel):
         self.btn_unify = wx.Button(self, label="Unificar (.md)")
         self.btn_download_md = wx.Button(self, label="Baixar como MD")
         self.btn_export_zip = wx.Button(self, label="Exportar (ZIP)")
+        self.btn_cancel = wx.Button(self, label="🛑 CANCELAR")
+        self.btn_cancel.SetForegroundColour(wx.Colour(200, 50, 50))
         
         action_sizer.Add(self.btn_delete, 0, wx.RIGHT, 5)
         action_sizer.Add(self.btn_unify, 0, wx.RIGHT, 5)
         action_sizer.Add(self.btn_download_md, 0, wx.RIGHT, 5)
-        action_sizer.Add(self.btn_export_zip, 0)
+        action_sizer.Add(self.btn_export_zip, 0, wx.RIGHT, 5)
+        action_sizer.Add(self.btn_cancel, 0)
         
         main_sizer.Add(action_sizer, 0, wx.ALL | wx.ALIGN_LEFT, 10)
         self.SetSizer(main_sizer)
@@ -110,6 +120,7 @@ class TabBatch(wx.Panel):
         self.btn_unify.Bind(wx.EVT_BUTTON, self.on_unify_md)
         self.btn_download_md.Bind(wx.EVT_BUTTON, self.on_download_md)
         self.btn_export_zip.Bind(wx.EVT_BUTTON, self.on_export_zip)
+        self.btn_cancel.Bind(wx.EVT_BUTTON, self.on_cancel_all)
         self.Bind(wx.EVT_TIMER, self.on_debounce_tick, self.debounce_timer)
         
         # [USABILIDADE] Eventos de Grade de Baixa Latência
@@ -117,6 +128,9 @@ class TabBatch(wx.Panel):
         self.grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_CLICK, self.on_label_click)
         self.grid.Bind(wx.grid.EVT_GRID_CELL_RIGHT_CLICK, self.on_right_click)
         self.grid.GetGridWindow().Bind(wx.EVT_MOTION, self.on_grid_motion)
+        
+        # [QA2 REFINE] Atalhos de Teclado
+        self.grid.Bind(wx.EVT_KEY_DOWN, self.on_key_down)
 
     def on_grid_click(self, event):
         """
@@ -178,6 +192,7 @@ class TabBatch(wx.Panel):
             'Link': 'url',
             'Título': 'title',
             'Canal': 'channel_name',
+            'Duração': 'duration',
             'Publicado': 'upload_date',
             'Adicionado': 'added_at',
             'Playlist': 'playlist_title',
@@ -191,7 +206,20 @@ class TabBatch(wx.Panel):
              return
 
         if key:
-            self.table.data.sort(key=lambda x: str(x.get(key, "")).lower(), reverse=not self.table.sort_ascending)
+            # [QA3] Tratamento de datas e números para ordenação natural
+            def sort_val(x):
+                val = x.get(key, "")
+                if key == 'token_count':
+                    try: return int(val or 0)
+                    except: return 0
+                if key == 'added_at':
+                    # Converte DD/MM/YYYY HH:MM:SS para YYYYMMDDHHMMSS
+                    ts = str(val)
+                    if len(ts) >= 10 and ts[2] == '/' and ts[5] == '/':
+                        return ts[6:10] + ts[3:5] + ts[0:2] + ts[11:]
+                return str(val).lower()
+
+            self.table.data.sort(key=sort_val, reverse=not self.table.sort_ascending)
             self.grid.ForceRefresh()
 
     def on_right_click(self, event):
@@ -207,12 +235,14 @@ class TabBatch(wx.Panel):
         m_link = menu.Append(wx.ID_ANY, "🔗 Abrir Link")
         m_copy = menu.Append(wx.ID_ANY, "📋 Copiar Link")
         m_md = menu.Append(wx.ID_ANY, "📄 Baixar como MD")
+        m_read = menu.Append(wx.ID_ANY, "📖 Ler (Aba 3)")
         m_sum = menu.Append(wx.ID_ANY, "✨ Resumir")
         
         self.Bind(wx.EVT_MENU, lambda e: self.on_delete_selected(None), m_del)
         self.Bind(wx.EVT_MENU, lambda e: webbrowser.open(video_data.get('url')), m_link)
         self.Bind(wx.EVT_MENU, lambda e: self._copy_to_clipboard(video_data.get('url')), m_copy)
         self.Bind(wx.EVT_MENU, lambda e: self._direct_export_md(video_data), m_md)
+        self.Bind(wx.EVT_MENU, lambda e: PubSub.publish('REQUEST_VIEW_VIDEO', video_id=vid), m_read)
         self.Bind(wx.EVT_MENU, lambda e: wx.MessageBox("Funcionalidade da Fase 6 (Placeholder).", "AI Summary"), m_sum)
         
         self.PopupMenu(menu)
@@ -239,6 +269,24 @@ class TabBatch(wx.Panel):
             path = fileDialog.GetPath()
             self.export_service.export_batch([vid], "markdown_single", path)
             wx.MessageBox("Arquivo exportado com sucesso!", "Sucesso", wx.OK)
+
+    def on_key_down(self, event):
+        """[QA2] Atalhos de Teclado: Espaço (Mark) e Delete (Excluir)."""
+        key = event.GetKeyCode()
+        row = self.grid.GetGridCursorRow()
+        
+        if key == wx.WXK_SPACE and row >= 0:
+            val = self.table.GetValue(row, 1)
+            self.table.SetValue(row, 1, "0" if val == "1" else "1")
+            self.grid.ForceRefresh()
+        elif key == wx.WXK_DELETE and row >= 0:
+            video_data = self.table.data[row]
+            vid = video_data.get('id') or video_data.get('uuid')
+            if vid and wx.MessageBox(f"Deseja excluir permanentemente '{video_data.get('title')}'?", 
+                                     "Confirmar Exclusão", wx.YES_NO | wx.ICON_QUESTION) == wx.YES:
+                self.app_state.delete_videos([vid])
+        else:
+            event.Skip()
 
     def on_grid_motion(self, event):
         """Muda o cursor sobre o Link para Hand Affordance."""
@@ -362,3 +410,9 @@ class TabBatch(wx.Panel):
             path = fileDialog.GetPath()
             self.export_service.export_batch(ids, "zip", path)
             wx.MessageBox("Arquivo ZIP gerado!", "Sucesso", wx.OK)
+
+    def on_cancel_all(self, event):
+        """Dispara sinal de cancelamento global para o Processor e AppState."""
+        if wx.MessageBox("Deseja cancelar todas as tarefas pendentes?", "Confirmação", wx.YES_NO | wx.ICON_QUESTION) == wx.YES:
+            PubSub.publish('REQUEST_CANCEL_ALL')
+            wx.MessageBox("Comando de cancelamento enviado.", "Info", wx.OK)

@@ -22,7 +22,7 @@ class TabAnalysis(wx.Panel):
         # Colunas Analíticas [Specs 5.9 Expansion]
         self.col_labels = [
             " [x] ", " # ", "Preview", "Título", "Canal", "Duração", 
-            "Tags", "Link", "Status", "Resumo"
+            "Publicado", "Adicionado", "Playlist", "Tokens", "Tags", "Link", "Status", "Resumo"
         ]
         self.table = VirtualVideoTable(col_labels=self.col_labels)
         
@@ -57,12 +57,16 @@ class TabAnalysis(wx.Panel):
         self.btn_export.SetBackgroundColour(wx.Colour(230, 230, 230))
         self.btn_export.SetForegroundColour(COLOR_FG)
         
+        self.btn_cancel = wx.Button(self.toolbar, label="🛑 Cancelar")
+        self.btn_cancel.SetForegroundColour(wx.Colour(200, 50, 50))
+        
         self.search = wx.SearchCtrl(self.toolbar)
         self.search.SetDescriptiveText("Filtro rápido...")
         self.search.ShowCancelButton(True)
         
         tb_sizer.Add(btn_summarize, 0, wx.CENTER | wx.LEFT, 10)
         tb_sizer.Add(self.btn_export, 0, wx.CENTER | wx.LEFT, 5)
+        tb_sizer.Add(self.btn_cancel, 0, wx.CENTER | wx.LEFT, 5)
         tb_sizer.AddStretchSpacer()
         tb_sizer.Add(self.search, 0, wx.CENTER | wx.RIGHT, 10)
         
@@ -94,13 +98,20 @@ class TabAnalysis(wx.Panel):
         self.grid.SetColSize(0, 40)   # [x]
         self.grid.SetColSize(1, 40)   # #
         self.grid.SetColSize(2, 90)   # Preview
-        self.grid.SetColSize(3, 380)  # Título (Aumentado para Modo Rico)
+        self.grid.SetColSize(3, 350)  # Título
         self.grid.SetColSize(4, 120)  # Canal
         self.grid.SetColSize(5, 70)   # Duração
-        self.grid.SetColSize(6, 120)  # Tags
-        self.grid.SetColSize(7, 40)   # Link
-        self.grid.SetColSize(8, 60)   # Status
-        self.grid.SetColSize(9, 300)  # Resumo
+        self.grid.SetColSize(6, 120)  # Publicado
+        self.grid.SetColSize(7, 160)  # [QA4] Adicionado (Expansão para evitar corte)
+        self.grid.SetColSize(8, 120)  # [QA4] Playlist
+        self.grid.SetColSize(9, 80)   # [QA4] Tokens
+        self.grid.SetColSize(10, 100) # Tags
+        self.grid.SetColSize(11, 40)  # Link
+        self.grid.SetColSize(12, 60)  # Status
+        self.grid.SetColSize(13, 250) # Resumo
+        
+        # [QA2 REFINE] Trava de Layout: Desabilita redimensionamento manual de linhas
+        self.grid.DisableDragRowSize()
         
         master_sizer.Add(self.grid, 1, wx.EXPAND)
         self.pnl_master.SetSizer(master_sizer)
@@ -153,11 +164,15 @@ class TabAnalysis(wx.Panel):
     def _bind_events(self):
         self.grid.Bind(wx.grid.EVT_GRID_SELECT_CELL, self.on_select_video)
         self.grid.Bind(wx.grid.EVT_GRID_CELL_RIGHT_CLICK, self.on_right_click)
-        self.btn_close_viewer.Bind(wx.EVT_BUTTON, lambda e: self.splitter.Unsplit(self.pnl_detail))
+        self.btn_close_viewer.Bind(wx.EVT_BUTTON, self.on_close_viewer)
         self.search.Bind(wx.EVT_TEXT, self.on_search)
+        
+        # [QA2 REFINE] Atalhos de Teclado
+        self.grid.Bind(wx.EVT_KEY_DOWN, self.on_key_down)
         
         # [FUNCIONALIDADE v5.9] Ativação do Botão Exportar
         self.btn_export.Bind(wx.EVT_BUTTON, self.on_export_batch)
+        self.btn_cancel.Bind(wx.EVT_BUTTON, self.on_cancel_all)
         
         self.grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_CLICK, self.on_label_click)
         self.Bind(wx.EVT_TIMER, self.on_debounce_tick, self.debounce_timer)
@@ -165,7 +180,7 @@ class TabAnalysis(wx.Panel):
         self.grid.Bind(wx.grid.EVT_GRID_CELL_LEFT_CLICK, self.on_grid_click)
 
     def on_state_mutation(self, event_type, data=None):
-        if event_type in ['VIDEO_ADDED', 'VIDEO_UPDATED', 'TASK_COMPLETED', 'DATA_LOADED']:
+        if event_type in ['VIDEO_ADDED', 'VIDEO_UPDATED', 'TASK_COMPLETED', 'DATA_LOADED', 'VIDEOS_DELETED', 'VIDEO_PROMOTED']:
             wx.CallAfter(self.on_data_signal)
 
     def on_data_signal(self):
@@ -221,15 +236,36 @@ class TabAnalysis(wx.Panel):
             self.table.sort_ascending = True
 
         label = self.table.col_labels[col].strip()
+        # [ORDENAÇÃO v6.1] Mapeamento de label para chave do dado
         mapping = {
             'Título': 'title',
             'Canal': 'channel_name',
             'Duração': 'duration',
-            'Status': 'status'
+            'Status': 'status',
+            'Publicado': 'upload_date',
+            'Adicionado': 'added_at',
+            'Link': 'url',
+            'Tags': 'tags',
+            'Resumo': 'transcript_snippet',
+            'Playlist': 'playlist_title',
+            'Tokens': 'token_count'
         }
         key = mapping.get(label)
         if key:
-            self.table.data.sort(key=lambda x: str(x.get(key, "")).lower(), reverse=not self.table.sort_ascending)
+            # [QA3] Tratamento de datas e números para ordenação natural
+            def sort_val(x):
+                val = x.get(key, "")
+                if key == 'token_count':
+                    try: return int(val or 0)
+                    except: return 0
+                if key == 'added_at':
+                    # Converte DD/MM/YYYY HH:MM:SS para YYYYMMDDHHMMSS
+                    ts = str(val)
+                    if len(ts) >= 10 and ts[2] == '/' and ts[5] == '/':
+                        return ts[6:10] + ts[3:5] + ts[0:2] + ts[11:]
+                return str(val).lower()
+
+            self.table.data.sort(key=sort_val, reverse=not self.table.sort_ascending)
             self.grid.ForceRefresh()
 
     def on_grid_motion(self, event):
@@ -256,12 +292,14 @@ class TabAnalysis(wx.Panel):
         m_link = menu.Append(wx.ID_ANY, "🔗 Abrir Link")
         m_copy = menu.Append(wx.ID_ANY, "📋 Copiar Link")
         m_md = menu.Append(wx.ID_ANY, "📄 Baixar como MD")
+        m_read = menu.Append(wx.ID_ANY, "📖 Ler (Aba 3)")
         m_sum = menu.Append(wx.ID_ANY, "✨ Resumir")
         
         self.Bind(wx.EVT_MENU, lambda e: self.app_state.delete_videos([vid]), m_del)
         self.Bind(wx.EVT_MENU, lambda e: webbrowser.open(video_data.get('url')), m_link)
         self.Bind(wx.EVT_MENU, lambda e: self._copy_to_clipboard(video_data.get('url')), m_copy)
         self.Bind(wx.EVT_MENU, lambda e: self._direct_export_md(video_data), m_md)
+        self.Bind(wx.EVT_MENU, lambda e: PubSub.publish('REQUEST_VIEW_VIDEO', video_id=vid), m_read)
         self.Bind(wx.EVT_MENU, lambda e: wx.MessageBox("Funcionalidade da Fase 6 (Placeholder).", "AI Summary"), m_sum)
         
         self.PopupMenu(menu)
@@ -308,7 +346,13 @@ class TabAnalysis(wx.Panel):
 
     def on_select_video(self, event):
         row = event.GetRow()
-        if row != self.last_selected_row and row < len(self.table.data):
+        self._load_row_details(row)
+        event.Skip()
+
+    def _load_row_details(self, row):
+        """[QA3] Lógica centralizada de carregamento de detalhes."""
+        # [QA3] Removida trava de row != last_selected_row para permitir reabertura imediata
+        if row >= 0 and row < len(self.table.data):
             self.last_selected_row = row
             video_data = self.table.data[row]
             vid_id = video_data.get('id')
@@ -348,8 +392,29 @@ class TabAnalysis(wx.Panel):
             if has_content or video_data.get('has_summary'):
                 if not self.splitter.IsSplit():
                     self.splitter.SplitHorizontally(self.pnl_master, self.pnl_detail, -300)
-            
-        event.Skip()
+
+    def on_close_viewer(self, event):
+        """[QA3] Fecha o visualizador e reseta seleção lógica."""
+        self.splitter.Unsplit(self.pnl_detail)
+        self.last_selected_row = -1 # Permite re-seleção imediata para reabrir
+
+    def on_key_down(self, event):
+        """[QA2] Atalhos de Teclado: Espaço (Mark) e Delete (Excluir)."""
+        key = event.GetKeyCode()
+        row = self.grid.GetGridCursorRow()
+        
+        if key == wx.WXK_SPACE and row >= 0:
+            val = self.table.GetValue(row, 0)
+            self.table.SetValue(row, 0, "0" if val == "1" else "1")
+            self.grid.ForceRefresh()
+        elif key == wx.WXK_DELETE and row >= 0:
+            video_data = self.table.data[row]
+            vid = video_data.get('id') or video_data.get('uuid')
+            if vid and wx.MessageBox(f"Deseja excluir permanentemente '{video_data.get('title')}'?", 
+                                     "Confirmar Exclusão", wx.YES_NO | wx.ICON_QUESTION) == wx.YES:
+                self.app_state.delete_videos([vid])
+        else:
+            event.Skip()
 
     def on_export_batch(self, event):
         """Dispara exportação para itens selecionados via ExportService."""
@@ -369,3 +434,9 @@ class TabAnalysis(wx.Panel):
             path = fileDialog.GetPath()
             exp.export_batch(ids, "zip", path)
             wx.MessageBox("Exportação concluída!", "Sucesso", wx.OK)
+
+    def on_cancel_all(self, event):
+        """Dispara sinal de cancelamento global."""
+        if wx.MessageBox("Deseja cancelar todas as tarefas pendentes?", "Confirmação", wx.YES_NO | wx.ICON_QUESTION) == wx.YES:
+            PubSub.publish('REQUEST_CANCEL_ALL')
+            wx.MessageBox("Comando de cancelamento enviado.", "Info", wx.OK)

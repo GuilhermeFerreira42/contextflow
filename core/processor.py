@@ -39,6 +39,7 @@ class Processor:
         
         # [SSOT] Reconexão Lógica: Inscreve o processador no barramento global
         PubSub.subscribe('REQUEST_BATCH_PROCESSING', self.add_urls)
+        PubSub.subscribe('REQUEST_CANCEL_ALL', self.clear_queue)
 
     def start_processing(self):
         if not self.active:
@@ -51,6 +52,19 @@ class Processor:
 
     def add_urls(self, raw_text: str):
         threading.Thread(target=self._async_resolve_urls, args=(raw_text,), daemon=True).start()
+
+    def clear_queue(self):
+        """[QA2 REFINE] Esvazia a fila de tarefas e limpa o AppState."""
+        logger.info("CANCEL ALL requested. Cleaning queue...")
+        while not self.task_queue.empty():
+            try:
+                self.task_queue.get_nowait()
+                self.task_queue.task_done()
+            except queue.Empty:
+                break
+        
+        self.app_state.clear_queued_tasks()
+        logger.info("Queue cleared.")
 
     def validate_infrastructure(self) -> Dict[str, Any]:
         """Verifica se as ferramentas e configs necessárias estão presentes."""

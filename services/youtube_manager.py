@@ -20,6 +20,19 @@ class YouTubeManager:
     """
     def __init__(self):
         self.headers = self._get_realistic_headers()
+        self._last_progress_pub = 0
+
+    def _progress_hook(self, d):
+        """Hook para capturar progresso do yt-dlp."""
+        if d['status'] == 'downloading':
+            p = d.get('_percent_str', '0%').strip()
+            # Limita publicação para evitar sobrecarga do barramento (max 2/sec)
+            now = time.time()
+            if now - self._last_progress_pub > 0.5:
+                from core.pubsub import PubSub
+                video_id = d.get('info_dict', {}).get('id', 'unknown')
+                PubSub.publish('TASK_PROGRESS', video_id=video_id, status_msg=f"Baixando: {p}")
+                self._last_progress_pub = now
 
     def _get_realistic_headers(self) -> Dict[str, str]:
         user_agents = [
@@ -59,6 +72,7 @@ class YouTubeManager:
             'quiet': True,
             'no_warnings': True,
             'skip_download': True,
+            'progress_hooks': [self._progress_hook],
         }
         if proxy:
             ydl_opts['proxy'] = proxy
@@ -162,7 +176,8 @@ class YouTubeManager:
             'writeautomaticsub': True,
             'subtitleslangs': langs,
             'subformat': 'json3',
-            'quiet': True
+            'quiet': True,
+            'progress_hooks': [self._progress_hook],
         }
         if proxy:
             ydl_opts['proxy'] = proxy

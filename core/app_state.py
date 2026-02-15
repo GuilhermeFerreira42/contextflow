@@ -101,10 +101,16 @@ class AppState:
     def get_all_videos(self) -> List[Dict[str, Any]]:
         """Returns a list of all videos (copy of values)."""
         with self._lock:
-            # Sort by created_at desc (default view)
-            # Precisamos lidar com None
+            # [QA3] Ordenação por added_at desc (Cronologia Real)
             v_list = list(self._videos.values())
-            v_list.sort(key=lambda x: x.get('created_at') or "", reverse=True)
+            
+            def sort_key(x):
+                ts = x.get('added_at') or ""
+                if len(ts) >= 10 and ts[2] == '/' and ts[5] == '/':
+                    return ts[6:10] + ts[3:5] + ts[0:2] + ts[11:]
+                return ts
+                
+            v_list.sort(key=sort_key, reverse=True)
             return v_list
 
     def get_video(self, video_id: str) -> Optional[Dict[str, Any]]:
@@ -133,7 +139,18 @@ class AppState:
             
             filtered_active = [a for a in active if a.get('uuid') not in promoted_uuids]
             
-            return filtered_active + persistent
+            unified = filtered_active + persistent
+            
+            # [QA2 REFINE] Ordenação Padrão: added_at decrescente (mais recentes primeiro)
+            def sort_key(x):
+                ts = x.get('added_at') or ""
+                if len(ts) >= 10 and ts[2] == '/' and ts[5] == '/':
+                    # Converte DD/MM/YYYY HH:MM:SS para YYYYMMDDHHMMSS para ordenação estável
+                    return ts[6:10] + ts[3:5] + ts[0:2] + ts[11:]
+                return ts
+            
+            unified.sort(key=sort_key, reverse=True)
+            return unified
 
     # --- Mutations (Async to DB, Sync to Memory) ---
 
@@ -214,6 +231,15 @@ class AppState:
             if uuid_str in self._active_downloads:
                 del self._active_downloads[uuid_str]
                 self._notify('TASK_REMOVED', uuid_str)
+
+    def clear_queued_tasks(self):
+        """[QA2 REFINE] Remove todas as tarefas com status 'queued'."""
+        with self._lock:
+            to_delete = [uid for uid, task in self._active_downloads.items() if task.get('status') == 'queued']
+            for uid in to_delete:
+                del self._active_downloads[uid]
+        
+        self._notify('TASKS_CLEARED')
 
     def delete_videos(self, ids: List[str]):
         """

@@ -26,20 +26,27 @@ class Sidebar(wx.Panel):
         # Re-implementing init to bind right click
         sizer = wx.BoxSizer(wx.VERTICAL)
         
-        # Header
-        header = wx.StaticText(self, label="Histórico")
-        font = header.GetFont()
-        font.SetWeight(wx.FONTWEIGHT_BOLD)
-        header.SetFont(font)
-        sizer.Add(header, 0, wx.ALL, 5)
+        # [QA3] Header com Toggle Button
+        header_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        
+        header_lbl = wx.StaticText(self, label="Histórico")
+        header_lbl.SetFont(wx.Font(10, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
+        
+        self.btn_toggle = wx.Button(self, label="☰", size=(30, 30), style=wx.BU_EXACTFIT)
+        self.btn_toggle.SetToolTip("Ocultar Sidebar")
+        self.btn_toggle.SetBackgroundColour(wx.Colour(240, 240, 240))
+        
+        header_sizer.Add(header_lbl, 1, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 5)
+        header_sizer.Add(self.btn_toggle, 0, wx.RIGHT, 5)
+        sizer.Add(header_sizer, 0, wx.EXPAND | wx.TOP | wx.BOTTOM, 5)
 
         # Search Bar
         self.search_ctrl = wx.SearchCtrl(self, style=wx.TE_PROCESS_ENTER)
         self.search_ctrl.ShowCancelButton(True)
-        self.search_ctrl.SetDescriptiveText("🔍 Pesquisar nos títulos...")
+        self.search_ctrl.SetDescriptiveText("🔍 Pesquisar...")
         self.search_ctrl.Bind(wx.EVT_TEXT, self.on_search_text)
         self.search_ctrl.Bind(wx.EVT_SEARCHCTRL_CANCEL_BTN, self.on_search_cancel)
-        sizer.Add(self.search_ctrl, 0, wx.EXPAND | wx.ALL, 5)
+        sizer.Add(self.search_ctrl, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 5)
         
         # Tree
         self.tree = wx.TreeCtrl(self, style=wx.TR_DEFAULT_STYLE | wx.TR_HIDE_ROOT)
@@ -48,8 +55,9 @@ class Sidebar(wx.Panel):
         sizer.Add(self.tree, 1, wx.EXPAND | wx.ALL, 0)
         
         self.SetSizer(sizer)
-
+ 
         self.Bind(wx.EVT_TREE_SEL_CHANGED, self.on_tree_selection, self.tree)
+        self.btn_toggle.Bind(wx.EVT_BUTTON, self.on_toggle_click)
         # Right Click
         self.tree.Bind(wx.EVT_TREE_ITEM_MENU, self.on_right_click)
 
@@ -156,6 +164,11 @@ class Sidebar(wx.Panel):
                  wx.MessageBox("Não foi possível acessar a área de transferência.", "Erro")
 
 
+    def on_toggle_click(self, event):
+        """[QA3] Dispara sinal para o Maestro ocultar a Sidebar."""
+        from core.pubsub import PubSub
+        PubSub.publish('REQUEST_SIDEBAR_TOGGLE')
+
     def on_search_text(self, event):
         text = self.search_ctrl.GetValue()
         self.load_history(filter_text=text)
@@ -189,6 +202,8 @@ class Sidebar(wx.Panel):
             if pid:
                 playlists[pid].append(v)
             else:
+                 # [QA3] Adição em ordem inversa já vem do AppState (Newest first)
+                 # Se usarmos AppendItem, o mais novo (primeiro da lista) fica no topo do grupo
                 single_videos.append(v)
         
         # Adicionar Playlists
