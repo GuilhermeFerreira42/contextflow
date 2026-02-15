@@ -59,6 +59,11 @@ class TabBatch(wx.Panel):
         btn_sizer.Add(self.btn_process, 0)
         input_sizer.Add(btn_sizer, 0, wx.ALIGN_RIGHT | wx.BOTTOM | wx.RIGHT, 5)
         
+        # [QA4] Barra de Esforço (Loading Gauge)
+        self.gauge = wx.Gauge(self, range=100, style=wx.GA_HORIZONTAL)
+        self.gauge.Hide() # Oculto por padrão
+        input_sizer.Add(self.gauge, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 5)
+        
         main_sizer.Add(input_sizer, 0, wx.EXPAND | wx.ALL, 10)
 
         # --- SEÇÃO 2: GRADE TÉCNICA (CENTER) ---
@@ -131,6 +136,11 @@ class TabBatch(wx.Panel):
         
         # [QA2 REFINE] Atalhos de Teclado
         self.grid.Bind(wx.EVT_KEY_DOWN, self.on_key_down)
+        
+        # [QA4] Escuta progresso global
+        PubSub.subscribe('METADATA_FETCHED', self.on_progress_signal)
+        PubSub.subscribe('TASK_COMPLETED', self.on_progress_signal)
+        PubSub.subscribe('TASK_ERROR', self.on_progress_signal)
 
     def on_grid_click(self, event):
         """
@@ -337,9 +347,29 @@ class TabBatch(wx.Panel):
     def on_click_process(self, event):
         raw_text = self.txt_input.GetValue().strip()
         if not raw_text: return
+        
+        # Ativa Gauge em modo pulsação (Indeterminado)
+        self.gauge.Show()
+        self.gauge.Pulse()
+        self.Layout()
+        
         # [SSOT] Uso do Barramento Oficial do Projeto
         PubSub.publish('REQUEST_BATCH_PROCESSING', raw_text=raw_text)
         self.txt_input.Clear()
+
+    def on_progress_signal(self, **kwargs):
+        """Atualiza a visibilidade do gauge baseado no estado da fila."""
+        def update():
+            active_tasks = [t for t in self.app_state.get_unified_data() if t.get('status') in ['queued', 'downloading', 'processing']]
+            if not active_tasks:
+                self.gauge.Hide()
+            else:
+                self.gauge.Show()
+                # Se temos itens, paramos o pulso e deixamos explícito q algo ocorre
+                # O gauge wx.Gauge não tem 'StopPulse', Hide/Show reseta se necessário.
+            self.Layout()
+        
+        wx.CallAfter(update)
 
     def on_reset_safety(self, event):
         """Limpa o cooldown global para retomada de testes (PHASE_5_8_LOGICAL_SYNC)."""

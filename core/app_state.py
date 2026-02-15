@@ -4,7 +4,9 @@ import uuid
 import wx
 import logging
 from typing import Dict, Any, List, Callable, Optional
+from concurrent.futures import ThreadPoolExecutor
 from storage.db_handler import DatabaseHandler
+from core.config_manager import ConfigManager
 
 logger = logging.getLogger("contextflow.state")
 
@@ -45,6 +47,19 @@ class AppState:
             
             # Observers: List of callbacks (event_type, data)
             self._observers: List[Callable[[str, Any], None]] = []
+            
+            # [QA4] Cache de Snapshot para Performance 10k
+            self._snapshot_cache: List[Dict[str, Any]] = []
+            self._cache_dirty = True
+            
+            # [QA4] Buffer para Undo (Snackbar)
+            self._trash_bin: Dict[str, Dict[str, Any]] = {}
+            self._delete_timer: Optional[threading.Timer] = None
+            
+            # [QA4] Pool de Workers Centralizado para Persistência e Tarefas Leves
+            self.executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="CF_CorePool")
+            
+            self.config = ConfigManager()
             
             # Load initial state
             self._load_from_db()
@@ -126,31 +141,33 @@ class AppState:
     def get_unified_data(self) -> List[Dict[str, Any]]:
         """
         [ATOMIC UNIFICATION & DEDUPLICATION]
-        Garante que a união de tarefas e vídeos ocorra sob um único lock.
-        Resolve o problema de duplicação visual durante a promoção filtrando tarefas 
-        que já possuem registro persistente correspondente via UUID.
+        [QA4] Snapshot Caching: Retorna cache se não houver mutações pendentes.
         """
         with self._lock:
+            if not self._cache_dirty:
+                return self._snapshot_cache
+                
             persistent = list(self._videos.values())
             active = self._active_downloads.values()
             
-            # Conjunto de UUIDs que já estão no banco para evitar "fantasmas" durante a transição
             promoted_uuids = {v.get('uuid') for v in persistent if v.get('uuid')}
-            
             filtered_active = [a for a in active if a.get('uuid') not in promoted_uuids]
             
             unified = filtered_active + persistent
             
-            # [QA2 REFINE] Ordenação Padrão: added_at decrescente (mais recentes primeiro)
+            # Ordenação Padrão: added_at decrescente
             def sort_key(x):
                 ts = x.get('added_at') or ""
                 if len(ts) >= 10 and ts[2] == '/' and ts[5] == '/':
-                    # Converte DD/MM/YYYY HH:MM:SS para YYYYMMDDHHMMSS para ordenação estável
                     return ts[6:10] + ts[3:5] + ts[0:2] + ts[11:]
                 return ts
             
             unified.sort(key=sort_key, reverse=True)
-            return unified
+            
+            # Atualiza Cache
+            self._snapshot_cache = unified
+            self._cache_dirty = False
+            return self._snapshot_cache
 
     # --- Mutations (Async to DB, Sync to Memory) ---
 
@@ -165,14 +182,13 @@ class AppState:
             merged = {**existing, **video_data}
             
             self._videos[video_id] = merged
+            self._cache_dirty = True
             
             # If it was an active download (UUID based), maybe we should update/clear it?
             # For now, let's keep it simple. Processor manages active state.
         
-        # Persist (Async ideally, but sync is safer for consistency for now, db_handler is fast sqlite)
-        # To make it "async" without blocking UI, we could use a thread, but sqlite writes are fast.
-        # Let's run in a separate thread to strictly adhere to "No blocking UI".
-        threading.Thread(target=self._persist_video_worker, args=(merged,)).start()
+        # Persistência via CorePool (Async)
+        self.executor.submit(self._persist_video_worker, merged)
         
         self._notify('VIDEO_UPDATED', video_id)
 
@@ -199,13 +215,14 @@ class AppState:
             existing = self._videos.get(video_id, {})
             merged = {**existing, **video_data}
             self._videos[video_id] = merged
+            self._cache_dirty = True
             
             # 2. Remove da lista de tarefas ativas (UUID)
             if uuid_str in self._active_downloads:
                 del self._active_downloads[uuid_str]
         
-        # Persistência Assíncrona
-        threading.Thread(target=self._persist_video_worker, args=(merged,)).start()
+        # Persistência Assíncrona via Pool
+        self.executor.submit(self._persist_video_worker, merged)
         
         # Notificação única para evitar refrescos duplicados
         self._notify('VIDEO_PROMOTED', {'video_id': video_id, 'uuid': uuid_str})
@@ -214,12 +231,14 @@ class AppState:
         """Registra uma tarefa temporária (antes de ter ID de vídeo ou enquanto está na fila)."""
         with self._lock:
             self._active_downloads[uuid_str] = data
+            self._cache_dirty = True
         self._notify('TASK_ADDED', uuid_str)
 
     def update_active_task(self, uuid_str: str, updates: Dict[str, Any]):
         with self._lock:
             if uuid_str in self._active_downloads:
                 self._active_downloads[uuid_str].update(updates)
+                self._cache_dirty = True
                 self._notify('TASK_UPDATED', uuid_str)
             else:
                 # Se não existe, cria (pode acontecer na inicialização de fila)
@@ -230,6 +249,7 @@ class AppState:
         with self._lock:
             if uuid_str in self._active_downloads:
                 del self._active_downloads[uuid_str]
+                self._cache_dirty = True
                 self._notify('TASK_REMOVED', uuid_str)
 
     def clear_queued_tasks(self):
@@ -238,15 +258,94 @@ class AppState:
             to_delete = [uid for uid, task in self._active_downloads.items() if task.get('status') == 'queued']
             for uid in to_delete:
                 del self._active_downloads[uid]
+            if to_delete: self._cache_dirty = True
         
         self._notify('TASKS_CLEARED')
 
-    def delete_videos(self, ids: List[str]):
+    def delete_videos(self, ids: List[str], deferred: bool = True):
         """
-        Remove itens da memória e do banco.
-        [POLIVALENTE Sênior] Trata IDs reais e UUIDs de forma adaptativa.
-        Se um UUID for passado mas o vídeo já foi promovido, localiza pelo campo 'uuid'.
+        Remove itens da memória e inicia o processo de deleção.
+        [QA4] Suporta modo deferred para o padrão Undo (Snackbar).
         """
+        if not ids: return
+
+        if deferred:
+            self._stage_deletion(ids)
+            return
+
+        self._execute_permanent_delete(ids)
+
+    def _stage_deletion(self, ids: List[str]):
+        """Move itens para a lixeira temporária e notifica UI para o Snackbar."""
+        sql_ids = []
+        with self._lock:
+            if self._delete_timer:
+                self._delete_timer.cancel()
+                
+            for vid in ids:
+                target_id = None
+                data = None
+                
+                # Busca e move para lixeira
+                if vid in self._videos:
+                    target_id = vid
+                    data = self._videos.pop(vid)
+                elif vid in self._active_downloads:
+                    target_id = vid
+                    data = self._active_downloads.pop(vid)
+                else:
+                    for db_id, v_data in self._videos.items():
+                        if v_data.get('uuid') == vid:
+                            target_id = db_id
+                            data = self._videos.pop(db_id)
+                            break
+                
+                if target_id and data:
+                    self._trash_bin[target_id] = data
+                    sql_ids.append(target_id)
+            
+            self._cache_dirty = True
+            
+        self._notify('VIDEOS_STAGED_FOR_DELETION', ids)
+        # Timer de 5 segundos para deleção física
+        self._delete_timer = threading.Timer(5.0, self._finalize_staged_deletion)
+        self._delete_timer.start()
+
+    def undo_deletion(self):
+        """Restaura itens da lixeira para a memória ativa."""
+        with self._lock:
+            if self._delete_timer:
+                self._delete_timer.cancel()
+                self._delete_timer = None
+            
+            restored_count = len(self._trash_bin)
+            for vid, data in self._trash_bin.items():
+                # Se era UUID, volta para active_downloads, senão para videos
+                if 'uuid' in data and data['status'] in ['queued', 'downloading', 'processing']:
+                    self._active_downloads[data['uuid']] = data
+                else:
+                    self._videos[vid] = data
+            
+            self._trash_bin.clear()
+            self._cache_dirty = True
+            
+        self._notify('DELETION_UNDONE', restored_count)
+        logger.info(f"Restauração concluída: {restored_count} itens recuperados.")
+
+    def _finalize_staged_deletion(self):
+        """Executa a deleção física no banco após o timeout do Undo."""
+        sql_ids = []
+        with self._lock:
+            sql_ids = list(self._trash_bin.keys())
+            self._trash_bin.clear()
+            self._delete_timer = None
+            
+        if sql_ids:
+            self.executor.submit(self._delete_worker, sql_ids)
+            logger.info(f"Deleção física executada para {len(sql_ids)} itens.")
+
+    def _execute_permanent_delete(self, ids: List[str]):
+        """Deleção imediata e definitiva (legado/padrão)."""
         sql_ids = []
         with self._lock:
             for vid in ids:
@@ -259,8 +358,6 @@ class AppState:
                 # 2. Busca direta por UUID em tarefas ativas
                 elif vid in self._active_downloads:
                     del self._active_downloads[vid]
-                    # Nota: pode ser que esse UUID já tenha registro no banco (parcial), 
-                    # mas se não está em _videos, não geramos delete SQL ainda.
                 
                 # 3. Busca por UUID dentro do banco de vídeos (Recuperação de Promoção)
                 else:
@@ -272,16 +369,19 @@ class AppState:
                 if target_id:
                     del self._videos[target_id]
                     sql_ids.append(target_id)
+            
+            self._cache_dirty = True
         
-        # Persiste deleção no banco (apenas IDs reais mapeados)
+        # Persiste deleção no banco via Pool
         if sql_ids:
-            threading.Thread(target=self._delete_worker, args=(sql_ids,)).start()
+            self.executor.submit(self._delete_worker, sql_ids)
         
         self._notify('VIDEOS_DELETED', ids)
 
     def _delete_worker(self, video_ids):
         for vid in video_ids:
             self.db_handler.delete_video(vid)
+            logger.info(f"Vídeo {vid} removido do banco físico.")
 
     def delete_playlist(self, playlist_id: str):
         # Find all videos with playlist_id

@@ -9,6 +9,7 @@ from ui.tab_batch import TabBatch
 from ui.tab_analysis import TabAnalysis
 from ui.panel_detail import DetailPanel
 from ui.panel_console import ConsolePanel
+from ui.dialog_config import DialogConfig
 from ui.sidebar import Sidebar
 
 class AppWindow(wx.Frame):
@@ -45,8 +46,12 @@ class AppWindow(wx.Frame):
         self.right_splitter = wx.SplitterWindow(self.main_splitter, style=wx.SP_BORDER | wx.SP_LIVE_UPDATE)
         self.right_splitter.SetMinimumPaneSize(50) # [REVERSIBILIDADE v5.9]
         
+        # [QA4] Container para Notebook + InfoBar (Snackbar)
+        self.nb_container = wx.Panel(self.right_splitter)
+        self.info_bar = wx.InfoBar(self.nb_container)
+        
         # 2. Notebook (Topologia de 3 Abas conforme ARCHITECTURE.md)
-        self.notebook = wx.Notebook(self.right_splitter)
+        self.notebook = wx.Notebook(self.nb_container)
         
         # Aba 1: Doca de Carga (Ingestão Massiva)
         self.tab_batch = TabBatch(self.notebook)
@@ -62,8 +67,14 @@ class AppWindow(wx.Frame):
         # 3. Console de Logs (Inferior)
         self.panel_console = ConsolePanel(self.right_splitter)
         
+        # Layout do Container do Notebook + InfoBar
+        nb_container_sizer = wx.BoxSizer(wx.VERTICAL)
+        nb_container_sizer.Add(self.info_bar, 0, wx.EXPAND)
+        nb_container_sizer.Add(self.notebook, 1, wx.EXPAND)
+        self.nb_container.SetSizer(nb_container_sizer)
+        
         # Configuração dos Splitters
-        self.right_splitter.SplitHorizontally(self.notebook, self.panel_console, -150)
+        self.right_splitter.SplitHorizontally(self.nb_container, self.panel_console, -150)
         self.right_splitter.SetSashGravity(1.0) # Console fixo na base
         
         self.main_splitter.SplitVertically(self.sidebar, self.right_splitter, 250)
@@ -101,6 +112,10 @@ class AppWindow(wx.Frame):
         # [QA3] Novos Sinais de Interatividade
         PubSub.subscribe('REQUEST_SIDEBAR_TOGGLE', self.on_sidebar_toggle_signal)
         PubSub.subscribe('REQUEST_VIEW_VIDEO', self.on_request_view_video)
+        
+        # [QA4] Sinais de Deleção e Undo
+        PubSub.subscribe('VIDEOS_STAGED_FOR_DELETION', self.on_videos_staged)
+        PubSub.subscribe('DELETION_UNDONE', self.on_deletion_undone)
 
         # Toolbar Events [QA2]
         self.Bind(wx.EVT_TOOL, self.on_sidebar_toggle_signal, id=2000)
@@ -126,12 +141,15 @@ class AppWindow(wx.Frame):
         # Menu Ferramentas
         tools_menu = wx.Menu()
         tools_menu.Append(3001, "Reprocessar Erros", "Tenta processar vídeos com status de erro")
+        tools_menu.AppendSeparator()
+        tools_menu.Append(3002, "Configurações...", "Abrir Console de Governança")
         menubar.Append(tools_menu, "&Ferramentas")
         
         self.SetMenuBar(menubar)
         self.Bind(wx.EVT_MENU, self.on_toggle_sidebar, id=2000)
         self.Bind(wx.EVT_MENU, self.on_toggle_logs, id=2001)
         self.Bind(wx.EVT_MENU, self.on_reprocess_errors, id=3001)
+        self.Bind(wx.EVT_MENU, self.on_config, id=3002)
 
     def on_global_progress(self, video_id, status_msg):
         """Atualiza o indicador de status persistente em todas as abas [3]."""
@@ -185,12 +203,12 @@ class AppWindow(wx.Frame):
             self.right_splitter.Unsplit(self.panel_console)
             self.item_view_logs.Check(False)
         else:
-            self.right_splitter.SplitHorizontally(self.notebook, self.panel_console, -150)
+            self.right_splitter.SplitHorizontally(self.nb_container, self.panel_console, -150)
             self.item_view_logs.Check(True)
 
     def on_toggle_logs(self, event):
         if self.item_view_logs.IsChecked():
-            self.right_splitter.SplitHorizontally(self.notebook, self.panel_console, -150)
+            self.right_splitter.SplitHorizontally(self.nb_container, self.panel_console, -150)
         else:
             self.right_splitter.Unsplit(self.panel_console)
 
@@ -202,3 +220,30 @@ class AppWindow(wx.Frame):
         if error_urls and wx.MessageBox(f"Reprocessar {len(error_urls)} erros?", "Confirmação", wx.YES_NO) == wx.YES:
             # [SSOT] Uso do barramento interno unificado
             PubSub.publish('REQUEST_BATCH_PROCESSING', raw_text="\n".join(error_urls))
+
+    def on_videos_staged(self, ids):
+        """Exibe o Snackbar com botão de Desfazer."""
+        count = len(ids)
+        msg = f"{count} vídeos movidos para a lixeira."
+        self.info_bar.ShowMessage(msg, wx.ICON_INFORMATION)
+        # Adiciona botão de Undo se não existir
+        if self.info_bar.GetButtonCount() == 0:
+            self.info_bar.AddButton(wx.ID_UNDO, "DESFAZER")
+            self.Bind(wx.EVT_BUTTON, self.on_click_undo, id=wx.ID_UNDO)
+
+    def on_deletion_undone(self, count):
+        """Esconde o Snackbar após desfazer."""
+        self.info_bar.Dismiss()
+        self.log_to_console(f"Deleção desfeita: {count} itens restaurados.", "SYSTEM")
+
+    def on_click_undo(self, event):
+        self.app_state.undo_deletion()
+        self.info_bar.Dismiss()
+
+    def on_config(self, event):
+        """Abre o Console de Governança."""
+        with DialogConfig(self) as dlg:
+            if dlg.ShowModal() == wx.ID_OK:
+                self.log_to_console("Configurações atualizadas.", "SYSTEM")
+                # Opcional: Notificar componentes que podem precisar de hot-reload
+                # Ex: Processor pode precisar ajustar max_workers

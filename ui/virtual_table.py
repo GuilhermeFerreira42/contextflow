@@ -165,7 +165,16 @@ class RichTitleRenderer(wx.grid.GridCellRenderer):
     def Clone(self): return RichTitleRenderer()
 
 class ChipTagRenderer(wx.grid.GridCellRenderer):
-    """Exibe tags como pílulas coloridas (Chips) via GraphicsContext."""
+    """Exibe tags como pílulas coloridas (Chips) com cores dinâmicas baseadas em hash."""
+    
+    def _get_tag_color(self, name: str):
+        """Gera uma cor pastel baseada no hash do nome da tag."""
+        import hashlib
+        # Gera um valor hash estável 0-359 (Hue)
+        h = int(hashlib.md5(name.encode()).hexdigest(), 16) % 360
+        # h, s, l: s=70%, l=90% para tons pastel suaves
+        return wx.Colour().SetHSB(h/360.0, 0.4, 0.95)
+
     def Draw(self, grid, attr, dc, rect, row, col, isSelected):
         # Limpa fundo
         bg_color = grid.GetDefaultCellBackgroundColour() if not isSelected else grid.GetSelectionBackground()
@@ -198,9 +207,16 @@ class ChipTagRenderer(wx.grid.GridCellRenderer):
                 txt_w, txt_h = dc.GetTextExtent(tag)
                 chip_w = txt_w + 12
                 
-                # Desenha Pílula (Light Mode contrast: cinza claro com borda)
-                gc.SetBrush(wx.Brush(wx.Colour(230, 230, 230, 200)))
-                gc.SetPen(wx.Pen(wx.Colour(180, 180, 180), 1))
+                # [QA4] Color-Coding de Tags (Estética SaaS)
+                bg_chip = self._get_tag_color(tag)
+                gc.SetBrush(wx.Brush(bg_chip))
+                # Borda sutilmente mais escura que o fundo
+                border_color = wx.Colour(
+                    max(0, bg_chip.Red() - 30),
+                    max(0, bg_chip.Green() - 30),
+                    max(0, bg_chip.Blue() - 30)
+                )
+                gc.SetPen(wx.Pen(border_color, 1))
                 gc.DrawRoundedRectangle(x_offset, y_pos, chip_w, 20, 10)
                 
                 # Texto do Chip

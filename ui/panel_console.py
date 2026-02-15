@@ -29,10 +29,8 @@ class ConsolePanel(wx.Panel):
 
     def log(self, message: str, level: str = "INFO"):
         """
-        Adiciona mensagem ao log.
-        Pode ser chamado de threads (use wx.CallAfter no chamador ou garanta aqui).
+        Adiciona mensagem ao log com coloração semântica.
         """
-        # Garante execução na main thread
         if not wx.IsMainThread():
             wx.CallAfter(self.log, message, level)
             return
@@ -40,7 +38,19 @@ class ConsolePanel(wx.Panel):
         timestamp = datetime.datetime.now().strftime("%H:%M:%S")
         formatted_msg = f"[{timestamp}] [{level}] {message}\n"
         
+        # [QA4] Coloração Sintática (Semantic Logging)
+        color = wx.Colour(49, 130, 206) # Default Blue (Info)
+        if level == "ERROR":
+            color = wx.Colour(229, 62, 62) # Red
+        elif level == "WARNING":
+            color = wx.Colour(221, 107, 32) # Orange
+        elif level == "SYSTEM":
+            color = wx.Colour(49, 130, 206) # Blue
+            
+        self.txt_log.SetDefaultStyle(wx.TextAttr(color))
         self.txt_log.AppendText(formatted_msg)
+        # Reseta estilo para não vazar
+        self.txt_log.SetDefaultStyle(wx.TextAttr(wx.BLACK))
 
 import logging
 class WxLogHandler(logging.Handler):
@@ -53,22 +63,31 @@ class WxLogHandler(logging.Handler):
         
     def emit(self, record):
         msg = self.format(record)
-        # Garante que vai para a main thread
+        level = record.levelname
+        if level == "INFO" and "SYSTEM" in msg.upper():
+            level = "SYSTEM"
+            
         if wx.GetApp():
-             # Precisa acessar o método log do painel pai OU escrever direto?
-             # Vamos escrever direto ou chamar log?
-             # O log method do ConsolePanel formata de novo.
-             # Vamos chamar direto o append para evitar duplo timestamp se o formatter padrão já tiver.
-             # Mas aqui vamos usar o Panel.log para consistência se possível, 
-             # mas Panel.log espera mensagem crua.
-             # Vamos extrair a mensagem e chamar ConsolePanel.log
-             
-             # Melhor: Vamos fazer o handler escrever direto, já formatado pelo logging system
-             wx.CallAfter(self._write, msg + "\n")
+             wx.CallAfter(self._write, msg + "\n", level)
 
-    def _write(self, msg):
+    def _write(self, msg, level):
         try:
             if self.text_ctrl:
+                # [QA4] Usa a lógica de cor do painel
+                # Como o handler recebe o TextCtrl direto, vamos tentar achar o objeto ConsolePanel se possível
+                # ou apenas aplicar o estilo aqui.
+                # Mas ConsolePanel.log faz mais sentido. 
+                # O handler foi inicializado com self.txt_log (TextCtrl).
+                
+                # Vamos injetar o painel no handler ou usar uma lógica de cores aqui
+                color = wx.Colour(49, 130, 206)
+                if level == "ERROR" or level == "CRITICAL":
+                    color = wx.Colour(229, 62, 62) # Red
+                elif level == "WARNING":
+                    color = wx.Colour(221, 107, 32) # Orange
+                
+                self.text_ctrl.SetDefaultStyle(wx.TextAttr(color))
                 self.text_ctrl.AppendText(msg)
+                self.text_ctrl.SetDefaultStyle(wx.TextAttr(wx.BLACK))
         except:
             pass

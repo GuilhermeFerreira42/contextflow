@@ -7,10 +7,12 @@ import uuid
 import random
 import logging
 from typing import List, Callable, Dict, Any, Optional
+from concurrent.futures import ThreadPoolExecutor
 
 from services.youtube_manager import YouTubeManager
 from core.token_engine import count_tokens
 from core.app_state import AppState
+from core.config_manager import ConfigManager
 from core.pubsub import PubSub
 from constants import THUMBNAILS_DIR
 
@@ -35,6 +37,12 @@ class Processor:
         self.active = False
         self.thread = None
         self.yt_manager = YouTubeManager()
+        self.config = ConfigManager()
+        
+        # [QA4] Worker Pool controlado conforme Config
+        max_workers = self.config.get("orchestration", "max_cloud_tasks", 2)
+        self.executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="CF_ProcessorPool")
+        
         os.makedirs(THUMBNAILS_DIR, exist_ok=True)
         
         # [SSOT] Reconexão Lógica: Inscreve o processador no barramento global
@@ -51,7 +59,7 @@ class Processor:
         self.active = False
 
     def add_urls(self, raw_text: str):
-        threading.Thread(target=self._async_resolve_urls, args=(raw_text,), daemon=True).start()
+        self.executor.submit(self._async_resolve_urls, raw_text)
 
     def clear_queue(self):
         """[QA2 REFINE] Esvazia a fila de tarefas e limpa o AppState."""
@@ -138,9 +146,18 @@ class Processor:
                 task = self.task_queue.get(timeout=1) 
             except queue.Empty:
                 continue
+                
+            # [QA4] Submete ao ProcessorPool para processamento paralelo
+            self.executor.submit(self._wrapped_process, task)
+            
+            # Delay entre submissões para evitar picos
+            time.sleep(random.uniform(0.5, 1.5))
+
+    def _wrapped_process(self, task):
+        try:
             self._process_task(task)
+        finally:
             self.task_queue.task_done()
-            time.sleep(random.uniform(2.0, 5.0))
 
     def _process_task(self, task: ProcessingTask):
         from core.metrics import MetricsCollector
