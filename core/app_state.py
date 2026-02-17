@@ -52,10 +52,6 @@ class AppState:
             self._snapshot_cache: List[Dict[str, Any]] = []
             self._cache_dirty = True
             
-            # [QA4] Buffer para Undo (Snackbar)
-            self._trash_bin: Dict[str, Dict[str, Any]] = {}
-            self._delete_timer: Optional[threading.Timer] = None
-            
             # [QA4] Pool de Workers Centralizado para Persistência e Tarefas Leves
             self.executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="CF_CorePool")
             
@@ -262,90 +258,16 @@ class AppState:
         
         self._notify('TASKS_CLEARED')
 
-    def delete_videos(self, ids: List[str], deferred: bool = True):
+    def delete_videos(self, ids: List[str]):
         """
-        Remove itens da memória e inicia o processo de deleção.
-        [QA4] Suporta modo deferred para o padrão Undo (Snackbar).
+        Remove itens da memória e do banco de forma imediata.
+        [PHASE_5_11] Expurgo total do modo Undo.
         """
         if not ids: return
-
-        if deferred:
-            self._stage_deletion(ids)
-            return
-
         self._execute_permanent_delete(ids)
 
-    def _stage_deletion(self, ids: List[str]):
-        """Move itens para a lixeira temporária e notifica UI para o Snackbar."""
-        sql_ids = []
-        with self._lock:
-            if self._delete_timer:
-                self._delete_timer.cancel()
-                
-            for vid in ids:
-                target_id = None
-                data = None
-                
-                # Busca e move para lixeira
-                if vid in self._videos:
-                    target_id = vid
-                    data = self._videos.pop(vid)
-                elif vid in self._active_downloads:
-                    target_id = vid
-                    data = self._active_downloads.pop(vid)
-                else:
-                    for db_id, v_data in self._videos.items():
-                        if v_data.get('uuid') == vid:
-                            target_id = db_id
-                            data = self._videos.pop(db_id)
-                            break
-                
-                if target_id and data:
-                    self._trash_bin[target_id] = data
-                    sql_ids.append(target_id)
-            
-            self._cache_dirty = True
-            
-        self._notify('VIDEOS_STAGED_FOR_DELETION', ids)
-        # Timer de 5 segundos para deleção física
-        self._delete_timer = threading.Timer(5.0, self._finalize_staged_deletion)
-        self._delete_timer.start()
-
-    def undo_deletion(self):
-        """Restaura itens da lixeira para a memória ativa."""
-        with self._lock:
-            if self._delete_timer:
-                self._delete_timer.cancel()
-                self._delete_timer = None
-            
-            restored_count = len(self._trash_bin)
-            for vid, data in self._trash_bin.items():
-                # Se era UUID, volta para active_downloads, senão para videos
-                if 'uuid' in data and data['status'] in ['queued', 'downloading', 'processing']:
-                    self._active_downloads[data['uuid']] = data
-                else:
-                    self._videos[vid] = data
-            
-            self._trash_bin.clear()
-            self._cache_dirty = True
-            
-        self._notify('DELETION_UNDONE', restored_count)
-        logger.info(f"Restauração concluída: {restored_count} itens recuperados.")
-
-    def _finalize_staged_deletion(self):
-        """Executa a deleção física no banco após o timeout do Undo."""
-        sql_ids = []
-        with self._lock:
-            sql_ids = list(self._trash_bin.keys())
-            self._trash_bin.clear()
-            self._delete_timer = None
-            
-        if sql_ids:
-            self.executor.submit(self._delete_worker, sql_ids)
-            logger.info(f"Deleção física executada para {len(sql_ids)} itens.")
-
     def _execute_permanent_delete(self, ids: List[str]):
-        """Deleção imediata e definitiva (legado/padrão)."""
+        """Deleção imediata e definitiva."""
         sql_ids = []
         with self._lock:
             for vid in ids:
@@ -376,6 +298,7 @@ class AppState:
         if sql_ids:
             self.executor.submit(self._delete_worker, sql_ids)
         
+        # Notificação Atômica para Sincronia Global [PHASE_5_11]
         self._notify('VIDEOS_DELETED', ids)
 
     def _delete_worker(self, video_ids):

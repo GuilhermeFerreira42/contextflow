@@ -38,22 +38,27 @@ class ConfigManager:
         return {
             "api_keys": {
                 "openai": "",
-                "gemini": "",
-                "grok": ""
-            },
-            "ollama": {
-                "endpoint": "http://localhost:11434",
-                "model": "llama3"
+                "anthropic": "",
+                "google": "",
+                "proxy_auth": ""
             },
             "orchestration": {
-                "active_provider": "openai",
                 "max_cloud_tasks": 2,
-                "max_local_tasks": 1
+                "auto_export": False
             },
-            "ux_preferences": {
-                "triage_mode": "auto",
-                "dynamic_tags": True,
-                "undo_enabled": True
+            "extraction_defense": {
+                "cooldown_mins": 10,
+                "errors_429_limit": 3,
+                "use_cookies": False,
+                "use_proxies": False
+            },
+            "subtitles": {
+                "language_order": "pt,pt-BR,en",
+                "fallback_auto": True
+            },
+            "ui": {
+                "color_tags": True,
+                "dynamic_tags": True
             }
         }
 

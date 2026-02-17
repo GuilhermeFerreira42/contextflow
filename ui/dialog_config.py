@@ -66,17 +66,54 @@ class DialogConfig(wx.Dialog):
         panel_orch.SetSizer(orch_sizer)
         nb.AddPage(panel_orch, "Orquestração")
         
-        # --- ABA 3: UI/UX ---
+        # --- ABA 3: EXTRAÇÃO & SEGURANÇA ---
+        panel_sec = wx.Panel(nb)
+        sec_sizer = wx.BoxSizer(wx.VERTICAL)
+        
+        sec_sizer.Add(wx.StaticText(panel_sec, label="Antifragilidade e Defesa"), 0, wx.ALL, 10)
+        
+        # Cooldown
+        sec_sizer.Add(wx.StaticText(panel_sec, label="Tempo de Cooldown (minutos):"), 0, wx.LEFT | wx.RIGHT, 10)
+        self.spin_cooldown = wx.SpinCtrl(panel_sec, min=1, max=60)
+        self.spin_cooldown.SetValue(int(self.config.get("extraction_defense", "cooldown_mins", 10)))
+        sec_sizer.Add(self.spin_cooldown, 0, wx.EXPAND | wx.ALL, 10)
+        
+        # Limit 429
+        sec_sizer.Add(wx.StaticText(panel_sec, label="Limite de Erros 429 (Sistema de Pausa):"), 0, wx.LEFT | wx.RIGHT, 10)
+        self.spin_429 = wx.SpinCtrl(panel_sec, min=1, max=10)
+        self.spin_429.SetValue(int(self.config.get("extraction_defense", "errors_429_limit", 3)))
+        sec_sizer.Add(self.spin_429, 0, wx.EXPAND | wx.ALL, 10)
+        
+        # Checkboxes Defesa
+        self.chk_cookies = wx.CheckBox(panel_sec, label="Utilizar Cookies (Exportados do Navegador)")
+        self.chk_cookies.SetValue(self.config.get("extraction_defense", "use_cookies", False))
+        sec_sizer.Add(self.chk_cookies, 0, wx.ALL, 10)
+        
+        self.chk_proxies = wx.CheckBox(panel_sec, label="Habilitar Rotação de Proxies (Requer API Key Proxy)")
+        self.chk_proxies.SetValue(self.config.get("extraction_defense", "use_proxies", False))
+        sec_sizer.Add(self.chk_proxies, 0, wx.ALL, 10)
+        
+        # Subtitles
+        sec_sizer.Add(wx.StaticText(panel_sec, label="Prioridade de Idiomas (Legenda):"), 0, wx.LEFT | wx.RIGHT | wx.TOP, 10)
+        self.txt_subs = wx.TextCtrl(panel_sec)
+        self.txt_subs.SetHint("Ex: pt,pt-BR,en")
+        self.txt_subs.SetValue(str(self.config.get("subtitles", "language_order", "pt,pt-BR,en")))
+        sec_sizer.Add(self.txt_subs, 0, wx.EXPAND | wx.ALL, 10)
+        
+        panel_sec.SetSizer(sec_sizer)
+        nb.AddPage(panel_sec, "Extração")
+        
+        # --- ABA 4: INTERFACE ---
         panel_ui = wx.Panel(nb)
         ui_sizer = wx.BoxSizer(wx.VERTICAL)
         
-        self.chk_undo = wx.CheckBox(panel_ui, label="Habilitar Modo Undo (Snackbar 5s)")
-        self.chk_undo.SetValue(self.config.get("ui", "undo_enabled", True))
-        ui_sizer.Add(self.chk_undo, 0, wx.ALL, 10)
-        
-        self.chk_tags = wx.CheckBox(panel_ui, label="Colorir Tags Automaticamente")
+        self.chk_tags = wx.CheckBox(panel_ui, label="Colorir Tags Automaticamente (Hash-Based)")
         self.chk_tags.SetValue(self.config.get("ui", "color_tags", True))
         ui_sizer.Add(self.chk_tags, 0, wx.ALL, 10)
+        
+        self.chk_dyn = wx.CheckBox(panel_ui, label="Habilitar Grade Dinâmica (Fast Rendering)")
+        self.chk_dyn.SetValue(self.config.get("ui", "dynamic_tags", True))
+        ui_sizer.Add(self.chk_dyn, 0, wx.ALL, 10)
         
         panel_ui.SetSizer(ui_sizer)
         nb.AddPage(panel_ui, "Interface")
@@ -106,9 +143,16 @@ class DialogConfig(wx.Dialog):
         self.config.set("orchestration", "max_cloud_tasks", self.spin_cloud.GetValue())
         self.config.set("orchestration", "auto_export", self.chk_auto.GetValue())
         
+        # Salvas Extração & Defesa
+        self.config.set("extraction_defense", "cooldown_mins", self.spin_cooldown.GetValue())
+        self.config.set("extraction_defense", "errors_429_limit", self.spin_429.GetValue())
+        self.config.set("extraction_defense", "use_cookies", self.chk_cookies.GetValue())
+        self.config.set("extraction_defense", "use_proxies", self.chk_proxies.GetValue())
+        self.config.set("subtitles", "language_order", self.txt_subs.GetValue())
+        
         # Salva UI
-        self.config.set("ui", "undo_enabled", self.chk_undo.GetValue())
         self.config.set("ui", "color_tags", self.chk_tags.GetValue())
+        self.config.set("ui", "dynamic_tags", self.chk_dyn.GetValue())
         
         self.config.save()
         logger.info("Configurações salvas via Console de Governança.")

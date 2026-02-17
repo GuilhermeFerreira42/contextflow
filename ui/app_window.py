@@ -46,9 +46,8 @@ class AppWindow(wx.Frame):
         self.right_splitter = wx.SplitterWindow(self.main_splitter, style=wx.SP_BORDER | wx.SP_LIVE_UPDATE)
         self.right_splitter.SetMinimumPaneSize(50) # [REVERSIBILIDADE v5.9]
         
-        # [QA4] Container para Notebook + InfoBar (Snackbar)
+        # [QA4] Container para Notebook
         self.nb_container = wx.Panel(self.right_splitter)
-        self.info_bar = wx.InfoBar(self.nb_container)
         
         # 2. Notebook (Topologia de 3 Abas conforme ARCHITECTURE.md)
         self.notebook = wx.Notebook(self.nb_container)
@@ -67,9 +66,8 @@ class AppWindow(wx.Frame):
         # 3. Console de Logs (Inferior)
         self.panel_console = ConsolePanel(self.right_splitter)
         
-        # Layout do Container do Notebook + InfoBar
+        # Layout do Container do Notebook
         nb_container_sizer = wx.BoxSizer(wx.VERTICAL)
-        nb_container_sizer.Add(self.info_bar, 0, wx.EXPAND)
         nb_container_sizer.Add(self.notebook, 1, wx.EXPAND)
         self.nb_container.SetSizer(nb_container_sizer)
         
@@ -113,9 +111,8 @@ class AppWindow(wx.Frame):
         PubSub.subscribe('REQUEST_SIDEBAR_TOGGLE', self.on_sidebar_toggle_signal)
         PubSub.subscribe('REQUEST_VIEW_VIDEO', self.on_request_view_video)
         
-        # [QA4] Sinais de Deleção e Undo
-        PubSub.subscribe('VIDEOS_STAGED_FOR_DELETION', self.on_videos_staged)
-        PubSub.subscribe('DELETION_UNDONE', self.on_deletion_undone)
+        # [QA4] Sinais de Deleção e Sincronia [PHASE_5_11]
+        PubSub.subscribe('VIDEOS_DELETED', self.on_videos_deleted)
 
         # Toolbar Events [QA2]
         self.Bind(wx.EVT_TOOL, self.on_sidebar_toggle_signal, id=2000)
@@ -221,24 +218,17 @@ class AppWindow(wx.Frame):
             # [SSOT] Uso do barramento interno unificado
             PubSub.publish('REQUEST_BATCH_PROCESSING', raw_text="\n".join(error_urls))
 
-    def on_videos_staged(self, ids):
-        """Exibe o Snackbar com botão de Desfazer."""
-        count = len(ids)
-        msg = f"{count} vídeos movidos para a lixeira."
-        self.info_bar.ShowMessage(msg, wx.ICON_INFORMATION)
-        # Adiciona botão de Undo se não existir
-        if self.info_bar.GetButtonCount() == 0:
-            self.info_bar.AddButton(wx.ID_UNDO, "DESFAZER")
-            self.Bind(wx.EVT_BUTTON, self.on_click_undo, id=wx.ID_UNDO)
-
-    def on_deletion_undone(self, count):
-        """Esconde o Snackbar após desfazer."""
-        self.info_bar.Dismiss()
-        self.log_to_console(f"Deleção desfeita: {count} itens restaurados.", "SYSTEM")
-
-    def on_click_undo(self, event):
-        self.app_state.undo_deletion()
-        self.info_bar.Dismiss()
+    def on_videos_deleted(self, ids):
+        """Monitora deleções para garantir sincronia global das abas."""
+        self.log_to_console(f"Deleção confirmada: {len(ids)} itens removidos.", "SYSTEM")
+        
+        # O AppState já notificou seus observers (Sidebar e Abas), 
+        # mas aqui podemos forçar ações de nível superior se necessário.
+        # Por exemplo, limpar a Aba 3 se o vídeo atual foi deletado.
+        current_v = self.panel_detail.current_video_id
+        if current_v in ids:
+            self.panel_detail.Clear()
+            self.log_to_console("Aba Detalhes limpa: vídeo excluído.", "SYSTEM")
 
     def on_config(self, event):
         """Abre o Console de Governança."""

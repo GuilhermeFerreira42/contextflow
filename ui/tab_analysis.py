@@ -280,12 +280,14 @@ class TabAnalysis(wx.Panel):
         event.Skip()
 
     def on_right_click(self, event):
-        row = event.GetRow()
+        row, col = event.GetRow(), event.GetCol()
         if row < 0 or row >= len(self.table.data): return
         
-        self.grid.SelectRow(row)
+        # [PHASE_5_11] Targeted Selection: Foca a linha mas não altera checkbox
+        self.grid.SetGridCursor(row, col)
         video_data = self.table.data[row]
         vid = video_data.get('id') or video_data.get('uuid')
+        title = video_data.get('title', 'Vídeo sem título')
         
         menu = wx.Menu()
         m_del = menu.Append(wx.ID_ANY, "🗑️ Excluir")
@@ -295,7 +297,13 @@ class TabAnalysis(wx.Panel):
         m_read = menu.Append(wx.ID_ANY, "📖 Ler (Aba 3)")
         m_sum = menu.Append(wx.ID_ANY, "✨ Resumir")
         
-        self.Bind(wx.EVT_MENU, lambda e: self.app_state.delete_videos([vid]), m_del)
+        # [PHASE_5_11] Targeted Delete Protocol
+        def on_del(e):
+            msg = f"Deseja excluir permanentemente o vídeo:\n'{title}'?"
+            if wx.MessageBox(msg, "Confirmar Exclusão", wx.YES_NO | wx.ICON_QUESTION) == wx.YES:
+                self.app_state.delete_videos([vid])
+
+        self.Bind(wx.EVT_MENU, on_del, m_del)
         self.Bind(wx.EVT_MENU, lambda e: webbrowser.open(video_data.get('url')), m_link)
         self.Bind(wx.EVT_MENU, lambda e: self._copy_to_clipboard(video_data.get('url')), m_copy)
         self.Bind(wx.EVT_MENU, lambda e: self._direct_export_md(video_data), m_md)
@@ -399,22 +407,42 @@ class TabAnalysis(wx.Panel):
         self.last_selected_row = -1 # Permite re-seleção imediata para reabrir
 
     def on_key_down(self, event):
-        """[QA2] Atalhos de Teclado: Espaço (Mark) e Delete (Excluir)."""
+        """[PHASE_5_11] Atalhos: Espaço (Blue-to-Check) e Delete (Exclusão Massiva)."""
         key = event.GetKeyCode()
-        row = self.grid.GetGridCursorRow()
         
-        if key == wx.WXK_SPACE and row >= 0:
-            val = self.table.GetValue(row, 0)
-            self.table.SetValue(row, 0, "0" if val == "1" else "1")
-            self.grid.ForceRefresh()
-        elif key == wx.WXK_DELETE and row >= 0:
-            video_data = self.table.data[row]
-            vid = video_data.get('id') or video_data.get('uuid')
-            if vid and wx.MessageBox(f"Deseja excluir permanentemente '{video_data.get('title')}'?", 
-                                     "Confirmar Exclusão", wx.YES_NO | wx.ICON_QUESTION) == wx.YES:
-                self.app_state.delete_videos([vid])
+        if key == wx.WXK_SPACE:
+            rows = self.grid.GetSelectedRows()
+            if not rows:
+                # Fallback: alterna apenas a linha sob o cursor
+                row = self.grid.GetGridCursorRow()
+                if row >= 0: rows = [row]
+            
+            if rows:
+                # [PHASE_5_11] Algoritmo de Inversão de Bloco
+                # Na Aba 2, o checkbox está na coluna 0
+                master_val = self.table.GetValue(rows[0], 0)
+                new_val = "0" if master_val == "1" else "1"
+                for r in rows:
+                    self.table.SetValue(r, 0, new_val)
+                self.grid.ForceRefresh()
+                
+        elif key == wx.WXK_DELETE:
+            self.on_delete_selected(None)
         else:
             event.Skip()
+
+    def on_delete_selected(self, event):
+        """Implementação consistente de deleção massiva com confirmação segura."""
+        ids = list(self.table.selected_ids)
+        if not ids:
+            wx.MessageBox("Nenhum item selecionado via checkbox.", "Aviso", wx.OK | wx.ICON_WARNING)
+            return
+            
+        msg = f"Deseja excluir permanentemente os {len(ids)} vídeos selecionados?"
+        if wx.MessageBox(msg, "Confirmar Exclusão Massiva", wx.YES_NO | wx.ICON_QUESTION) == wx.YES:
+            self.app_state.delete_videos(ids)
+            self.table.selected_ids.clear()
+            self._refresh_grid()
 
     def on_export_batch(self, event):
         """Dispara exportação para itens selecionados via ExportService."""
