@@ -77,7 +77,7 @@ class TabAnalysis(wx.Panel):
         self.splitter = wx.SplitterWindow(self, style=wx.SP_3D | wx.SP_LIVE_UPDATE | wx.SP_NO_XP_THEME)
         self.splitter.SetBackgroundColour(wx.Colour(230, 230, 230)) # COLOR_BORDER Light
         self.splitter.SetSashGravity(0.5) # [MANDATO 5.9] Redimensionamento proporcional
-        self.splitter.SetMinimumPaneSize(50) # [REVERSIBILIDADE v5.9]
+        self.splitter.SetMinimumPaneSize(50) # [REVERSIBILIDADE v5.12] Previne travamento em 0
         
         # MASTER PANEL (Top)
         self.pnl_master = wx.Panel(self.splitter)

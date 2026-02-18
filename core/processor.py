@@ -133,11 +133,9 @@ class Processor:
         while self.active:
             if cooldown.is_cooling_down():
                 remaining = cooldown.get_remaining_cooldown()
-                # [VISIBILIDADE] Log claro conforme PHASE_5_8_LOGICAL_SYNC
-                # [REGRA ALPHA] Proteção Cooldown Ativa
-                msg = f"SYSTEM COOLDOWN ACTIVE. Waiting... ({remaining}s remaining before retry)"
+                # [GOVERNANÇA v5.12] Terminologia amigável
+                msg = f"INTERVALO DE ESPERA ATIVO. Aguardando... ({remaining}s restantes antes de retomar)"
                 logger.info(msg)
-                # Opcional: Notificar via PubSub se a UI tiver um status bar global
                 PubSub.publish('TASK_PROGRESS', video_id="COOLDOWN", status_msg=msg)
                 time.sleep(10) # Wait and check again
                 continue
@@ -177,14 +175,16 @@ class Processor:
             self.task_queue.put(task)
             return
 
-        # Pre-Flight Check (Contract Step 3.2)
-        # [REGRA BETA] Bloqueio de Segurança para Filas Grandes.
-        # Filas > 20 requerem Proxy para evitar banimento de IP Residencial.
-        if self.task_queue.qsize() > 20 and not proxy_mgr.has_proxies():
-            logger.error("ALERTA DE SEGURANÇA: Fila > 20 sem Proxies. Abortando para evitar BAN.")
-            self.app_state.update_active_task(task.uuid, {'status': 'ABORTED', 'error': 'Security: Proxy required for large batches'})
-            PubSub.publish('TASK_ERROR', video_id="SECURITY", error_msg="Proxy required for large batches")
-            return
+        # [GOVERNANÇA v5.12] Limite dinâmico de fila via ConfigManager
+        max_warning = self.config.get("orchestration", "max_queue_warning", 20)
+        auto_defense = self.config.get("orchestration", "auto_defense_enabled", True)
+
+        if self.task_queue.qsize() > max_warning and auto_defense:
+            if not proxy_mgr.has_proxies():
+                logger.error(f"ALERTA DE SEGURANÇA: Fila > {max_warning} sem Proxies. Abortando para evitar bloqueio.")
+                self.app_state.update_active_task(task.uuid, {'status': 'ABORTED', 'error': 'Segurança: Requer Proxy para lotes grandes'})
+                PubSub.publish('TASK_ERROR', video_id="SECURITY", error_msg="Proxy necessário para lotes massivos")
+                return
 
 
         # Record queue wait
@@ -206,10 +206,14 @@ class Processor:
             # 429 Detection (Contract Step 3.1)
             if meta.get('status') == 'error' and '429' in meta.get('error_msg', ''):
                 if active_proxy: proxy_mgr.ban_proxy(active_proxy)
-                # [REGRA ALPHA] Disparo de Cooldown Global.
-                # O sistema entra em hibernação forçada para proteger a infraestrutura.
-                cooldown.trigger_cooldown(3600) # Global cooldown (1h)
-                raise Exception("YouTube Block (429) detected. Proxy banned and SYSTEM COOLDOWN triggered.")
+                
+                # [GOVERNANÇA v5.12] Defesa condicionada à flag do usuário
+                if auto_defense:
+                    cooldown_time = self.config.get("extraction_defense", "cooldown_secs", 3600)
+                    cooldown.trigger_cooldown(cooldown_time)
+                    raise Exception(f"LIMITE DE FALHAS (429) detectado. IP pausado por {cooldown_time} segundos.")
+                else:
+                    logger.warning("Erro 429 detectado, mas PROTEÇÃO AUTOMÁTICA está DESATIVADA. Prosseguindo por conta e risco.")
 
 
             if meta['status'] == 'error': raise Exception(f"Falha ao obter metadados: {meta.get('error_msg')}")

@@ -40,17 +40,32 @@ class ConfigManager:
                 "openai": "",
                 "anthropic": "",
                 "google": "",
+                "grok": "",
                 "proxy_auth": ""
             },
+            "ollama": {
+                "endpoint": "http://localhost:11434",
+                "model": "llama3"
+            },
             "orchestration": {
+                "active_provider": "openai",
                 "max_cloud_tasks": 2,
-                "auto_export": False
+                "max_local_tasks": 1,
+                "auto_export": False,
+                "resume_tasks": True,
+                "max_queue_warning": 20,
+                "auto_defense_enabled": True,
+                "proxy_rotation_mode": "Aleatório"
             },
             "extraction_defense": {
-                "cooldown_mins": 10,
-                "errors_429_limit": 3,
+                "cooldown_secs": 3600,
+                "errors_429_limit": 5,
                 "use_cookies": False,
                 "use_proxies": False
+            },
+            "inputs": {
+                "cookie_text": "",
+                "proxy_text": ""
             },
             "subtitles": {
                 "language_order": "pt,pt-BR,en",
@@ -58,7 +73,8 @@ class ConfigManager:
             },
             "ui": {
                 "color_tags": True,
-                "dynamic_tags": True
+                "dynamic_tags": True,
+                "dynamic_grid": True
             }
         }
 
@@ -109,6 +125,46 @@ class ConfigManager:
                 self._config[section] = {}
             self._config[section][key] = value
             self.save()
+
+    def update_physical_files(self):
+        """
+        Sincroniza os conteúdos de Texto para os arquivos físicos cookies.txt e proxies.txt.
+        [GOVERNANÇA] Garante que o motor yt-dlp e o ProxyManager usem dados frescos da UI.
+        """
+        from constants import BASE_DIR, COOKIES_PATH, PROXY_LIST_PATH
+        
+        with self._lock:
+            # 1. Sincronização de Cookies
+            cookie_text = self.get("inputs", "cookie_text", "").strip()
+            if cookie_text:
+                try:
+                    with open(COOKIES_PATH, 'w', encoding='utf-8') as f:
+                        f.write(cookie_text)
+                    logger.info(f"Cookies físicos atualizados em: {COOKIES_PATH}")
+                except Exception as e:
+                    logger.error(f"Falha ao escrever cookies.txt: {e}")
+            else:
+                if os.path.exists(COOKIES_PATH):
+                    try:
+                        os.remove(COOKIES_PATH)
+                        logger.info("cookies.txt removido (vazio na config).")
+                    except Exception as e:
+                        logger.error(f"Erro ao remover cookies.txt: {e}")
+
+            # 2. Sincronização de Proxies
+            proxy_text = self.get("inputs", "proxy_text", "").strip()
+            try:
+                # Garante que o diretório de proxies exista
+                os.makedirs(os.path.dirname(PROXY_LIST_PATH), exist_ok=True)
+                with open(PROXY_LIST_PATH, 'w', encoding='utf-8') as f:
+                    f.write(proxy_text)
+                logger.info(f"Proxies físicos atualizados em: {PROXY_LIST_PATH}")
+                
+                # Hot-reload instantâneo no singleton
+                from core.proxy_manager import ProxyManager
+                ProxyManager().hot_reload()
+            except Exception as e:
+                logger.error(f"Falha ao escrever proxies.txt: {e}")
 
     def get_all(self):
         with self._lock:

@@ -22,28 +22,34 @@ class ProxyManager:
         self.proxies: List[str] = []
         self.banned_proxies: Dict[str, float] = {} # proxy -> unban_time
         self.ban_duration = 3600 # 1 hour default
-        self._load_proxies()
+        self._round_robin_idx = 0
+        from core.config_manager import ConfigManager
+        self.config = ConfigManager()
+        self.hot_reload()
         self._initialized = True
 
-    def _load_proxies(self):
+    def hot_reload(self):
+        """Atualiza a lista de proxies em memória a partir do arquivo físico."""
         self.proxies = [] # Clear existing
         if not os.path.exists(PROXY_LIST_PATH):
-            logger.info(f"Proxy list not found at {PROXY_LIST_PATH}")
+            logger.info(f"Proxy list not found at {PROXY_LIST_PATH}. Starting with empty pool.")
             return
         
         try:
-            with open(PROXY_LIST_PATH, 'r') as f:
+            with open(PROXY_LIST_PATH, 'r', encoding='utf-8') as f:
                 self.proxies = [l.strip() for l in f if l.strip()]
-            logger.info(f"Loaded {len(self.proxies)} proxies.")
+            logger.info(f"HOT-RELOAD: {len(self.proxies)} proxies carregados.")
+            self._round_robin_idx = 0 # Reset index
         except Exception as e:
-            logger.error(f"Failed to load proxies: {e}")
+            logger.error(f"Failed to hot-reload proxies: {e}")
+
+    def _load_proxies(self):
+        # Migrado para hot_reload() para suporte a mudanças em tempo real
+        self.hot_reload()
 
     def get_proxy(self) -> Optional[str]:
         """
-        Retorna um proxy aleatório da lista de não-banidos.
-        
-        [LAZY CLEANING] A limpeza de proxies banidos ocorre apenas no momento da solicitação (Just-in-Time).
-        Isso evita a necessidade de uma Thread de Background consumindo CPU para monitorar timeouts.
+        Retorna um proxy seguindo o Modo de Rotação configurado (Aleatório ou Round-Robin).
         """
         now = time.time()
         # Clean expired bans
@@ -53,8 +59,18 @@ class ProxyManager:
         
         if not available:
             return None
+            
+        mode = self.config.get("orchestration", "proxy_rotation_mode", "Aleatório")
         
-        return random.choice(available)
+        if mode == "Round-Robin":
+            if self._round_robin_idx >= len(available):
+                self._round_robin_idx = 0
+            proxy = available[self._round_robin_idx]
+            self._round_robin_idx = (self._round_robin_idx + 1) % len(available)
+            return proxy
+        else:
+            # Default: Aleatório
+            return random.choice(available)
 
     def ban_proxy(self, proxy: str):
         """Bane um proxy temporariamente após erro 429."""

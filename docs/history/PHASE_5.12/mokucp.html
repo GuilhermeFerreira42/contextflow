@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Configurações &amp; Governança - Extração</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style type="text/tailwindcss">
+        :root {
+            --primary-blue: #4a86cf;
+            --bg-modal-content: #f8f9fa;
+            --border-color: #e2e8f0;
+            --text-main: #334155;
+            --text-secondary: #64748b;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #999999;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #ccc; border-radius: 10px; }
+        .tab-active {
+            @apply border-b-2 border-blue-500 text-blue-600 bg-blue-50/50;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+<div class="w-full max-w-[900px] bg-white rounded-xl shadow-2xl overflow-hidden flex flex-col border border-gray-300">
+<div class="px-6 py-4 flex justify-between items-center border-b border-gray-200">
+<h1 class="text-[17px] font-semibold text-slate-700">
+            Configurações &amp; Governança — Extração
+        </h1>
+<button class="text-gray-400 hover:text-gray-600">
+<span class="material-symbols-outlined !fill-none">close</span>
+</button>
+</div>
+<div class="px-2 border-b border-gray-200">
+<nav class="flex">
+<a class="px-6 py-3 text-[13px] font-medium text-slate-500 hover:text-slate-700 border-r border-gray-100" href="#">Chaves de API</a>
+<a class="px-6 py-3 text-[13px] font-medium text-slate-500 hover:text-slate-700 border-r border-gray-100" href="#">Orquestração</a>
+<a class="px-6 py-3 text-[13px] font-semibold text-white bg-[var(--primary-blue)] border-r border-gray-100" href="#">Extração e Segurança</a>
+<a class="px-6 py-3 text-[13px] font-medium text-slate-500 hover:text-slate-700" href="#">Interface</a>
+</nav>
+</div>
+<div class="p-6 space-y-5 bg-[#f8f9fb] overflow-y-auto max-h-[78vh] custom-scrollbar">
+<section class="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+<div class="px-5 py-3 border-b border-gray-100 flex items-center gap-2 bg-white">
+<span class="material-symbols-outlined text-[var(--primary-blue)] text-xl">shield</span>
+<h2 class="text-sm font-semibold text-slate-700">Controle de Limites e Proteção Automática</h2>
+</div>
+<div class="p-5 space-y-5">
+<div class="flex items-center gap-3">
+<label class="text-[13px] text-slate-600">Limite de Itens na Fila (gatilho):</label>
+<input class="w-[70px] h-8 border border-gray-300 rounded-md px-2 text-sm focus:ring-1 focus:ring-blue-400 focus:border-blue-400 outline-none" type="number" value="20"/>
+</div>
+<div class="space-y-4">
+<div class="flex items-center gap-2">
+<input checked="" class="w-4 h-4 text-[var(--primary-blue)] border-gray-300 rounded focus:ring-blue-400" id="auto-protect" type="checkbox"/>
+<label class="text-[13px] text-slate-700 font-medium" for="auto-protect">Habilitar Proteção Automática</label>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6 pl-6">
+<div class="flex items-center gap-3">
+<span class="text-[13px] text-slate-500">Tempo de Espera após Bloqueio:</span>
+<div class="relative flex items-center">
+<input class="w-[90px] h-8 border border-gray-300 rounded-md px-2 text-sm outline-none" type="number" value="3600"/>
+<span class="material-symbols-outlined absolute right-1 text-gray-400 text-lg pointer-events-none">arrow_drop_down</span>
+</div>
+<span class="text-[13px] text-slate-500">segundos</span>
+</div>
+<div class="flex items-center gap-3">
+<span class="text-[13px] text-slate-500">Limite de Erros Consecutivos (ex: 429):</span>
+<div class="relative flex items-center">
+<input class="w-[70px] h-8 border border-gray-300 rounded-md px-2 text-sm outline-none" type="number" value="5"/>
+<span class="material-symbols-outlined absolute right-1 text-gray-400 text-lg pointer-events-none">arrow_drop_down</span>
+</div>
+</div>
+</div>
+</div>
+<div class="bg-orange-50 border border-orange-100 p-3 rounded-lg flex gap-3">
+<span class="material-symbols-outlined text-orange-400 text-[20px]">info</span>
+<p class="text-[12px] text-orange-800 leading-snug">
+                        Ao atingir o limite configurado ou exceder o número de erros consecutivos, o sistema entrará em modo de espera pelo tempo definido acima.
+                    </p>
+</div>
+</div>
+</section>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+<section class="bg-white rounded-lg border border-gray-200 shadow-sm flex flex-col">
+<div class="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+<span class="material-symbols-outlined text-[var(--primary-blue)] text-xl">cookie</span>
+<h2 class="text-sm font-semibold text-slate-700">Autenticação via Cookies <span class="font-normal text-[11px] text-slate-400">(Formato Netscape)</span></h2>
+</div>
+<div class="p-5 space-y-4 flex-grow">
+<div class="space-y-1.5">
+<label class="text-[12px] font-medium text-slate-500">Importar arquivo cookies.txt</label>
+<div class="relative">
+<input class="w-full h-9 bg-gray-50 border border-gray-200 rounded-md px-3 text-[12px] text-slate-400 cursor-pointer" readonly="" type="text" value="↑ importar arquivo cookies.txt"/>
+</div>
+</div>
+<div class="space-y-1.5">
+<label class="text-[12px] font-medium text-slate-500">Ou colar conteúdo do arquivo Netscape:</label>
+<textarea class="w-full border border-gray-200 bg-gray-50 rounded-md p-3 text-[12px] font-mono focus:ring-1 focus:ring-blue-300 outline-none resize-none" placeholder="# Netscape HTTP Cookie File" rows="4"></textarea>
+</div>
+<div class="flex items-center gap-2 pt-1">
+<div class="w-4 h-4 border border-gray-300 rounded bg-gray-50"></div>
+<label class="text-[12px] text-slate-500">Status: Nenhum cookie ativo</label>
+</div>
+</div>
+</section>
+<section class="bg-white rounded-lg border border-gray-200 shadow-sm flex flex-col">
+<div class="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+<span class="material-symbols-outlined text-[var(--primary-blue)] text-xl">router</span>
+<h2 class="text-sm font-semibold text-slate-700">Rede e Proxies</h2>
+</div>
+<div class="p-5 space-y-4 flex-grow">
+<div class="space-y-1.5">
+<label class="text-[12px] font-medium text-slate-500">Lista de Proxies <span class="font-normal text-slate-400">(um por linha — host:port:user:pass)</span></label>
+<textarea class="w-full border border-gray-200 bg-gray-50 rounded-md p-3 text-[12px] font-mono focus:ring-1 focus:ring-blue-300 outline-none resize-none" placeholder="127.0.0.1:8080:user:pass" rows="4"></textarea>
+</div>
+<div class="flex items-center gap-2 pt-1">
+<input class="w-4 h-4 text-[var(--primary-blue)] border-gray-300 rounded focus:ring-blue-400" id="enable-proxies" type="checkbox"/>
+<label class="text-[12px] text-slate-700 font-medium" for="enable-proxies">Ativar Proxies na Extração</label>
+</div>
+<div class="bg-red-50 border border-red-100 p-2.5 rounded-md flex items-center gap-2">
+<span class="material-symbols-outlined text-red-400 text-[18px]">cancel</span>
+<span class="text-[12px] text-red-700 font-medium">Status: Proxies desativados</span>
+</div>
+</div>
+</section>
+</div>
+<section class="bg-white rounded-lg border border-gray-200 shadow-sm">
+<div class="px-5 py-3 border-b border-gray-100 flex justify-between items-center">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[var(--primary-blue)] text-xl">translate</span>
+<h2 class="text-sm font-semibold text-slate-700">Prioridade de Idiomas</h2>
+</div>
+<button class="text-[12px] text-slate-500 flex items-center gap-1 hover:text-blue-500 font-medium">
+<span class="material-symbols-outlined !fill-none text-lg">refresh</span> Restaurar Padrão
+                </button>
+</div>
+<div class="p-5">
+<p class="text-[12px] text-slate-500 mb-4">Ordene os idiomas para fallback durante a extração.</p>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<div class="flex items-center gap-2 px-3 py-1.5 bg-[#f1f5f9] border border-slate-200 rounded-md text-[12px] font-medium text-slate-700">
+<span class="w-3 h-3 bg-emerald-500 rounded-sm"></span> Português
+                        </div>
+<div class="flex items-center gap-2 px-3 py-1.5 bg-[#f1f5f9] border border-slate-200 rounded-md text-[12px] font-medium text-slate-700">
+<span class="w-3 h-3 bg-emerald-500 rounded-sm"></span> Português-Brasil
+                        </div>
+<div class="flex items-center gap-2 px-3 py-1.5 bg-[#f1f5f9] border border-slate-200 rounded-md text-[12px] font-medium text-slate-700">
+<span class="w-3 h-3 bg-blue-500 rounded-sm"></span> Inglês
+                        </div>
+<div class="p-1 border border-slate-200 rounded-md text-slate-400 bg-white">
+<span class="material-symbols-outlined !fill-none text-lg">arrow_forward</span>
+</div>
+</div>
+<div class="flex border border-gray-200 rounded-md overflow-hidden bg-white shadow-sm">
+<button class="px-3 py-1.5 hover:bg-gray-50 border-r border-gray-100 flex items-center justify-center">
+<span class="material-symbols-outlined !fill-none text-[18px] text-slate-600">swap_vert</span>
+</button>
+<button class="px-3 py-1.5 hover:bg-gray-50 flex items-center justify-center">
+<span class="material-symbols-outlined !fill-none text-[18px] text-slate-600">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+<div class="bg-gray-200/50 border border-gray-300 rounded-md p-3 text-[12px] text-slate-600 flex items-center">
+<span class="font-bold mr-2">Status:</span> Proteção Ativa - Proxies Desativados - Nenhum Cookie
+        </div>
+</div>
+<div class="px-6 py-4 bg-[#f8f9fb] border-t border-gray-200 flex justify-end gap-3">
+<button class="px-10 py-2.5 text-[14px] font-medium text-slate-600 bg-[#e2e8f0] rounded-md hover:bg-slate-300 transition-colors">
+            Cancelar
+        </button>
+<button class="px-12 py-2.5 text-[14px] font-medium text-white bg-[var(--primary-blue)] rounded-md hover:bg-blue-600 transition-colors shadow-sm">
+            Salvar
+        </button>
+</div>
+</div>
+
+</body></html>

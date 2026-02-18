@@ -37,14 +37,14 @@ class AppWindow(wx.Frame):
     def _init_ui(self):
         # 1. Splitter Principal (Vertical: Sidebar | Workspace+Console)
         self.main_splitter = wx.SplitterWindow(self, style=wx.SP_BORDER | wx.SP_LIVE_UPDATE)
-        self.main_splitter.SetMinimumPaneSize(50) # [REVERSIBILIDADE v5.9]
+        self.main_splitter.SetMinimumPaneSize(50) 
         
         # 1.1 Sidebar (Esquerda)
         self.sidebar = Sidebar(self.main_splitter, self.on_sidebar_selection, app_state=self.app_state)
         
         # 1.2 Container da Área Direita (Splitter Horizontal: Notebook | Console)
         self.right_splitter = wx.SplitterWindow(self.main_splitter, style=wx.SP_BORDER | wx.SP_LIVE_UPDATE)
-        self.right_splitter.SetMinimumPaneSize(50) # [REVERSIBILIDADE v5.9]
+        self.right_splitter.SetMinimumPaneSize(50)
         
         # [QA4] Container para Notebook
         self.nb_container = wx.Panel(self.right_splitter)
