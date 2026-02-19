@@ -9,9 +9,37 @@ import time
 import requests
 import logging
 from typing import Optional, Dict, Any, Tuple, List
-from youtube_transcript_api import YouTubeTranscriptApi
 
 logger = logging.getLogger("contextflow.youtube")
+
+class DownloadCancelledException(Exception):
+    """Lançada para abortar imediatamente o processamento do yt-dlp."""
+    pass
+
+class InterruptibleLogger:
+    """
+    Logger sensor que lança exceção se detectar solicitação de cancelamento no AppState.
+    Dribla chamadas bloqueantes de rede do yt-dlp.
+    """
+    def __init__(self):
+        from core.app_state import AppState
+        self.app_state = AppState()
+
+    def debug(self, msg): 
+        self._check_cancel()
+            
+    def info(self, msg): 
+        self._check_cancel()
+
+    def warning(self, msg): 
+        self._check_cancel()
+
+    def error(self, msg): 
+        self._check_cancel()
+
+    def _check_cancel(self):
+        if self.app_state.is_cancel_requested():
+            raise DownloadCancelledException("Interrupção atômica solicitada pelo usuário.")
 
 class YouTubeManager:
     """
@@ -24,6 +52,10 @@ class YouTubeManager:
 
     def _progress_hook(self, d):
         """Hook para capturar progresso do yt-dlp."""
+        from core.app_state import AppState
+        if AppState().is_cancel_requested():
+            raise DownloadCancelledException("Interrupção atômica solicitada via Progresso.")
+
         if d['status'] == 'downloading':
             p = d.get('_percent_str', '0%').strip()
             # Limita publicação para evitar sobrecarga do barramento (max 2/sec)
@@ -73,6 +105,8 @@ class YouTubeManager:
             'no_warnings': True,
             'skip_download': True,
             'progress_hooks': [self._progress_hook],
+            'logger': InterruptibleLogger(),
+            'nocheckcertificate': True
         }
         if proxy:
             ydl_opts['proxy'] = proxy
@@ -103,6 +137,8 @@ class YouTubeManager:
                     'added_at': now_str,
                     'status': 'fetched'
                 }
+        except DownloadCancelledException:
+            raise
         except Exception as e:
             logger.error(f"Metadata extraction failed for {url}: {e}")
             video_id = self.extract_video_id(url)
@@ -126,6 +162,10 @@ class YouTubeManager:
         
         # 1. API - Tentativa Manual
         try:
+            from youtube_transcript_api import YouTubeTranscriptApi
+            if not YouTubeTranscriptApi:
+                raise ImportError("YouTubeTranscriptApi returned None")
+
             # [REGRESSÃO FIX] Injeção de Proxy para a Transcript API
             proxies_dict = {"http": proxy, "https": proxy} if proxy else None
             
@@ -178,6 +218,8 @@ class YouTubeManager:
             'subformat': 'json3',
             'quiet': True,
             'progress_hooks': [self._progress_hook],
+            'logger': InterruptibleLogger(),
+            'nocheckcertificate': True
         }
         if proxy:
             ydl_opts['proxy'] = proxy
@@ -212,6 +254,8 @@ class YouTubeManager:
                     resp = requests.get(target_url, headers=self.headers, proxies=proxies_dict)
                     if resp.status_code == 200:
                         return self._clean_downloaded_subs(resp.text), "fallback_ytdlp"
+        except DownloadCancelledException:
+            raise
         except Exception as e:
             logger.error(f"Fallback download failed for {video_id} with langs {langs}: {e}")
         return None, "failed"

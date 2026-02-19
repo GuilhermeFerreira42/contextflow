@@ -16,7 +16,7 @@ class DialogConfig(wx.Dialog):
     3 Abas: Extração, Conectividade IA, Orquestração.
     """
     def __init__(self, parent):
-        super().__init__(parent, title="Painel de Controle Operacional — ContextFlow", size=(700, 800), 
+        super().__init__(parent, title="Painel de Controle Operacional — ContextFlow", size=(800, 600), 
                          style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
         self.config = ConfigManager()
         self.cooldown_mgr = CooldownManager()
@@ -154,12 +154,56 @@ class DialogConfig(wx.Dialog):
         self.ai_inputs = {}
         for label, key in providers:
             grid.Add(wx.StaticText(panel, label=label), 0, wx.ALIGN_CENTER_VERTICAL)
+            
+            row_api = wx.BoxSizer(wx.HORIZONTAL)
             txt = wx.TextCtrl(panel, style=wx.TE_PASSWORD)
             txt.SetValue(self.config.get("api_keys", key, ""))
-            grid.Add(txt, 1, wx.EXPAND)
+            row_api.Add(txt, 1, wx.EXPAND)
+            
+            # Botão de Olho (Toggle Visibilidade)
+            btn_eye = wx.Button(panel, label="👁", size=(30, 24))
+            btn_eye.SetToolTip(f"Mostrar/Ocultar {label}")
+            row_api.Add(btn_eye, 0, wx.LEFT, 5)
+            
+            def on_toggle_visibility(event, b=btn_eye, k=key, sz=row_api):
+                # [WINDOWS STABILITY] Recreação atômica com Freeze para evitar blink
+                panel.Freeze()
+                try:
+                    current_t = self.ai_inputs[k]
+                    val = current_t.GetValue()
+                    is_pw = bool(current_t.GetWindowStyleFlag() & wx.TE_PASSWORD)
+                    new_style = wx.TE_LEFT if is_pw else wx.TE_PASSWORD
+                    
+                    # Cria novo mantendo proporções do Sizer
+                    new_t = wx.TextCtrl(panel, style=new_style)
+                    new_t.SetValue(val)
+                    
+                    # Swap físico no sizer
+                    sz.Replace(current_t, new_t)
+                    current_t.Destroy()
+                    
+                    self.ai_inputs[k] = new_t
+                    b.SetLabel("👁" if not is_pw else "👓")
+                    
+                    panel.Layout()
+                    new_t.SetFocus()
+                    new_t.SetInsertionPointEnd()
+                finally:
+                    panel.Thaw()
+                
+            btn_eye.Bind(wx.EVT_BUTTON, on_toggle_visibility)
+            
+            grid.Add(row_api, 1, wx.EXPAND)
             self.ai_inputs[key] = txt
             
         api_sizer.Add(grid, 1, wx.EXPAND | wx.ALL, 10)
+        
+        # Legenda de Segurança
+        lbl_sec = wx.StaticText(panel, label="* As chaves são armazenadas localmente em config/credentials.json.")
+        lbl_sec.SetFont(wx.Font(8, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_ITALIC, wx.FONTWEIGHT_NORMAL))
+        lbl_sec.SetForegroundColour(wx.Colour(100, 116, 139))
+        api_sizer.Add(lbl_sec, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+
         sizer.Add(api_sizer, 0, wx.EXPAND | wx.ALL, 15)
 
         # BLOCO: Ollama (Conectividade Local)
@@ -265,19 +309,13 @@ class DialogConfig(wx.Dialog):
         grid = wx.FlexGridSizer(rows=3, cols=4, vgap=10, hgap=10)
         
         # 1. Limite de Itens
-        grid.Add(wx.StaticText(parent, label="Limite de Itens na Fila:"), 0, wx.ALIGN_CENTER_VERTICAL)
+        grid.Add(wx.StaticText(parent, label="Aviso de Segurança (Fila):"), 0, wx.ALIGN_CENTER_VERTICAL)
         self.spin_q_limit = wx.SpinCtrl(parent, value="20", min=1, max=1000)
         self.spin_q_limit.SetValue(self.config.get("orchestration", "max_queue_warning", 20))
         grid.Add(self.spin_q_limit, 0, wx.ALIGN_CENTER_VERTICAL)
         
-        # 2. Limite de Erros (RESTAURADO)
-        grid.Add(wx.StaticText(parent, label="Limite de Falhas (429):"), 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 15)
-        self.spin_fail_limit = wx.SpinCtrl(parent, value="5", min=1, max=20)
-        self.spin_fail_limit.SetValue(self.config.get("extraction_defense", "errors_429_limit", 5))
-        grid.Add(self.spin_fail_limit, 0, wx.ALIGN_CENTER_VERTICAL)
-        
         # 3. Tempo de Espera (PRECISÃO SEGUNDOS)
-        grid.Add(wx.StaticText(parent, label="Tempo de Espera (seg):"), 0, wx.ALIGN_CENTER_VERTICAL)
+        grid.Add(wx.StaticText(parent, label="Intervalo de Espera (seg):"), 0, wx.ALIGN_CENTER_VERTICAL)
         self.spin_cooldown = wx.SpinCtrl(parent, value="3600", min=60, max=86400)
         self.spin_cooldown.SetValue(self.config.get("extraction_defense", "cooldown_secs", 3600))
         grid.Add(self.spin_cooldown, 0, wx.ALIGN_CENTER_VERTICAL)
@@ -291,13 +329,41 @@ class DialogConfig(wx.Dialog):
         else: self.choice_rotation.SetSelection(0)
         grid.Add(self.choice_rotation, 0, wx.ALIGN_CENTER_VERTICAL)
         
+        # 2. Limite de Erros (RESTAURADO)
+        grid.Add(wx.StaticText(parent, label="Limite de Tentativas Falhas:"), 0, wx.ALIGN_CENTER_VERTICAL)
+        self.spin_fail_limit = wx.SpinCtrl(parent, value="5", min=1, max=20)
+        self.spin_fail_limit.SetValue(self.config.get("extraction_defense", "errors_429_limit", 5))
+        grid.Add(self.spin_fail_limit, 0, wx.ALIGN_CENTER_VERTICAL)
+        
+        grid.AddSpacer(15)
+        grid.AddSpacer(15)
+
+        b_sizer.Add(grid, 0, wx.EXPAND | wx.ALL, 10)
+
+        # Legendas Explicativas (Mandato 5.12)
+        legend_font = wx.Font(8, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_ITALIC, wx.FONTWEIGHT_NORMAL)
+        
+        lbl_cool_desc = wx.StaticText(parent, label="* Intervalo de Espera: Tempo que o IP fica em 'molho' após exceder falhas.")
+        lbl_cool_desc.SetFont(legend_font)
+        lbl_cool_desc.SetForegroundColour(wx.Colour(100, 116, 139))
+        b_sizer.Add(lbl_cool_desc, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+
+        lbl_fail_desc = wx.StaticText(parent, label="* Limite de Tentativas Falhas: Quantidade de erros 429 permitidos antes do bloqueio.")
+        lbl_fail_desc.SetFont(legend_font)
+        lbl_fail_desc.SetForegroundColour(wx.Colour(100, 116, 139))
+        b_sizer.Add(lbl_fail_desc, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+
+        lbl_queue_desc = wx.StaticText(parent, label="* Aviso de Segurança (Fila): O sistema solicitará confirmação manual ao exceder este limite.")
+        lbl_queue_desc.SetFont(legend_font)
+        lbl_queue_desc.SetForegroundColour(wx.Colour(100, 116, 139))
+        b_sizer.Add(lbl_queue_desc, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+        
         # 5. Shield Toggle
         self.chk_protection = wx.CheckBox(parent, label="Habilitar Proteção Automática (Regra Alpha)")
         self.chk_protection.SetValue(self.config.get("orchestration", "auto_defense_enabled", True))
         self.chk_protection.SetFont(wx.Font(8, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
-        grid.Add(self.chk_protection, 0, wx.ALIGN_CENTER_VERTICAL | wx.TOP, 5)
+        b_sizer.Add(self.chk_protection, 0, wx.ALL, 10)
         
-        b_sizer.Add(grid, 1, wx.EXPAND | wx.ALL, 10)
         sizer.Add(b_sizer, 0, wx.EXPAND | wx.ALL, 15)
 
     def _block_b_cookies(self, parent, sizer):

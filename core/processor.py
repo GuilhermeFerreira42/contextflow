@@ -38,32 +38,81 @@ class Processor:
         self.thread = None
         self.yt_manager = YouTubeManager()
         self.config = ConfigManager()
+        self.local_semaphore = threading.Semaphore(1) # [BLINDAGEM 5.12] Trava rígida para Ollama
         
         # [QA4] Worker Pool controlado conforme Config
         max_workers = self.config.get("orchestration", "max_cloud_tasks", 2)
         self.executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="CF_ProcessorPool")
+        self._cancel_requested = False # Flag para interrupção imediata
         
         os.makedirs(THUMBNAILS_DIR, exist_ok=True)
         
-        # [SSOT] Reconexão Lógica: Inscreve o processador no barramento global
         PubSub.subscribe('REQUEST_BATCH_PROCESSING', self.add_urls)
         PubSub.subscribe('REQUEST_CANCEL_ALL', self.clear_queue)
+        PubSub.subscribe('CONFIRMED_MASSIVE_QUEUE', self._enqueue_buffer)
+        
+        self._massive_buffer = [] # Buffer temporário para confirmação UI
 
     def start_processing(self):
         if not self.active:
             self.active = True
+            
+            # [PHASE_5_12] Restauração de Fila persistente
+            if self.config.get("orchestration", "resume_tasks", True):
+                self._resume_interrupted_tasks()
+            
+            self._cancel_requested = False # Reset flag local
+            self.app_state.set_cancel_requested(False) # [PHASE_5_12] Reset Kill-Switch
             self.thread = threading.Thread(target=self._worker_loop, daemon=True)
             self.thread.start()
+            logger.info("Motor de Processamento ContextFlow ATIVADO.")
 
     def stop_processing(self):
         self.active = False
 
+    def _resume_interrupted_tasks(self):
+        """
+        [PHASE_5_12] Busca vídeos que ficaram 'presos' em processamento (ou pendentes) 
+        antes do desligamento e os devolve à fila.
+        """
+        all_videos = self.app_state.get_all_videos()
+        interrupted = [v for v in all_videos if v.get('status') in ['processing', 'downloading', 'queued']]
+        
+        if not interrupted: return
+        
+        logger.info(f"Retomando {len(interrupted)} tarefas interrompidas...")
+        for v in interrupted:
+            task = ProcessingTask(
+                url=v['url'],
+                uuid=v.get('uuid') or str(uuid.uuid4()),
+                playlist_id=v.get('playlist_id'),
+                playlist_title=v.get('playlist_title'),
+                title=v.get('title'),
+                video_id=v['id']
+            )
+            # Reverte status para 'queued' visualmente antes de entrar no worker
+            self.app_state.update_video_status(v['id'], 'queued')
+            self.task_queue.put(task)
+
     def add_urls(self, raw_text: str):
+        # [PHASE_5_12] Garante que novas solicitações limpem o sinal de cancelamento anterior
+        self._cancel_requested = False
+        self.app_state.set_cancel_requested(False)
         self.executor.submit(self._async_resolve_urls, raw_text)
 
     def clear_queue(self):
-        """[QA2 REFINE] Esvazia a fila de tarefas e limpa o AppState."""
-        logger.info("CANCEL ALL requested. Cleaning queue...")
+        """[QA2 REFINE] Esvazia a fila de tarefas e sinaliza cancelamento imediato."""
+        logger.info("CANCEL ALL requested. Cleaning queue and signaling cancel...")
+        self._cancel_requested = True # Flag local (Retrocompatibilidade)
+        self.app_state.set_cancel_requested(True) # [PHASE_5_12] Kill-Switch SSoT
+        
+        # [PHASE_5_12] UX Imediata: Atualiza UI para todas as tarefas em execução
+        active = self.app_state.get_active_downloads()
+        for t in active:
+            uid = t.get('uuid')
+            if uid:
+                self.app_state.update_active_task(uid, {'status': 'CANCELLED', 'error': 'Cancelado pelo usuário'})
+        
         while not self.task_queue.empty():
             try:
                 self.task_queue.get_nowait()
@@ -72,6 +121,7 @@ class Processor:
                 break
         
         self.app_state.clear_queued_tasks()
+        PubSub.publish('ALL_TASKS_STOPPED') # [PHASE_5_12] Força fechamento do gauge global
         logger.info("Queue cleared.")
 
     def validate_infrastructure(self) -> Dict[str, Any]:
@@ -86,26 +136,43 @@ class Processor:
 
     def _async_resolve_urls(self, raw_text: str):
         lines = [l.strip() for l in raw_text.split('\n') if l.strip()]
+        resolved_tasks = []
+        
         for line in lines:
+            if self.app_state.is_cancel_requested():
+                logger.info("URL resolution aborted due to global cancellation.")
+                return
+
             try:
                 if "list=" in line:
                     pl_info = self.yt_manager.get_playlist_info(line)
                     if pl_info and pl_info.get('videos'):
-                        pl_id = pl_info['id']
-                        pl_title = pl_info['title']
                         for vid_info in pl_info['videos']:
+                            if self.app_state.is_cancel_requested(): return
                             v_url = vid_info.get('url') or f"https://www.youtube.com/watch?v={vid_info['id']}"
-                            self._enqueue_video(v_url, pl_id, pl_title)
+                            resolved_tasks.append((v_url, pl_info['id'], pl_info['title']))
                 else:
                     if self.yt_manager.validate_url(line):
-                        self._enqueue_video(line)
-                    else:
-                        # [RESILIÊNCIA] Notifica erro de validação imediatamente
-                        logger.error(f"URL Inválida: {line}")
-                        PubSub.publish('TASK_ERROR', video_id="URL-VAL", error_msg=f"URL Inválida: {line}")
+                        resolved_tasks.append((line, None, None))
             except Exception as e:
                 logger.error(f"Erro ao resolver URL {line}: {e}")
-                PubSub.publish('TASK_ERROR', video_id="URL-RESOLVE", error_msg=str(e))
+
+        # [BLINDAGEM 5.12] Lógica de Fila (Aviso vs. Aborto)
+        max_warning = self.config.get("orchestration", "max_queue_warning", 20)
+        
+        if len(resolved_tasks) > max_warning:
+            self._massive_buffer = resolved_tasks
+            PubSub.publish('CONFIRM_MASSIVE_QUEUE', count=len(resolved_tasks))
+        else:
+            for task_data in resolved_tasks:
+                self._enqueue_video(*task_data)
+
+    def _enqueue_buffer(self):
+        """Callback após confirmação manual na UI."""
+        if self._massive_buffer:
+            for task_data in self._massive_buffer:
+                self._enqueue_video(*task_data)
+            self._massive_buffer = []
 
     def _enqueue_video(self, url: str, pl_id: str = None, pl_title: str = None):
         if self.yt_manager.validate_url(url):
@@ -158,6 +225,13 @@ class Processor:
             self.task_queue.task_done()
 
     def _process_task(self, task: ProcessingTask):
+        from services.youtube_manager import DownloadCancelledException
+        # [PHASE_5_12] Check cancel request immediate
+        if self.app_state.is_cancel_requested():
+            logger.info(f"Task {task.uuid} aborted due to user cancellation.")
+            self.app_state.update_active_task(task.uuid, {'status': 'CANCELLED', 'error': 'Cancelado pelo usuário'})
+            return
+
         from core.metrics import MetricsCollector
         from core.ai_governance import AIGovernance, TokenCounter
         from core.proxy_manager import ProxyManager
@@ -176,15 +250,12 @@ class Processor:
             return
 
         # [GOVERNANÇA v5.12] Limite dinâmico de fila via ConfigManager
-        max_warning = self.config.get("orchestration", "max_queue_warning", 20)
         auto_defense = self.config.get("orchestration", "auto_defense_enabled", True)
+        from core.proxy_manager import ProxyManager
+        proxy_mgr = ProxyManager()
 
-        if self.task_queue.qsize() > max_warning and auto_defense:
-            if not proxy_mgr.has_proxies():
-                logger.error(f"ALERTA DE SEGURANÇA: Fila > {max_warning} sem Proxies. Abortando para evitar bloqueio.")
-                self.app_state.update_active_task(task.uuid, {'status': 'ABORTED', 'error': 'Segurança: Requer Proxy para lotes grandes'})
-                PubSub.publish('TASK_ERROR', video_id="SECURITY", error_msg="Proxy necessário para lotes massivos")
-                return
+        if self.task_queue.qsize() > 50 and auto_defense and not proxy_mgr.has_proxies():
+             logger.warning("Fila crítica sem proxies. Risco de bloqueio IP aumentado.")
 
 
         # Record queue wait
@@ -203,7 +274,10 @@ class Processor:
             logger.info(f"Fetching metadata for {task.url}...")
             meta = self.yt_manager.get_video_metadata(task.url, proxy=active_proxy)
             
-            # 429 Detection (Contract Step 3.1)
+            if self.app_state.is_cancel_requested():
+                logger.info(f"Task {task.uuid} stopped after metadata fetch.")
+                self.app_state.update_active_task(task.uuid, {'status': 'CANCELLED'})
+                return
             if meta.get('status') == 'error' and '429' in meta.get('error_msg', ''):
                 if active_proxy: proxy_mgr.ban_proxy(active_proxy)
                 
@@ -262,11 +336,16 @@ class Processor:
                 raise Exception("Transcrição indisponível (Tente usar Cookies ou verifique se o vídeo possui legendas).")
             
             # --- AI STEP (Governance) ---
-            metrics.tracker.start('llm')
-            from constants import MODEL_NAME
-            token_count = TokenCounter.count_tokens(transcript, MODEL_NAME)
-            time.sleep(0.1) # Simulate
-            metrics.tracker.stop('llm')
+            # [BLINDAGEM 5.12] Trava de Hardware para Provedores Locais
+            is_local = self.config.get("orchestration", "active_provider", "openai") == "ollama"
+            
+            with (self.local_semaphore if is_local else threading.Lock()):
+                metrics.tracker.start('llm')
+                from constants import MODEL_NAME
+                token_count = TokenCounter.count_tokens(transcript, MODEL_NAME)
+                # Simulação ou Chamada Real aqui...
+                time.sleep(0.1) 
+                metrics.tracker.stop('llm')
 
             self.app_state.db_handler.save_transcript(task.video_id, transcript)
             
@@ -294,7 +373,16 @@ class Processor:
 
             PubSub.publish('TASK_COMPLETED', video_id=task.video_id, data_dict={'title': task.title})
 
+        except DownloadCancelledException:
+            logger.info(f"Task {task.uuid} suppressed error update due to atomic cancellation.")
+            self.app_state.update_active_task(task.uuid, {'status': 'CANCELLED'})
+            return
         except Exception as e:
+            if self.app_state.is_cancel_requested():
+                logger.info(f"Task {task.uuid} suppressed error update due to global cancellation.")
+                self.app_state.update_active_task(task.uuid, {'status': 'CANCELLED'})
+                return
+
             logger.error(f"Task failed: {e}")
             metrics.tracker.stop('fetch')
             metrics.tracker.stop('llm')
@@ -318,16 +406,6 @@ class Processor:
             gov_error_data.update(fail_metrics)
             gov.log_and_bill(task.video_id or "UNKNOWN", gov_error_data)
 
-            if task.video_id:
-                self.app_state.update_video_status(task.video_id, "ERROR")
-                PubSub.publish('TASK_ERROR', video_id=task.video_id, error_msg=str(e))
-                self.app_state.remove_active_task(task.uuid)
-            else:
-                self.app_state.update_active_task(task.uuid, {'status': 'error', 'error': str(e)})
-                PubSub.publish('TASK_ERROR', video_id="UNKNOWN", error_msg=str(e))
-
-        except Exception as e:
-            logger.error(f"Task failed: {e}")
             if task.video_id:
                 self.app_state.update_video_status(task.video_id, "ERROR")
                 PubSub.publish('TASK_ERROR', video_id=task.video_id, error_msg=str(e))

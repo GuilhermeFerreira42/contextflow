@@ -70,6 +70,12 @@ class ThumbnailRenderer(wx.grid.GridCellRenderer):
 
         table = grid.GetTable()
         if row >= len(table.data): return
+        
+        # [PERFORMANCE 5.12] Grade Dinâmica: Ignora miniaturas se desativado
+        if not table.config.get("ui", "dynamic_grid", True):
+            dc.SetTextForeground(wx.BLACK if not isSelected else wx.WHITE)
+            dc.DrawText("[IMG]", rect.x + 10, rect.y + (rect.height // 2 - 7))
+            return
 
         item = table.data[row]
         img_path = item.get('thumbnail_path')
@@ -185,6 +191,13 @@ class ChipTagRenderer(wx.grid.GridCellRenderer):
         table = grid.GetTable()
         if row >= len(table.data): return
         
+        # [PERFORMANCE 5.12] Grade Dinâmica: Ignora chips se desativado (renderiza texto)
+        if not table.config.get("ui", "dynamic_grid", True):
+            tags = table.data[row].get('tags', [])
+            dc.SetTextForeground(wx.BLACK if not isSelected else wx.WHITE)
+            dc.DrawText(", ".join(tags[:2]), rect.x + 5, rect.y + (rect.height // 2 - 7))
+            return
+
         tags = table.data[row].get('tags', [])
         if not tags: 
             # Placeholder se não houver tags
@@ -315,6 +328,8 @@ class VirtualVideoTable(wx.grid.GridTableBase):
     def __init__(self, data=None, col_labels=None):
         super().__init__()
         self.app_state = AppState()
+        from core.config_manager import ConfigManager
+        self.config = ConfigManager() # [PHASE_5_12]
         self.data = data or []
         self.selected_ids = set()
         

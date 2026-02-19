@@ -74,8 +74,10 @@ class AppWindow(wx.Frame):
         # Configuração dos Splitters
         self.right_splitter.SplitHorizontally(self.nb_container, self.panel_console, -150)
         self.right_splitter.SetSashGravity(1.0) # Console fixo na base
+        self.right_splitter.SetMinimumPaneSize(50)
         
         self.main_splitter.SplitVertically(self.sidebar, self.right_splitter, 250)
+        self.main_splitter.SetMinimumPaneSize(50)
         
         self._init_toolbar() # [QA2 REFINE] Toolbar superior para reversibilidade
         self.create_menubar()
@@ -110,6 +112,7 @@ class AppWindow(wx.Frame):
         # [QA3] Novos Sinais de Interatividade
         PubSub.subscribe('REQUEST_SIDEBAR_TOGGLE', self.on_sidebar_toggle_signal)
         PubSub.subscribe('REQUEST_VIEW_VIDEO', self.on_request_view_video)
+        PubSub.subscribe('CONFIRM_MASSIVE_QUEUE', self.on_confirm_massive)
         
         # [QA4] Sinais de Deleção e Sincronia [PHASE_5_11]
         PubSub.subscribe('VIDEOS_DELETED', self.on_videos_deleted)
@@ -192,6 +195,15 @@ class AppWindow(wx.Frame):
     def on_request_view_video(self, video_id):
         """[QA3] Handler para navegação imediata para Aba 3."""
         wx.CallAfter(self.on_sidebar_selection, video_id)
+
+    def on_confirm_massive(self, count):
+        """[BLINDAGEM 5.12] Diálogo de Confirmação Manual para Lotes Massivos."""
+        msg = f"Você está tentando adicionar {count} vídeos à fila.\n\n" \
+              "O processamento massivo sem proxies pode levar a bloqueios temporários de IP.\n" \
+              "Deseja prosseguir com a extração?"
+        
+        if wx.MessageBox(msg, "AVISO DE SEGURANÇA", wx.YES_NO | wx.ICON_WARNING | wx.STAY_ON_TOP) == wx.YES:
+            PubSub.publish('CONFIRMED_MASSIVE_QUEUE')
 
     def on_toggle_logs_toolbar(self, event):
         """Alterna visibilidade dos logs via toolbar."""

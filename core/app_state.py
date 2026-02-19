@@ -56,6 +56,7 @@ class AppState:
             self.executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="CF_CorePool")
             
             self.config = ConfigManager()
+            self._cancel_requested = False # [PHASE_5_12] Kill-switch global
             
             # Load initial state
             self._load_from_db()
@@ -331,3 +332,12 @@ class AppState:
             self.delete_videos(ids_to_remove)
             
         return ids_to_remove
+
+    def set_cancel_requested(self, requested: bool):
+        with self._lock:
+            self._cancel_requested = requested
+            logger.info(f"Cancel request set to: {requested}")
+
+    def is_cancel_requested(self) -> bool:
+        with self._lock:
+            return self._cancel_requested
