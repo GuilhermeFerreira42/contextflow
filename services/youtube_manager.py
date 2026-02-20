@@ -163,40 +163,41 @@ class YouTubeManager:
         
         # 1. API - Tentativa Manual
         try:
-            from youtube_transcript_api import YouTubeTranscriptApi
-            if not YouTubeTranscriptApi:
-                raise ImportError("YouTubeTranscriptApi returned None")
-
-            # [REGRESSÃO FIX] Injeção de Proxy para a Transcript API
-            proxies_dict = {"http": proxy, "https": proxy} if proxy else None
+            import youtube_transcript_api
+            api_class = getattr(youtube_transcript_api, 'YouTubeTranscriptApi', None)
             
-            # YouTubeTranscriptApi.list_transcripts aceita parâmetro proxies
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id, proxies=proxies_dict)
-            
-            if not transcript_list:
-                logger.warning(f"Transcrição não encontrada para {video_id} (Objeto Nulo).")
-                return None, "failed"
-            
-            # Tenta encontrar manual created em PT
-            try:
-                t = transcript_list.find_manually_created_transcript(['pt', 'pt-BR'])
-                return self._clean_text(" ".join([i['text'] for i in t.fetch()])), "api_manual_pt"
-            except:
-                pass
-
-            # Tenta manual EN
-            try:
-                 t = transcript_list.find_manually_created_transcript(['en'])
-                 return self._clean_text(" ".join([i['text'] for i in t.fetch()])), "api_manual_en"
-            except:
-                pass
+            if not api_class or not hasattr(api_class, 'list_transcripts'):
+                logger.warning("YouTubeTranscriptApi.list_transcripts não disponível nesta versão.")
+            else:
+                # [REGRESSÃO FIX] Injeção de Proxy para a Transcript API
+                proxies_dict = {"http": proxy, "https": proxy} if proxy else None
                 
-            # Fallback para generated PT
-            try:
-                t = transcript_list.find_generated_transcript(['pt', 'pt-BR'])
-                return self._clean_text(" ".join([i['text'] for i in t.fetch()])), "api_auto_pt"
-            except:
-                pass
+                # list_transcripts aceita parâmetro proxies
+                transcript_list = api_class.list_transcripts(video_id, proxies=proxies_dict)
+                
+                if not transcript_list:
+                    logger.warning(f"Objeto de transcrição nulo para {video_id}.")
+                else:
+                    # Tenta encontrar manual created em PT
+                    try:
+                        t = transcript_list.find_manually_created_transcript(['pt', 'pt-BR'])
+                        return self._clean_text(" ".join([i['text'] for i in t.fetch()])), "api_manual_pt"
+                    except:
+                        pass
+    
+                    # Tenta manual EN
+                    try:
+                         t = transcript_list.find_manually_created_transcript(['en'])
+                         return self._clean_text(" ".join([i['text'] for i in t.fetch()])), "api_manual_en"
+                    except:
+                        pass
+                        
+                    # Fallback para generated PT
+                    try:
+                        t = transcript_list.find_generated_transcript(['pt', 'pt-BR'])
+                        return self._clean_text(" ".join([i['text'] for i in t.fetch()])), "api_auto_pt"
+                    except:
+                        pass
                 
         except Exception as e:
             logger.warning(f"YouTubeTranscriptApi initial check failed: {e}")

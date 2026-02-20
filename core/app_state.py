@@ -174,6 +174,11 @@ class AppState:
         if not video_id: return
 
         with self._lock:
+            # [PHASE_5_12] Bloqueio de Mutação pós-cancelamento
+            # Impede que threads atrasadas recriem o item na grade se ele foi purgado.
+            if self._cancel_requested and video_data.get('status') != 'completed':
+                if video_id not in self._videos:
+                    return # Não re-adiciona se foi purgado
             # Merge with existing if present to preserve fields not passed
             existing = self._videos.get(video_id, {})
             merged = {**existing, **video_data}
@@ -208,6 +213,11 @@ class AppState:
         if not video_id: return
 
         with self._lock:
+            # [PHASE_5_12] Blindagem de Promoção Pós-Cancelamento
+            if self._cancel_requested and video_data.get('status') != 'completed':
+                # Se cancelado e não terminou, purga o rastro do UUID e ignora
+                if uuid_str in self._active_downloads: del self._active_downloads[uuid_str]
+                return
             # 1. Adiciona ao dicionário de vídeos persistentes
             existing = self._videos.get(video_id, {})
             merged = {**existing, **video_data}
@@ -238,6 +248,10 @@ class AppState:
                 self._cache_dirty = True
                 self._notify('TASK_UPDATED', uuid_str)
             else:
+                # [PHASE_5_12] Bloqueia re-criação se o cancelamento estiver ativo
+                # Isso impede as "linhas fantasmas" após o Purge.
+                if self._cancel_requested: return
+                
                 # Se não existe, cria (pode acontecer na inicialização de fila)
                 self._active_downloads[uuid_str] = updates
                 self._notify('TASK_ADDED', uuid_str)
