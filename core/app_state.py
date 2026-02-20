@@ -249,14 +249,24 @@ class AppState:
                 self._cache_dirty = True
                 self._notify('TASK_REMOVED', uuid_str)
 
-    def clear_queued_tasks(self):
-        """[QA2 REFINE] Remove todas as tarefas com status 'queued'."""
+    def purge_active_tasks(self):
+        """
+        [PHASE_5_12] Estratégia de Purga:
+        Remove todos os itens de _active_downloads e limpa de _videos o que não estiver 'completed'.
+        Garante que a grade exiba apenas o que foi concluído com sucesso pós-cancelamento.
+        """
         with self._lock:
-            to_delete = [uid for uid, task in self._active_downloads.items() if task.get('status') == 'queued']
-            for uid in to_delete:
-                del self._active_downloads[uid]
-            if to_delete: self._cache_dirty = True
+            # 1. Limpa downloads ativos (UUIDs)
+            self._active_downloads.clear()
+            
+            # 2. Limpa da memória vídeos que não terminaram (status != completed)
+            to_remove = [vid for vid, data in self._videos.items() if data.get('status') != 'completed']
+            for vid in to_remove:
+                del self._videos[vid]
+            
+            self._cache_dirty = True
         
+        logger.info("Purge complete: Active downloads cleared and non-completed videos removed from memory.")
         self._notify('TASKS_CLEARED')
 
     def delete_videos(self, ids: List[str]):

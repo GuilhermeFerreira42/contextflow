@@ -39,6 +39,7 @@ class InterruptibleLogger:
 
     def _check_cancel(self):
         if self.app_state.is_cancel_requested():
+            logger.info("Kill-Switch: Detecção de cancelamento via Logger.")
             raise DownloadCancelledException("Interrupção atômica solicitada pelo usuário.")
 
 class YouTubeManager:
@@ -171,6 +172,10 @@ class YouTubeManager:
             
             # YouTubeTranscriptApi.list_transcripts aceita parâmetro proxies
             transcript_list = YouTubeTranscriptApi.list_transcripts(video_id, proxies=proxies_dict)
+            
+            if not transcript_list:
+                logger.warning(f"Transcrição não encontrada para {video_id} (Objeto Nulo).")
+                return None, "failed"
             
             # Tenta encontrar manual created em PT
             try:

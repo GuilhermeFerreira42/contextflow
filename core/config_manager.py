@@ -41,6 +41,7 @@ class ConfigManager:
                 "anthropic": "",
                 "google": "",
                 "grok": "",
+                "groq": "",
                 "proxy_auth": ""
             },
             "ollama": {

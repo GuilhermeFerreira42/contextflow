@@ -127,6 +127,14 @@ class DialogConfig(wx.Dialog):
         # BLOCO D: Prioridade de Idiomas
         self._block_d_languages(panel, sizer)
 
+        # [PHASE_5_12] Botão de Cancelamento Operacional (Abortar Tudo)
+        btn_abort = wx.Button(panel, label="🛑 Cancelar Todos os Processamentos Ativos", size=(-1, 40))
+        btn_abort.SetBackgroundColour(wx.Colour(239, 68, 68)) # Red 500
+        btn_abort.SetForegroundColour(wx.WHITE)
+        btn_abort.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
+        btn_abort.Bind(wx.EVT_BUTTON, self.on_abort_all)
+        sizer.Add(btn_abort, 0, wx.EXPAND | wx.ALL, 15)
+
         panel.SetSizer(sizer)
         return panel
 
@@ -147,8 +155,8 @@ class DialogConfig(wx.Dialog):
         providers = [
             ("OpenAI API Key:", "openai"),
             ("Google Gemini:", "google"),
-            ("Anthropic API:", "anthropic"),
-            ("Grok (xAI):", "grok")
+            ("Grok (xAI):", "grok"),
+            ("GROQ API:", "groq")
         ]
         
         self.ai_inputs = {}
@@ -451,7 +459,7 @@ class DialogConfig(wx.Dialog):
         # Cookies
         from constants import COOKIES_PATH
         has_cookies = os.path.exists(COOKIES_PATH)
-        self.lbl_status_cookies.SetLabel(f"🍪 Cookies: {'Presentes' if has_cookies else 'Ausentes'}")
+        self.lbl_status_cookies.SetLabel(f"🍪 Cookies: {'OK' if has_cookies else 'Vazio'}")
         self.lbl_status_cookies.SetForegroundColour(wx.Colour(37, 99, 235) if has_cookies else wx.Colour(100, 116, 139))
 
     def on_move_up(self, event):
@@ -518,6 +526,14 @@ class DialogConfig(wx.Dialog):
         logger.info("Governança atualizada e sincronizada globalmente (Deep Saneamento).")
         self.EndModal(wx.ID_OK)
     
+    def on_abort_all(self, event):
+        """[PHASE_5_12] Cancela tudo via Processor."""
+        from core.processor import Processor
+        proc = Processor()
+        proc.clear_queue()
+        wx.MessageBox("Comando de purga enviado. Todos os itens não concluídos foram removidos.", 
+                      "Cancelamento Atômico", wx.OK | wx.ICON_INFORMATION)
+
     def __del__(self):
         if hasattr(self, 'timer') and self.timer.IsRunning():
             self.timer.Stop()

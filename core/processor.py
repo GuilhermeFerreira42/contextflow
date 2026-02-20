@@ -19,12 +19,14 @@ from constants import THUMBNAILS_DIR
 logger = logging.getLogger("contextflow.processor")
 
 class ProcessingTask:
-    def __init__(self, url: str, playlist_id: str = None, playlist_title: str = None):
-        self.uuid = str(uuid.uuid4())
+    def __init__(self, url: str, playlist_id: str = None, playlist_title: str = None, **kwargs):
+        # [FIX] Suporte a argumentos extras para restauração de fila (uuid, video_id, title)
+        # Evita TypeError: got an unexpected keyword argument 'uuid'
+        self.uuid = kwargs.get('uuid') or str(uuid.uuid4())
         self.url = url
         self.status = "pending"
-        self.video_id = None
-        self.title = "Aguardando..."
+        self.video_id = kwargs.get('video_id')
+        self.title = kwargs.get('title') or "Aguardando..."
         self.error_msg = ""
         self.playlist_id = playlist_id
         self.playlist_title = playlist_title
@@ -106,12 +108,9 @@ class Processor:
         self._cancel_requested = True # Flag local (Retrocompatibilidade)
         self.app_state.set_cancel_requested(True) # [PHASE_5_12] Kill-Switch SSoT
         
-        # [PHASE_5_12] UX Imediata: Atualiza UI para todas as tarefas em execução
-        active = self.app_state.get_active_downloads()
-        for t in active:
-            uid = t.get('uuid')
-            if uid:
-                self.app_state.update_active_task(uid, {'status': 'CANCELLED', 'error': 'Cancelado pelo usuário'})
+        # [PHASE_5_12] Purge Strategy: Remove todos os itens incompletos da UI
+        # Isso evita ruído visual e simplifica a re-entrada.
+        self.app_state.purge_active_tasks()
         
         while not self.task_queue.empty():
             try:
@@ -120,9 +119,8 @@ class Processor:
             except queue.Empty:
                 break
         
-        self.app_state.clear_queued_tasks()
         PubSub.publish('ALL_TASKS_STOPPED') # [PHASE_5_12] Força fechamento do gauge global
-        logger.info("Queue cleared.")
+        logger.info("Queue cleared and non-completed tasks purged.")
 
     def validate_infrastructure(self) -> Dict[str, Any]:
         """Verifica se as ferramentas e configs necessárias estão presentes."""
