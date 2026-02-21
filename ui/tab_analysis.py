@@ -445,23 +445,35 @@ class TabAnalysis(wx.Panel):
             self._refresh_grid()
 
     def on_export_batch(self, event):
-        """Dispara exportação para itens selecionados via ExportService."""
+        """Dispara exportação para itens selecionados via ExportService (Threaded)."""
         ids = list(self.table.selected_ids)
         if not ids:
             wx.MessageBox("Nenhum item selecionado para exportação.", "Aviso", wx.OK | wx.ICON_WARNING)
             return
             
-        # Reutiliza lógica de exportação (Poderia usar PubSub ou instanciar Service)
-        from services.export_service import ExportService
-        exp = ExportService(self.app_state)
-        
         with wx.FileDialog(self, "Exportar Selecionados (ZIP)", wildcard="ZIP files (*.zip)|*.zip",
                            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT) as fileDialog:
             if fileDialog.ShowModal() == wx.ID_CANCEL:
                 return
             path = fileDialog.GetPath()
-            exp.export_batch(ids, "zip", path)
-            wx.MessageBox("Exportação concluída!", "Sucesso", wx.OK)
+            
+            # [QA3] Exportação assíncrona para não travar a UI em lotes massivos
+            pd = wx.ProgressDialog("Exportando...", "Iniciando...", maximum=len(ids), parent=self, 
+                                   style=wx.PD_APP_MODAL | wx.PD_AUTO_HIDE)
+            
+            def update_progress(current, total, msg):
+                if pd:
+                    wx.CallAfter(pd.Update, current, msg)
+                    if current >= total:
+                        wx.CallAfter(wx.MessageBox, "Exportação concluída!", "Sucesso", wx.OK)
+            
+            from services.export_service import ExportService
+            exp = ExportService(self.app_state)
+            
+            import threading
+            t = threading.Thread(target=exp.export_batch, args=(ids, "zip", path, update_progress), daemon=True)
+            t.start()
+
 
     def on_cancel_all(self, event):
         """Dispara sinal de cancelamento global."""

@@ -282,25 +282,19 @@ class Sidebar(wx.Panel):
         def update_progress(current, total, msg):
             if pd:
                 try:
-                    pd.Update(current, msg)
+                    # [THREAD SAFETY] Progress update must be via wx.CallAfter if callback is from bg thread
+                    # sidebar.py calls this from a bg thread, so we ensure UI safety.
+                    wx.CallAfter(pd.Update, current, msg)
                     if current >= total:
-                        wx.MessageBox(f"Exportação salva em:\n{path}", "Sucesso")
+                        wx.CallAfter(wx.MessageBox, f"Exportação salva em:\n{path}", "Sucesso")
                 except:
                     pass
         
-        # Use Processor just to access run_export? 
-        # Ideally export logic should be in Service or AppState.
-        # But for now Processor has `export_batch`.
-        # Create a temp processor instance IS BAD for AppState?
-        # Processor __init__ creates new stuff.
-        # We should probably move export logic to AppState or dedicated service.
-        # But Processor needs to injected AppState.
-        
-        from core.processor import Processor
-        proc = Processor(app_state=self.app_state)
+        from services.export_service import ExportService
+        exp = ExportService(self.app_state)
         
         import threading
-        t = threading.Thread(target=proc.export_batch, args=(ids, fmt, path, update_progress), daemon=True)
+        t = threading.Thread(target=exp.export_batch, args=(ids, fmt, path, update_progress), daemon=True)
         t.start()
 
     def on_tree_selection(self, event):

@@ -287,8 +287,20 @@ class TabBatch(wx.Panel):
             if fileDialog.ShowModal() == wx.ID_CANCEL:
                 return
             path = fileDialog.GetPath()
-            self.export_service.export_batch([vid], "markdown_single", path)
-            wx.MessageBox("Arquivo exportado com sucesso!", "Sucesso", wx.OK)
+            
+            # [QA3] Exportação assíncrona mesmo para arquivo único (Consistência)
+            pd = wx.ProgressDialog("Exportando...", "Gravando arquivo...", maximum=1, parent=self, 
+                                   style=wx.PD_APP_MODAL | wx.PD_AUTO_HIDE)
+            
+            def update_progress(current, total, msg):
+                if pd:
+                    wx.CallAfter(pd.Update, current, msg)
+                    if current >= total:
+                        wx.CallAfter(wx.MessageBox, "Arquivo exportado com sucesso!", "Sucesso", wx.OK)
+            
+            import threading
+            t = threading.Thread(target=self.export_service.export_batch, args=([vid], "markdown_single", path, update_progress), daemon=True)
+            t.start()
 
     def on_key_down(self, event):
         """[PHASE_5_11] Atalhos: Espaço (Blue-to-Check) e Delete (Exclusão Massiva)."""
@@ -417,33 +429,54 @@ class TabBatch(wx.Panel):
             if fileDialog.ShowModal() == wx.ID_CANCEL:
                 return
             path = fileDialog.GetPath()
-            self.export_service.export_batch(ids, "markdown_single", path)
-            wx.MessageBox("Exportação concluída!", "Sucesso", wx.OK)
+            
+            pd = wx.ProgressDialog("Exportando...", "Gerando arquivo...", maximum=len(ids), parent=self, 
+                                   style=wx.PD_APP_MODAL | wx.PD_AUTO_HIDE)
+            
+            def update_progress(current, total, msg):
+                if pd:
+                    wx.CallAfter(pd.Update, current, msg)
+                    if current >= total:
+                        wx.CallAfter(wx.MessageBox, "Exportação concluída!", "Sucesso", wx.OK)
+            
+            import threading
+            t = threading.Thread(target=self.export_service.export_batch, args=(ids, "markdown_single", path, update_progress), daemon=True)
+            t.start()
 
     def on_download_md(self, event):
         ids = self._get_selected_ids()
         if not ids: return
         
-        # Para "Baixar como MD" (individual), vamos salvar em uma pasta
         with wx.DirDialog(self, "Selecione a pasta para exportação", style=wx.DD_DEFAULT_STYLE) as dirDialog:
             if dirDialog.ShowModal() == wx.ID_CANCEL:
                 return
             folder = dirDialog.GetPath()
             
-            # Reutiliza lógica de ZIP mas salvando em arquivos
-            # Ou melhor, adicionamos suporte no ExportService ou fazemos aqui
-            for vid in ids:
-                meta = self.app_state.get_video(vid)
-                if meta:
-                    from core.export_formatter import ExportFormatter
-                    t_data = self.app_state.db_handler.get_transcript(vid)
-                    full_text = t_data['full_text'] if t_data else ""
-                    md_content = ExportFormatter.format_video_markdown(meta, full_text)
-                    filename = f"{ExportFormatter.get_safe_filename(meta['title'])}.md"
-                    with open(os.path.join(folder, filename), 'w', encoding='utf-8') as f:
-                        f.write(md_content)
+            pd = wx.ProgressDialog("Exportando...", "Salvando arquivos...", maximum=len(ids), parent=self, 
+                                   style=wx.PD_APP_MODAL | wx.PD_AUTO_HIDE)
             
-            wx.MessageBox(f"Exportados {len(ids)} arquivos para {folder}", "Sucesso", wx.OK)
+            def worker():
+                total = len(ids)
+                for i, vid in enumerate(ids):
+                    meta = self.app_state.get_video(vid)
+                    if meta:
+                        msg = f"Salvando: {meta['title']}"
+                        wx.CallAfter(pd.Update, i, msg)
+                        
+                        from core.export_formatter import ExportFormatter
+                        t_data = self.app_state.db_handler.get_transcript(vid)
+                        full_text = t_data['full_text'] if t_data else ""
+                        md_content = ExportFormatter.format_video_markdown(meta, full_text)
+                        filename = f"{ExportFormatter.get_safe_filename(meta['title'])}.md"
+                        with open(os.path.join(folder, filename), 'w', encoding='utf-8') as f:
+                            f.write(md_content)
+                
+                wx.CallAfter(pd.Update, total, "Concluído!")
+                wx.CallAfter(wx.MessageBox, f"Exportados {len(ids)} arquivos para {folder}", "Sucesso", wx.OK)
+
+            import threading
+            t = threading.Thread(target=worker, daemon=True)
+            t.start()
 
     def on_export_zip(self, event):
         ids = self._get_selected_ids()
@@ -454,8 +487,19 @@ class TabBatch(wx.Panel):
             if fileDialog.ShowModal() == wx.ID_CANCEL:
                 return
             path = fileDialog.GetPath()
-            self.export_service.export_batch(ids, "zip", path)
-            wx.MessageBox("Arquivo ZIP gerado!", "Sucesso", wx.OK)
+            
+            pd = wx.ProgressDialog("Exportando...", "Gerando ZIP...", maximum=len(ids), parent=self, 
+                                   style=wx.PD_APP_MODAL | wx.PD_AUTO_HIDE)
+            
+            def update_progress(current, total, msg):
+                if pd:
+                    wx.CallAfter(pd.Update, current, msg)
+                    if current >= total:
+                        wx.CallAfter(wx.MessageBox, "Arquivo ZIP gerado!", "Sucesso", wx.OK)
+            
+            import threading
+            t = threading.Thread(target=self.export_service.export_batch, args=(ids, "zip", path, update_progress), daemon=True)
+            t.start()
 
     def on_cancel_all(self, event):
         """Dispara sinal de cancelamento global para o Processor e AppState."""
