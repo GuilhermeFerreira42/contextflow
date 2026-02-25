@@ -69,7 +69,7 @@ graph TD
 
 **Plano de Migração de Dados (Crítico)**
 1.  **SQLite Atomic Evolution:** No `DatabaseManager`, implementar verificação de versão. Executar `ALTER TABLE videos ADD COLUMN input_tokens INTEGER` e criar tabela `summaries` caso não existam.
-2.  **Credentials Migration:** Script para converter `credentials.json` do formato v32 para a nova estrutura de 7 provedores, preservando chaves de API existentes.
+2.  **Credentials Migration:** Script para converter `credentials.json` do formato codigo atual para a nova estrutura de 7 provedores, preservando chaves de API existentes.
 
 **Ordem Sequencial de Implementação**
 1.  **Core:** Implementar `AIFactory` e `TokenEngine` funcional (Zero-Knowledge).

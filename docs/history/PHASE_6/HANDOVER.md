@@ -4,8 +4,8 @@ Este documento de **Handover** serve como a instrução mestre e o nexo de conti
 
 # HANDOVER: TRANSIÇÃO PARA ESTAÇÃO ANALÍTICA (FASE 6)
 
-### 1. Status Atual e Fundação Saneada (v32)
-O sistema foi estabilizado utilizando a **Versão 32** do código como única **Fonte de Verdade (SSoT)**. A infraestrutura de extração está blindada contra vazamentos de layout e ambiguidades operacionais.
+### 1. Status Atual e Fundação Saneada (atual)
+O sistema foi estabilizado utilizando o código atual como única **Fonte de Verdade (SSoT)**. A infraestrutura de extração está blindada contra vazamentos de layout e ambiguidades operacionais.
 *   **Topologia de 3 Abas:** As abas 1 (Batch), 2 (Analysis) e 3 (Detail) estão fisicamente separadas sob o **Protocolo Zero-Knowledge**, proibindo qualquer importação mútua direta.
 *   **Motor de Virtualização:** A `VirtualVideoTable` suporta 10.000 itens com latência de célula < 0.1ms.
 *   **Resiliência de Rede:** Implementado o **Kill-Switch** de threads bloqueantes via `InterruptibleLogger` e suporte a cookies Netscape e rotação de proxies.
@@ -36,3 +36,38 @@ O objetivo é transformar transcrições em inteligência competitiva.
 ---
 
 **Veredito de Prontidão:** O sistema está fisicamente segregado e administrativamente blindado. A Fase 6 deve ser construída sobre esta fundação, focando no **desacoplamento via Factory** e na **resiliência da interface**.
+
+---
+
+Com base na análise técnica do codigo atual, confirmo que a fundação estrutural para a **Fase 6** e os saneamentos críticos da **Fase 5.12** já estão **implementados e funcionais**. O código atual não é apenas um esqueleto; ele já possui a lógica de governança e resiliência necessária.
+
+Aqui está a validação detalhada do que já consta no código:
+
+### 1. Governança de IA (O "Cofre")
+*   **Gestão de Custos e Tokens:** A classe `AIGovernance` está presente, integrando o `TokenCounter` (via `tiktoken`) e o `AICostCalculator`. O sistema já lê preços de `ai_prices.json`.
+*   **Cache Semântico:** O `AICacheManager` já implementa a geração de hash determinístico (SHA256) que inclui o **vídeo, o texto e o checksum do prompt**, garantindo que o cache seja invalidado se as instruções da IA mudarem.
+*   **Log de Auditoria:** O método `log_and_bill` já registra o uso na tabela `ai_usage_log`, capturando métricas de telemetria como tempo de espera, tempo de rede e processamento LLM.
+
+### 2. Infraestrutura de UI (Aba 2 - Cockpit)
+*   **Topologia de 3 Abas:** O `app_window.py` já instancia a `TabBatch` (Aba 1), `TabAnalysis` (Aba 2) e `DetailPanel` (Aba 3) de forma independente.
+*   **Grade Virtual com Renderizadores Ricos:** A `VirtualVideoTable` já possui os renderizadores customizados necessários para a visualização analítica:
+    *   `ThumbnailRenderer`: Para miniaturas 80x45.
+    *   `RichTitleRenderer`: Para hierarquia de título e canal.
+    *   `ChipTagRenderer`: Para exibir as tags como pílulas coloridas dinâmicas.
+    *   `LinkIconRenderer`: Para o ícone 🔗 clicável.
+
+### 3. Resiliência e "Kill-Switch"
+*   **Cancelamento Atômico:** O motor de processamento no `Processor` já utiliza a **Purge Strategy**, limpando a fila e removendo itens incompletos da UI via `purge_active_tasks` ao cancelar.
+*   **Interrupção de Rede:** O `InterruptibleLogger` no `youtube_manager.py` já monitora o sinal de cancelamento do `AppState` para interromper chamadas bloqueantes do `yt-dlp` imediatamente.
+
+### 4. Configurações e Governança de Hardware
+*   **Trava de Hardware (Ollama):** O `Processor` já implementa o `local_semaphore = threading.Semaphore(1)`, garantindo que apenas uma tarefa local rode por vez para proteger a CPU/GPU do usuário.
+*   **Consolidação de Credenciais:** O `DialogConfig` já possui os campos para chaves de API (OpenAI, Gemini, Anthropic, GROQ) com mascaramento e botão de "olho" (eye toggle).
+
+### O que ainda falta (Foco da Fase 6)
+Embora a fundação esteja pronta, o código atual ainda requer o desenvolvimento das seguintes "inteligências":
+*   **Factory de Provedores:** Implementar os adaptadores reais para Gemini, Anthropic e GROQ (atualmente o sistema está mais focado em OpenAI/tiktoken).
+*   **Streaming de Resumos:** O barramento `PubSub` está pronto, mas falta a lógica de receber a resposta da IA em "chunks" (fragmentos) e atualizar a UI incrementalmente.
+*   **Model Discovery:** Automatizar a busca de modelos do Ollama via API `/api/tags`.
+
+**Veredito:** O código atual é uma base **extremamente sólida**. Você pode iniciar a implementação da lógica analítica da Fase 6 sem medo de quebras estruturais básicas.
