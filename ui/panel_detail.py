@@ -3,14 +3,25 @@
 import wx
 import wx.html2
 import os
-from constants import THUMBNAILS_DIR
+import markdown
+from constants import THUMBNAILS_DIR, COLOR_ACCENT
+from core.pubsub import PubSub
+from core.app_state import AppState
 
 class DetailPanel(wx.Panel):
     def __init__(self, parent):
         super().__init__(parent)
+        self.app_state = AppState()
+        self.current_video_id = None
         self.SetBackgroundColour(wx.WHITE)
         self.SetForegroundColour(wx.Colour(40, 40, 40)) # COLOR_FG
         self._init_ui()
+        self._bind_events()
+
+    def _bind_events(self):
+        PubSub.subscribe('SUMMARY_STREAM', self.on_summary_stream)
+        PubSub.subscribe('SUMMARY_COMPLETED', self.on_summary_completed)
+        PubSub.subscribe('SUMMARY_STARTED', self.on_summary_started)
 
     def _init_ui(self):
         main_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -69,10 +80,11 @@ class DetailPanel(wx.Panel):
 
     def load_video(self, video_data: dict, transcript_text: str):
         # Update Meta
+        self.current_video_id = video_data.get('id')
         self.lbl_title.SetLabel(video_data.get('title', 'Unknown'))
         
         pl_title = video_data.get('playlist_title') or "Nenhuma"
-        meta_text = f"ID: {video_data.get('id')} | Playlist: {pl_title}\n"
+        meta_text = f"ID: {self.current_video_id} | Playlist: {pl_title}\n"
         meta_text += f"Upload: {video_data.get('upload_date')} | Duração: {video_data.get('duration')}s"
         self.lbl_meta.SetLabel(meta_text)
         
@@ -83,52 +95,71 @@ class DetailPanel(wx.Panel):
                 # Tenta carregar ignorando erros de log do wx que poluem o console
                 log_level = wx.Log.GetLogLevel()
                 wx.Log.SetLogLevel(0) # Silencia temporariamente
-                
                 img = wx.Image(thumb_path, wx.BITMAP_TYPE_ANY)
-                
                 wx.Log.SetLogLevel(log_level) # Restaura log
                 
                 if img.IsOk():
                     img = img.Scale(160, 90, wx.IMAGE_QUALITY_HIGH)
                     self.img_thumb.SetBitmap(wx.Bitmap(img))
                 else:
-                    print(f"Erro: Imagem inválida ou corrompida: {thumb_path}")
                     self.set_default_image()
-            except Exception as e:
-                print(f"Erro ao carregar thumbnail {thumb_path}: {e}")
+            except:
                 self.set_default_image()
         else:
             self.set_default_image()
 
-        # Update Content
-        # Formatando texto para HTML simples para leitura agradável (Light Mode)
-        if self.browser:
-            html_content = f"""
-            <html>
-            <head>
-                <style>
-                    body {{
-                        font-family: 'Segoe UI', sans-serif;
-                        line-height: 1.6;
-                        padding: 20px;
-                        background-color: white;
-                        color: #282828;
-                        margin: 0;
-                    }}
-                    h3 {{ color: #0078d7; border-bottom: 1px solid #eee; padding-bottom: 10px; }}
-                    p {{ white-space: pre-wrap; }}
-                </style>
-            </head>
-            <body>
-            <h3>Transcrição</h3>
-            <p>{transcript_text}</p>
-            </body>
-            </html>
-            """
-            self.browser.SetPage(html_content, "")
+        # [FASE 6] Prioridade: Resumo > Live Buffer > Transcrição
+        summary_text = video_data.get('summary_text') or self.app_state._live_analysis_buffer.get(self.current_video_id)
+        
+        if summary_text:
+            self._show_content("Resumo Inteligente", summary_text)
         else:
-            self.txt_content.SetValue(transcript_text)
+            self._show_content("Transcrição", transcript_text)
 
         # Update Stats
         t_count = video_data.get('token_count', 0)
-        self.lbl_stats.SetLabel(f"Tokens: {t_count} (Estimado)")
+        self.lbl_stats.SetLabel(f"Tokens: {t_count} (Estimado) | Saldo Sessão: ${self.app_state.get_session_budget():.2f}")
+
+    def _show_content(self, title, text):
+        if self.browser:
+            html_content = markdown.markdown(text, extensions=['extra', 'codehilite'])
+            styled_html = f"""
+            <html>
+            <head>
+                <style>
+                    body {{ font-family: 'Segoe UI', sans-serif; line-height: 1.6; padding: 20px; background-color: white; color: #282828; }}
+                    h3 {{ color: {COLOR_ACCENT.GetAsString(wx.C2S_HTML_SYNTAX)}; border-bottom: 1px solid #eee; padding-bottom: 10px; }}
+                </style>
+            </head>
+            <body>
+            <h3>{title}</h3>
+            <div>{html_content}</div>
+            </body>
+            </html>
+            """
+            self.browser.SetPage(styled_html, "")
+        else:
+            self.txt_content.SetValue(f"--- {title} ---\n\n{text}")
+
+    # --- Handlers de Streaming (Sincronia Tab 2 <-> Tab 3) ---
+    def on_summary_started(self, video_id):
+        if video_id == self.current_video_id:
+            wx.CallAfter(self._show_content, "Resumo Inteligente", "### ✨ Gerando resumo inteligente...")
+
+    def on_summary_stream(self, video_id, text):
+        if video_id == self.current_video_id:
+            wx.CallAfter(self._show_content, "Resumo Inteligente", text)
+
+    def on_summary_completed(self, video_id):
+        if video_id == self.current_video_id:
+            # Pega o vídeo atualizado do state para ter o resumo final processado
+            v_meta = self.app_state.get_video(video_id)
+            if v_meta:
+                wx.CallAfter(self.load_video, v_meta, "")
+
+    def Clear(self):
+        self.current_video_id = None
+        self.lbl_title.SetLabel("Selecione um vídeo")
+        self.lbl_meta.SetLabel("")
+        self.set_default_image()
+        self._show_content("", "")

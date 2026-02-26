@@ -399,6 +399,16 @@ class TabBatch(wx.Panel):
         
         wx.CallAfter(update)
 
+    def on_state_mutation(self, event_type, data=None):
+        if event_type in ['VIDEO_ADDED', 'VIDEO_UPDATED', 'TASK_COMPLETED', 'DATA_LOADED', 'VIDEOS_DELETED', 'VIDEO_PROMOTED', 'SELECTION_CHANGED']:
+            wx.CallAfter(self.on_data_signal)
+
+    def on_data_signal(self):
+        """Throttle refresh logic."""
+        if self.debounce_timer.IsRunning():
+            self.debounce_timer.Stop()
+        self.debounce_timer.Start(250, oneShot=True)
+
     def on_reset_safety(self, event):
         """Limpa o cooldown global para retomada de testes (PHASE_5_8_LOGICAL_SYNC)."""
         from core.cooldown_manager import CooldownManager

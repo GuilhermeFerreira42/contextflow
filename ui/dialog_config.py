@@ -149,14 +149,17 @@ class DialogConfig(wx.Dialog):
         sec_api.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
         api_sizer = wx.StaticBoxSizer(sec_api, wx.VERTICAL)
         
-        grid = wx.FlexGridSizer(rows=4, cols=2, vgap=10, hgap=10)
+        grid = wx.FlexGridSizer(rows=0, cols=2, vgap=10, hgap=10)
         grid.AddGrowableCol(1)
         
         providers = [
             ("OpenAI API Key:", "openai"),
-            ("Google Gemini:", "google"),
+            ("Anthropic API:", "anthropic"),
+            ("Google / Gemini:", "google"),
             ("Grok (xAI):", "grok"),
-            ("GROQ API:", "groq")
+            ("GROQ API:", "groq"),
+            ("Azure OpenAI:", "azure"),
+            ("OpenRouter:", "openrouter")
         ]
         
         self.ai_inputs = {}
@@ -174,25 +177,18 @@ class DialogConfig(wx.Dialog):
             row_api.Add(btn_eye, 0, wx.LEFT, 5)
             
             def on_toggle_visibility(event, b=btn_eye, k=key, sz=row_api):
-                # [WINDOWS STABILITY] Recreação atômica com Freeze para evitar blink
                 panel.Freeze()
                 try:
                     current_t = self.ai_inputs[k]
                     val = current_t.GetValue()
                     is_pw = bool(current_t.GetWindowStyleFlag() & wx.TE_PASSWORD)
                     new_style = wx.TE_LEFT if is_pw else wx.TE_PASSWORD
-                    
-                    # Cria novo mantendo proporções do Sizer
                     new_t = wx.TextCtrl(panel, style=new_style)
                     new_t.SetValue(val)
-                    
-                    # Swap físico no sizer
                     sz.Replace(current_t, new_t)
                     current_t.Destroy()
-                    
                     self.ai_inputs[k] = new_t
                     b.SetLabel("👁" if not is_pw else "👓")
-                    
                     panel.Layout()
                     new_t.SetFocus()
                     new_t.SetInsertionPointEnd()
@@ -200,7 +196,6 @@ class DialogConfig(wx.Dialog):
                     panel.Thaw()
                 
             btn_eye.Bind(wx.EVT_BUTTON, on_toggle_visibility)
-            
             grid.Add(row_api, 1, wx.EXPAND)
             self.ai_inputs[key] = txt
             
@@ -228,10 +223,31 @@ class DialogConfig(wx.Dialog):
         l_grid.Add(self.txt_ollama_url, 1, wx.EXPAND)
         
         l_grid.Add(wx.StaticText(panel, label="Model Name:"), 0, wx.ALIGN_CENTER_VERTICAL)
-        self.txt_ollama_model = wx.TextCtrl(panel)
-        self.txt_ollama_model.SetValue(self.config.get("ollama", "model", "llama3"))
-        l_grid.Add(self.txt_ollama_model, 1, wx.EXPAND)
+        row_model = wx.BoxSizer(wx.HORIZONTAL)
+        self.choice_ollama_model = wx.ComboBox(panel, style=wx.CB_DROPDOWN)
+        self.choice_ollama_model.SetValue(self.config.get("ollama", "model", "llama3"))
+        row_model.Add(self.choice_ollama_model, 1, wx.EXPAND)
         
+        btn_discover = wx.Button(panel, label="🔍 Buscar", size=(70, 24))
+        btn_discover.SetToolTip("Descobrir modelos instalados no Ollama")
+        row_model.Add(btn_discover, 0, wx.LEFT, 5)
+        l_grid.Add(row_model, 1, wx.EXPAND)
+        
+        def on_discover_ollama(event):
+            from core.adapters.ollama_adapter import OllamaAdapter
+            adapter = OllamaAdapter()
+            url = self.txt_ollama_url.GetValue()
+            models = adapter.get_available_models({"base_url": url})
+            if models:
+                current = self.choice_ollama_model.GetValue()
+                self.choice_ollama_model.SetItems(models)
+                if current in models: self.choice_ollama_model.SetValue(current)
+                elif models: self.choice_ollama_model.SetSelection(0)
+                wx.MessageBox(f"Encontrados {len(models)} modelos no Ollama.", "Descoberta OK", wx.OK | wx.ICON_INFORMATION)
+            else:
+                wx.MessageBox("Não foi possível conectar ao Ollama ou nenhum modelo encontrado.", "Falha de Descoberta", wx.OK | wx.ICON_ERROR)
+        
+        btn_discover.Bind(wx.EVT_BUTTON, on_discover_ollama)
         local_sizer.Add(l_grid, 1, wx.EXPAND | wx.ALL, 10)
         sizer.Add(local_sizer, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 15)
 
@@ -242,7 +258,7 @@ class DialogConfig(wx.Dialog):
         
         row = wx.BoxSizer(wx.HORIZONTAL)
         row.Add(wx.StaticText(panel, label="Provedor Padrão:"), 0, wx.ALIGN_CENTER_VERTICAL)
-        self.choice_provider = wx.Choice(panel, choices=["openai", "google", "anthropic", "grok", "ollama"])
+        self.choice_provider = wx.Choice(panel, choices=["openai", "google", "anthropic", "grok", "groq", "azure", "openrouter", "ollama"])
         current_provider = self.config.get("orchestration", "active_provider", "openai")
         idx = self.choice_provider.FindString(current_provider)
         if idx != wx.NOT_FOUND: self.choice_provider.SetSelection(idx)
@@ -510,7 +526,7 @@ class DialogConfig(wx.Dialog):
             self.config.set("api_keys", key, ctrl.GetValue()) # PERSISTÊNCIA DAS CHAVES
             
         self.config.set("ollama", "endpoint", self.txt_ollama_url.GetValue())
-        self.config.set("ollama", "model", self.txt_ollama_model.GetValue())
+        self.config.set("ollama", "model", self.choice_ollama_model.GetValue())
         self.config.set("orchestration", "active_provider", self.choice_provider.GetStringSelection())
         
         # ABA 3: ORQUESTRAÇÃO

@@ -42,6 +42,8 @@ class ConfigManager:
                 "google": "",
                 "grok": "",
                 "groq": "",
+                "azure": "",
+                "openrouter": "",
                 "proxy_auth": ""
             },
             "ollama": {

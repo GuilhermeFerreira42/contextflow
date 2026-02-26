@@ -58,8 +58,95 @@ class AppState:
             self.config = ConfigManager()
             self._cancel_requested = False # [PHASE_5_12] Kill-switch global
             
+            # [PHASE 6] Live Analysis Context
+            # Armazena o resumo parcial sendo gerado em tempo real.
+            self._live_analysis_buffer: Dict[str, str] = {} # video_id -> partial_text
+            self._session_budget = 5.0 # Saldo inicial da sessão (USD)
+            self._selected_ids = set() # [PHASE 6] Seleção Global Sincronizada
+            
             # Load initial state
             self._load_from_db()
+
+    def get_session_budget(self) -> float:
+        with self._lock:
+            return self._session_budget
+
+    def decrement_session_budget(self, amount: float):
+        with self._lock:
+            self._session_budget = max(0.0, self._session_budget - amount)
+        self._notify('BUDGET_UPDATED', self._session_budget)
+
+    # --- Global Selection Management (Phase 6) ---
+    def toggle_selection(self, video_id: str):
+        with self._lock:
+            if video_id in self._selected_ids:
+                self._selected_ids.remove(video_id)
+            else:
+                self._selected_ids.add(video_id)
+        self._notify('SELECTION_CHANGED', video_id)
+
+    def set_selection(self, video_id: str, selected: bool):
+        with self._lock:
+            if selected: self._selected_ids.add(video_id)
+            else: self._selected_ids.discard(video_id)
+        self._notify('SELECTION_CHANGED', video_id)
+
+    def is_selected(self, video_id: str) -> bool:
+        with self._lock:
+            return video_id in self._selected_ids
+            
+    def get_selected_ids(self) -> List[str]:
+        with self._lock:
+            return list(self._selected_ids)
+            
+    def clear_selection(self):
+        with self._lock:
+            self._selected_ids.clear()
+        self._notify('SELECTION_CHANGED', None)
+
+    def update_live_summary(self, video_id: str, partial_text: str):
+        """Atualiza o buffer de streaming em memória."""
+        with self._lock:
+            self._live_analysis_buffer[video_id] = partial_text
+        self._notify('SUMMARY_STREAM', {'video_id': video_id, 'text': partial_text})
+
+    def save_summary(self, video_id: str, summary_data: Dict[str, Any]):
+        """Persiste o resumo final no banco e limpa o buffer de live."""
+        with self._lock:
+            if video_id in self._live_analysis_buffer:
+                del self._live_analysis_buffer[video_id]
+        
+        # Callback para persistência no banco (summaries table criada na migração)
+        def _persist():
+            conn = self.db_handler._get_connection()
+            cursor = conn.cursor()
+            try:
+                cursor.execute('''
+                    INSERT INTO summaries (video_id, content, provider, model, input_tokens, output_tokens, prompt_hash)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(video_id) DO UPDATE SET
+                        content=excluded.content,
+                        provider=excluded.provider,
+                        model=excluded.model,
+                        input_tokens=excluded.input_tokens,
+                        output_tokens=excluded.output_tokens,
+                        prompt_hash=excluded.prompt_hash,
+                        created_at=CURRENT_TIMESTAMP
+                ''', (
+                    video_id,
+                    summary_data.get('content'),
+                    summary_data.get('provider'),
+                    summary_data.get('model'),
+                    summary_data.get('input_tokens', 0),
+                    summary_data.get('output_tokens', 0),
+                    summary_data.get('prompt_hash')
+                ))
+                conn.commit()
+            finally:
+                conn.close()
+        
+        self.executor.submit(_persist)
+        self._notify('SUMMARY_COMPLETED', {'video_id': video_id})
 
     def _load_from_db(self):
         """Loads all videos from DB into memory."""

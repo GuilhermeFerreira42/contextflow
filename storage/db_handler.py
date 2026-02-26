@@ -92,6 +92,21 @@ class DatabaseHandler:
             )
         ''')
         
+        # Tabela summaries (Fase 6 - Estação Analítica)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS summaries (
+                video_id TEXT PRIMARY KEY,
+                content TEXT,
+                provider TEXT,
+                model TEXT,
+                input_tokens INTEGER DEFAULT 0,
+                output_tokens INTEGER DEFAULT 0,
+                prompt_hash TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (video_id) REFERENCES videos(id)
+            )
+        ''')
+
         # Tabela system_config (Persistência de Estados e Configurações)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS system_config (
@@ -111,31 +126,44 @@ class DatabaseHandler:
         """
         Verifica se as novas colunas existem e as adiciona se necessário.
         [MANUTENÇÃO ZERO] 'Auto-Migrate' via PRAGMA table_info.
-        Evita a necessidade de ferramentas complexas (Alembic) para um app desktop simples.
         """
-
         conn = self._get_connection()
         cursor = conn.cursor()
         try:
+            # Check videos table
             cursor.execute("PRAGMA table_info(videos)")
-            columns = [info[1] for info in cursor.fetchall()]
+            v_columns = [info[1] for info in cursor.fetchall()]
             
-            if 'playlist_id' not in columns:
-                print("Migrando DB: Adicionando playlist_id...")
-                cursor.execute("ALTER TABLE videos ADD COLUMN playlist_id TEXT")
-                
-            if 'playlist_title' not in columns:
-                print("Migrando DB: Adicionando playlist_title...")
-                cursor.execute("ALTER TABLE videos ADD COLUMN playlist_title TEXT")
+            migrations = [
+                ('playlist_id', "ALTER TABLE videos ADD COLUMN playlist_id TEXT"),
+                ('playlist_title', "ALTER TABLE videos ADD COLUMN playlist_title TEXT"),
+                ('channel_name', "ALTER TABLE videos ADD COLUMN channel_name TEXT"),
+                ('added_at', "ALTER TABLE videos ADD COLUMN added_at TEXT"),
+            ]
+            
+            for col, sql in migrations:
+                if col not in v_columns:
+                    print(f"Migrando DB: {col}...")
+                    cursor.execute(sql)
+            
+            # [FASE 6] Garantir que a tabela summaries exista (se init falhou ou DB antigo)
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='summaries'")
+            if not cursor.fetchone():
+                print("Migrando DB: Criando tabela summaries...")
+                cursor.execute('''
+                    CREATE TABLE summaries (
+                        video_id TEXT PRIMARY KEY,
+                        content TEXT,
+                        provider TEXT,
+                        model TEXT,
+                        input_tokens INTEGER DEFAULT 0,
+                        output_tokens INTEGER DEFAULT 0,
+                        prompt_hash TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (video_id) REFERENCES videos(id)
+                    )
+                ''')
 
-            if 'channel_name' not in columns:
-                print("Migrando DB: Adicionando channel_name...")
-                cursor.execute("ALTER TABLE videos ADD COLUMN channel_name TEXT")
-
-            if 'added_at' not in columns:
-                print("Migrando DB: Adicionando added_at...")
-                cursor.execute("ALTER TABLE videos ADD COLUMN added_at TEXT")
-                
             conn.commit()
         except Exception as e:
             print(f"Erro na migração de DB: {e}")

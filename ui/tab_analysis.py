@@ -3,6 +3,13 @@ import wx
 import wx.grid
 import os
 import webbrowser
+import markdown
+try:
+    import wx.html2 as html
+    WEBVIEW_AVAILABLE = True
+except ImportError:
+    WEBVIEW_AVAILABLE = False
+
 from core.app_state import AppState
 from core.pubsub import PubSub
 from ui.virtual_table import VirtualVideoTable
@@ -32,11 +39,35 @@ class TabAnalysis(wx.Panel):
         self._init_ui()
         self._bind_events()
         
+        # [FASE 6] Subscrições de Streaming
+        PubSub.subscribe('SUMMARY_STREAM', self.on_summary_stream)
+        PubSub.subscribe('SUMMARY_COMPLETED', self.on_summary_completed)
+        PubSub.subscribe('SUMMARY_STARTED', self.on_summary_started)
+        
         # Registro como Observador
         self.app_state.register_observer(self.on_state_mutation)
         
+        # [FASE 6] Atualiza chip inicial
+        self._update_status_chip()
+        
         # Garante refresh inicial
         wx.CallAfter(self._refresh_grid)
+
+    def _update_status_chip(self):
+        """Atualiza o informativo de IA na toolbar."""
+        from core.config_manager import ConfigManager
+        config = ConfigManager()
+        provider = config.get("orchestration", "active_provider", "openai").upper()
+        
+        model_key = f"{provider.lower()}_model"
+        if provider.lower() == "ollama": model_key = "model"
+        
+        model = config.get("orchestration" if provider.lower() != "ollama" else "ollama", model_key, "default")
+        
+        self.lbl_status_chip.SetLabel(f"[ 🤖 {provider} | {model} ]")
+        self.lbl_status_chip.SetForegroundColour(COLOR_ACCENT)
+        self.pnl_status_chip.Layout()
+        self.toolbar.Layout()
 
     def _init_ui(self):
         main_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -48,7 +79,7 @@ class TabAnalysis(wx.Panel):
         tb_sizer = wx.BoxSizer(wx.HORIZONTAL)
         
         # Botões Placeholder (Esterilização Funcional v5.9)
-        btn_summarize = wx.Button(self.toolbar, label="✨ Batch Summarize")
+        btn_summarize = wx.Button(self.toolbar, label="✨ Resumo em Lote")
         btn_summarize.SetBackgroundColour(COLOR_ACCENT)
         btn_summarize.SetForegroundColour(wx.WHITE)
         btn_summarize.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
@@ -60,6 +91,18 @@ class TabAnalysis(wx.Panel):
         self.btn_cancel = wx.Button(self.toolbar, label="🛑 Cancelar")
         self.btn_cancel.SetForegroundColour(wx.Colour(200, 50, 50))
         
+        # [FASE 6] STATUS CHIP (Provedor/Modelo)
+        self.pnl_status_chip = wx.Panel(self.toolbar)
+        self.pnl_status_chip.SetBackgroundColour(wx.Colour(245, 245, 245))
+        chip_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        
+        self.lbl_status_chip = wx.StaticText(self.pnl_status_chip, label="[ 🤖 AGUARDANDO ]")
+        self.lbl_status_chip.SetFont(wx.Font(8, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
+        self.lbl_status_chip.SetForegroundColour(wx.Colour(100, 100, 100))
+        
+        chip_sizer.Add(self.lbl_status_chip, 1, wx.CENTER | wx.ALL, 5)
+        self.pnl_status_chip.SetSizer(chip_sizer)
+        
         self.search = wx.SearchCtrl(self.toolbar)
         self.search.SetDescriptiveText("Filtro rápido...")
         self.search.ShowCancelButton(True)
@@ -67,6 +110,7 @@ class TabAnalysis(wx.Panel):
         tb_sizer.Add(btn_summarize, 0, wx.CENTER | wx.LEFT, 10)
         tb_sizer.Add(self.btn_export, 0, wx.CENTER | wx.LEFT, 5)
         tb_sizer.Add(self.btn_cancel, 0, wx.CENTER | wx.LEFT, 5)
+        tb_sizer.Add(self.pnl_status_chip, 0, wx.CENTER | wx.LEFT, 15) # Chip central
         tb_sizer.AddStretchSpacer()
         tb_sizer.Add(self.search, 0, wx.CENTER | wx.RIGHT, 10)
         
@@ -143,14 +187,18 @@ class TabAnalysis(wx.Panel):
         side_sizer.Add(self.lbl_side_title, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.EXPAND, 10)
         self.pnl_side_info.SetSizer(side_sizer)
         
-        # Conteúdo Textual
-        self.txt_summary = wx.TextCtrl(self.pnl_detail, style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_RICH2 | wx.NO_BORDER)
-        self.txt_summary.SetBackgroundColour(COLOR_BG)
-        self.txt_summary.SetForegroundColour(COLOR_FG)
-        self.txt_summary.SetFont(wx.Font(10, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
+        # [FASE 6] Conteúdo Analítico (WebView + Fallback)
+        if WEBVIEW_AVAILABLE:
+            self.display = html.WebView.New(self.pnl_detail)
+        else:
+            self.display = wx.TextCtrl(self.pnl_detail, style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_RICH2 | wx.NO_BORDER)
+            self.display.SetFont(wx.Font(10, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
+        
+        self.display.SetBackgroundColour(COLOR_BG)
+        self.display.SetForegroundColour(COLOR_FG)
         
         detail_sizer.Add(self.pnl_side_info, 0, wx.EXPAND)
-        detail_sizer.Add(self.txt_summary, 1, wx.EXPAND | wx.ALL, 10)
+        detail_sizer.Add(self.display, 1, wx.EXPAND | wx.ALL, 10)
         self.pnl_detail.SetSizer(detail_sizer)
         
         # [SMART SHOW] Inicializa oculto (Mandato 5.9)
@@ -180,7 +228,7 @@ class TabAnalysis(wx.Panel):
         self.grid.Bind(wx.grid.EVT_GRID_CELL_LEFT_CLICK, self.on_grid_click)
 
     def on_state_mutation(self, event_type, data=None):
-        if event_type in ['VIDEO_ADDED', 'VIDEO_UPDATED', 'TASK_COMPLETED', 'DATA_LOADED', 'VIDEOS_DELETED', 'VIDEO_PROMOTED']:
+        if event_type in ['VIDEO_ADDED', 'VIDEO_UPDATED', 'TASK_COMPLETED', 'DATA_LOADED', 'VIDEOS_DELETED', 'VIDEO_PROMOTED', 'SELECTION_CHANGED']:
             wx.CallAfter(self.on_data_signal)
 
     def on_data_signal(self):
@@ -350,6 +398,17 @@ class TabAnalysis(wx.Panel):
         if label == "Link":
             url = self.table.data[row].get('url')
             if url: webbrowser.open(url)
+            
+        elif label == "Resumo":
+            item = self.table.data[row]
+            vid = item.get('id')
+            if not item.get('summary_text') and vid:
+                # [FASE 6] Trigger de Resumo IA
+                PubSub.publish('REQUEST_SUMMARY', video_id=vid)
+            else:
+                # Se já tem resumo, apenas expande e foca
+                self._load_row_details(row)
+                
         event.Skip()
 
     def on_select_video(self, event):
@@ -359,7 +418,6 @@ class TabAnalysis(wx.Panel):
 
     def _load_row_details(self, row):
         """[QA3] Lógica centralizada de carregamento de detalhes."""
-        # [QA3] Removida trava de row != last_selected_row para permitir reabertura imediata
         if row >= 0 and row < len(self.table.data):
             self.last_selected_row = row
             video_data = self.table.data[row]
@@ -367,15 +425,14 @@ class TabAnalysis(wx.Panel):
             
             # Atualiza UI de Detalhe
             self.lbl_side_title.SetLabel(video_data.get('title', 'Unknown'))
-            self.lbl_side_title.Wrap(320) # Re-wrap após mudar o texto
+            self.lbl_side_title.Wrap(320)
             
-            # Carrega Thumbnail se existir
+            # Carrega Thumbnail
             thumb_path = video_data.get('thumbnail_path')
             if thumb_path and os.path.exists(thumb_path):
                 try:
                     bmp = wx.Bitmap(thumb_path)
                     if bmp.IsOk():
-                        # Redimensiona para o static bitmap
                         img = bmp.ConvertToImage().Rescale(320, 180, wx.IMAGE_QUALITY_HIGH)
                         self.bmp_detail.SetBitmap(wx.Bitmap(img))
                 except:
@@ -383,23 +440,80 @@ class TabAnalysis(wx.Panel):
             else:
                 self.bmp_detail.SetBitmap(wx.NullBitmap)
 
-            # [LAZY LOADING] Resumo
-            t_data = self.app_state.db_handler.get_transcript(vid_id)
-            has_content = False
-            if t_data:
-                full_text = t_data.get('full_text', '')
-                if full_text:
-                    self.txt_summary.SetValue(full_text)
-                    has_content = True
+            # [FASE 6] Prioridade: Resumo real > Live Buffer > Transcrição
+            # Mas melhor usar o app_state
             
-            if not has_content:
-                self.txt_summary.SetValue("Nenhuma transcrição ou resumo disponível para este vídeo.")
+            summary_text = video_data.get('summary_text', '')
+            is_live = False
+            
+            if not summary_text:
+                summary_text = self.app_state._live_analysis_buffer.get(vid_id, '')
+                if summary_text: is_live = True
+            
+            display_content = ""
+            if summary_text:
+                display_content = summary_text
+            else:
+                t_data = self.app_state.db_handler.get_transcript(vid_id)
+                if t_data and t_data.get('full_text'):
+                    display_content = f"### Transcrição (Sem Resumo)\n\n" + t_data['full_text']
+                else:
+                    display_content = "Nenhuma transcrição ou resumo disponível para este vídeo."
 
-            # [SMART SHOW] Expansão Inteligente
-            # Se o vídeo tem resumo ou transcrição, mostramos o painel inferior
-            if has_content or video_data.get('has_summary'):
+            self._update_display(display_content)
+
+            # [SMART SHOW]
+            if display_content:
                 if not self.splitter.IsSplit():
-                    self.splitter.SplitHorizontally(self.pnl_master, self.pnl_detail, -300)
+                    self.splitter.SplitHorizontally(self.pnl_master, self.pnl_detail, -320)
+
+    def _update_display(self, text):
+        """Renderiza Markdown no WebView ou TextCtrl."""
+        if WEBVIEW_AVAILABLE:
+            html_content = markdown.markdown(text, extensions=['extra', 'codehilite'])
+            # Estilo Básico para o WebView (Light Mode)
+            styled_html = f"""
+            <html>
+            <head>
+                <style>
+                    body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica; line-height: 1.6; padding: 20px; color: #333; }}
+                    h1, h2, h3 {{ color: {COLOR_ACCENT.GetAsString(wx.C2S_HTML_SYNTAX)}; }}
+                    pre {{ background: #f4f4f4; padding: 10px; border-radius: 5px; overflow-x: auto; }}
+                </style>
+            </head>
+            <body>{html_content}</body>
+            </html>
+            """
+            self.display.SetPage(styled_html, "")
+        else:
+            self.display.SetValue(text)
+
+    # --- HANDLERS DE STREAMING (FASE 6) ---
+    def on_summary_started(self, video_id):
+        if video_id == self._get_current_vid():
+            # [SMART SHOW] Garante que o painel de detalhe esteja aberto
+            if not self.splitter.IsSplit():
+                self.splitter.SplitHorizontally(self.pnl_master, self.pnl_detail, -320)
+            wx.CallAfter(self._update_display, "### ✨ Gerando resumo inteligente...\n\nAguarde, o conteúdo está sendo processado.")
+
+    def on_summary_stream(self, video_id, text):
+        if video_id == self._get_current_vid():
+            # [SMART SHOW] Garante abertura mesmo se o sinal chegou antes da seleção física (consistência)
+            if not self.splitter.IsSplit():
+                self.splitter.SplitHorizontally(self.pnl_master, self.pnl_detail, -320)
+            wx.CallAfter(self._update_display, text)
+
+    def on_summary_completed(self, video_id):
+        # Refresh grid para mostrar o snippet e trocar o CTA pelo resumo
+        wx.CallAfter(self._refresh_grid)
+        if video_id == self._get_current_vid():
+            # [REGRA v6.1] Forçar reload final para garantir sincronia do buffer e BD
+            wx.CallAfter(self._load_row_details, self.last_selected_row)
+
+    def _get_current_vid(self):
+        if self.last_selected_row >= 0 and self.last_selected_row < len(self.table.data):
+            return self.table.data[self.last_selected_row].get('id')
+        return None
 
     def on_close_viewer(self, event):
         """[QA3] Fecha o visualizador e reseta seleção lógica."""
