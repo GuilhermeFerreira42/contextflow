@@ -47,27 +47,8 @@ class TabAnalysis(wx.Panel):
         # Registro como Observador
         self.app_state.register_observer(self.on_state_mutation)
         
-        # [FASE 6] Atualiza chip inicial
-        self._update_status_chip()
-        
         # Garante refresh inicial
         wx.CallAfter(self._refresh_grid)
-
-    def _update_status_chip(self):
-        """Atualiza o informativo de IA na toolbar."""
-        from core.config_manager import ConfigManager
-        config = ConfigManager()
-        provider = config.get("orchestration", "active_provider", "openai").upper()
-        
-        model_key = f"{provider.lower()}_model"
-        if provider.lower() == "ollama": model_key = "model"
-        
-        model = config.get("orchestration" if provider.lower() != "ollama" else "ollama", model_key, "default")
-        
-        self.lbl_status_chip.SetLabel(f"[ 🤖 {provider} | {model} ]")
-        self.lbl_status_chip.SetForegroundColour(COLOR_ACCENT)
-        self.pnl_status_chip.Layout()
-        self.toolbar.Layout()
 
     def _init_ui(self):
         main_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -91,17 +72,14 @@ class TabAnalysis(wx.Panel):
         self.btn_cancel = wx.Button(self.toolbar, label="🛑 Cancelar")
         self.btn_cancel.SetForegroundColour(wx.Colour(200, 50, 50))
         
-        # [FASE 6] STATUS CHIP (Provedor/Modelo)
-        self.pnl_status_chip = wx.Panel(self.toolbar)
-        self.pnl_status_chip.SetBackgroundColour(wx.Colour(245, 245, 245))
-        chip_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        # [FASE 6.1] MODO PRO (Triage Mode)
+        self.btn_triage = wx.ToggleButton(self.toolbar, label="👁️ Modo Pro")
+        self.btn_triage.SetValue(self.app_state.triage_mode)
+        self._update_triage_ui()
         
-        self.lbl_status_chip = wx.StaticText(self.pnl_status_chip, label="[ 🤖 AGUARDANDO ]")
-        self.lbl_status_chip.SetFont(wx.Font(8, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
-        self.lbl_status_chip.SetForegroundColour(wx.Colour(100, 100, 100))
-        
-        chip_sizer.Add(self.lbl_status_chip, 1, wx.CENTER | wx.ALL, 5)
-        self.pnl_status_chip.SetSizer(chip_sizer)
+        # [FASE 6.1] STATUS CHIP (Componente Compartilhado)
+        from ui.components.status_chip import StatusChip
+        self.status_chip = StatusChip(self.toolbar)
         
         self.search = wx.SearchCtrl(self.toolbar)
         self.search.SetDescriptiveText("Filtro rápido...")
@@ -110,7 +88,8 @@ class TabAnalysis(wx.Panel):
         tb_sizer.Add(btn_summarize, 0, wx.CENTER | wx.LEFT, 10)
         tb_sizer.Add(self.btn_export, 0, wx.CENTER | wx.LEFT, 5)
         tb_sizer.Add(self.btn_cancel, 0, wx.CENTER | wx.LEFT, 5)
-        tb_sizer.Add(self.pnl_status_chip, 0, wx.CENTER | wx.LEFT, 15) # Chip central
+        tb_sizer.Add(self.btn_triage, 0, wx.CENTER | wx.LEFT, 5)
+        tb_sizer.Add(self.status_chip, 0, wx.CENTER | wx.LEFT, 15) # Chip central
         tb_sizer.AddStretchSpacer()
         tb_sizer.Add(self.search, 0, wx.CENTER | wx.RIGHT, 10)
         
@@ -226,6 +205,7 @@ class TabAnalysis(wx.Panel):
         self.Bind(wx.EVT_TIMER, self.on_debounce_tick, self.debounce_timer)
         self.grid.GetGridWindow().Bind(wx.EVT_MOTION, self.on_grid_motion)
         self.grid.Bind(wx.grid.EVT_GRID_CELL_LEFT_CLICK, self.on_grid_click)
+        self.btn_triage.Bind(wx.EVT_TOGGLEBUTTON, self.on_toggle_triage)
 
     def on_state_mutation(self, event_type, data=None):
         if event_type in ['VIDEO_ADDED', 'VIDEO_UPDATED', 'TASK_COMPLETED', 'DATA_LOADED', 'VIDEOS_DELETED', 'VIDEO_PROMOTED', 'SELECTION_CHANGED']:
@@ -413,10 +393,13 @@ class TabAnalysis(wx.Panel):
 
     def on_select_video(self, event):
         row = event.GetRow()
-        self._load_row_details(row)
+        # [PHASE 6.1] MODO PRO: No "Modo Pro", navegação por setas não expande o painel
+        # a menos que ele já esteja aberto.
+        should_expand = not self.app_state.triage_mode or self.splitter.IsSplit()
+        self._load_row_details(row, expand=should_expand)
         event.Skip()
 
-    def _load_row_details(self, row):
+    def _load_row_details(self, row, expand=True):
         """[QA3] Lógica centralizada de carregamento de detalhes."""
         if row >= 0 and row < len(self.table.data):
             self.last_selected_row = row
@@ -463,7 +446,7 @@ class TabAnalysis(wx.Panel):
             self._update_display(display_content)
 
             # [SMART SHOW]
-            if display_content:
+            if display_content and expand:
                 if not self.splitter.IsSplit():
                     self.splitter.SplitHorizontally(self.pnl_master, self.pnl_detail, -320)
 
@@ -540,10 +523,28 @@ class TabAnalysis(wx.Panel):
                     self.table.SetValue(r, 0, new_val)
                 self.grid.ForceRefresh()
                 
+        elif key == wx.WXK_RETURN:
+            # [PHASE 6.1] Enter força expansão no Modo Pro
+            row = self.grid.GetGridCursorRow()
+            if row >= 0:
+                self._load_row_details(row, expand=True)
         elif key == wx.WXK_DELETE:
             self.on_delete_selected(None)
         else:
             event.Skip()
+
+    def on_toggle_triage(self, event):
+        self.app_state.triage_mode = self.btn_triage.GetValue()
+        self._update_triage_ui()
+
+    def _update_triage_ui(self):
+        if self.app_state.triage_mode:
+            self.btn_triage.SetLabel("⚡ Modo Pro")
+            self.btn_triage.SetBackgroundColour(wx.Colour(255, 240, 200)) # Golden hint
+        else:
+            self.btn_triage.SetLabel("👁️ Auto View")
+            self.btn_triage.SetBackgroundColour(wx.Colour(230, 230, 230))
+        self.toolbar.Layout()
 
     def on_delete_selected(self, event):
         """Implementação consistente de deleção massiva com confirmação segura."""

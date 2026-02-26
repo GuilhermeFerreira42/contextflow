@@ -16,19 +16,11 @@ class TokenCounter:
     @staticmethod
     def count_tokens(text: str, model: str = MODEL_NAME, provider: str = "openai") -> int:
         """
-        Conta tokens de forma agnóstica. 
-        [Fase 6] Se tiktoken falhar ou o provedor for local/gemini, utiliza heurística de fallback.
+        Conta tokens de forma agnóstica de alta precisão (Fase 6.1).
+        Utiliza o TokenEngine para carregar o encoder específico.
         """
-        if provider == "openai":
-            try:
-                encoding = tiktoken.encoding_for_model(model)
-                return len(encoding.encode(text))
-            except Exception:
-                pass
-        
-        # Heurística Universal (Fallback): 1 token ~ 4 caracteres
-        # Proporciona uma estimativa de custo conservadora e segura para o dashboard.
-        return len(text) // 4
+        from core.token_engine import TokenEngine
+        return TokenEngine().count_tokens(text, provider, model)
 
 class AICostCalculator:
     def __init__(self, prices_path: str = AI_PRICES_PATH):

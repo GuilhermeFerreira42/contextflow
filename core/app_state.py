@@ -64,8 +64,24 @@ class AppState:
             self._session_budget = 5.0 # Saldo inicial da sessão (USD)
             self._selected_ids = set() # [PHASE 6] Seleção Global Sincronizada
             
+            # [PHASE 6.1] Triage Mode (Boolean Safe)
+            raw_triage = self.config.get("ux_preferences", "triage_mode", False)
+            self._triage_mode = str(raw_triage).lower() == 'true' if isinstance(raw_triage, str) else bool(raw_triage)
+            
             # Load initial state
             self._load_from_db()
+
+    @property
+    def triage_mode(self) -> bool:
+        with self._lock:
+            return self._triage_mode
+
+    @triage_mode.setter
+    def triage_mode(self, value: bool):
+        with self._lock:
+            self._triage_mode = value
+            self.config.set("ux_preferences", "triage_mode", value)
+        self._notify('TRIAGE_MODE_CHANGED', value)
 
     def get_session_budget(self) -> float:
         with self._lock:

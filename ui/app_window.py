@@ -11,6 +11,7 @@ from ui.panel_detail import DetailPanel
 from ui.panel_console import ConsolePanel
 from ui.dialog_config import DialogConfig
 from ui.sidebar import Sidebar
+from ui.components.status_chip import StatusChip
 
 class AppWindow(wx.Frame):
     """
@@ -100,6 +101,10 @@ class AppWindow(wx.Frame):
         
         tsb = self.toolbar.AddTool(2000, "Sidebar", wx.ArtProvider.GetBitmap(wx.ART_LIST_VIEW, wx.ART_TOOLBAR))
         tlog = self.toolbar.AddTool(2001, "Logs", wx.ArtProvider.GetBitmap(wx.ART_REPORT_VIEW, wx.ART_TOOLBAR))
+        
+        # [FASE 6.1] Status Chip como Controle Global na Toolbar
+        self.status_chip = StatusChip(self.toolbar)
+        self.toolbar.AddControl(self.status_chip)
         
         self.toolbar.Realize()
 
