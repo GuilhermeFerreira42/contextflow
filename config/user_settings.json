@@ -4,7 +4,7 @@
     "dynamic_tags": true,
     "dynamic_grid": true,
     "col_analysis_width_0": 23,
-    "col_analysis_width_2": 92,
+    "col_analysis_width_2": 91,
     "col_analysis_width_3": 343,
     "col_analysis_width_5": 52,
     "col_analysis_width_6": 73,
@@ -14,7 +14,7 @@
     "col_analysis_width_13": 180
   },
   "ux_preferences": {
-    "triage_mode": false,
+    "triage_mode": true,
     "dynamic_tags": true,
     "undo_enabled": true
   }

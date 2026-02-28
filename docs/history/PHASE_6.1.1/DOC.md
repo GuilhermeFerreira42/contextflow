@@ -1,127 +1,336 @@
-# 1️⃣ PHASE_6_1_1_OVERVIEW.md
+# PHASE_6_1_1_FINAL_SPEC.md
 
-**Objetivo de Negócio**
-Consolidar a **soberania do Analista Solo** eliminando falhas impeditivas de usabilidade e governança identificadas na v36. O foco é garantir que o sistema seja efetivamente **LLM Agnóstico**, visualmente profissional em **Light Mode** absoluto e financeiramente transparente através de telemetria em tempo real.
-
-**Problema Resolvido**
-1.  **Bloqueio de Seleção:** O `StatusChip` não permite a escolha de modelos, impedindo o uso de múltiplos provedores.
-2.  **Inconsistência Cromática:** Presença de "Dark Mode residual" no visualizador de resumos, gerando fadiga visual.
-3.  **Cegueira de Governança:** Ausência de feedback imediato sobre o consumo de tokens e custo por vídeo.
-4.  **Fricção de Navegação:** Inatividade do comando de clique duplo para expansão do cockpit analítico.
-
-**Impacto Sistêmico**
-A interface atinge conformidade total com o **Design System Premium**, liberando os motores de inteligência para operação real e segura.
-
-**Escopo Fechado**
-*   **Inclui:**
-    *   **Seletor Interativo:** Menu popup agrupado por provedor com indicadores ✅/❌ baseados na validade das chaves de API.
-    *   **Sanitização Visual:** Conversão forçada de 100% do `SummaryPanel` para Light Mode (Branco/Cinza Escuro).
-    *   **Dashboard de Resumo:** Linha de telemetria visual (Modelo, Tokens, Custo Est.) integrada ao painel de detalhes.
-    *   **Interatividade Full:** Vínculo de evento `EVT_GRID_CELL_LEFT_DCLICK` à expansão inteligente.
-*   **Não Inclui:**
-    *   Busca Vetorial ou RAG (Postergado para Fase 7).
-
-**Riscos Estratégicos**
-*   **Latência de Menu:** Atraso na população do menu caso o handshake com o `ConfigManager` não seja assíncrono.
-
-**Critérios Objetivos de Conclusão**
-1.  Troca de LLM funcional via chip sem abrir diálogos modais.
-2.  Ausência de qualquer pixel escuro (#1E1E1E) no cockpit analítico.
-3.  Exibição correta de tokens/custo para cada resumo gerado.
+## Governança Financeira, Seleção LLM e Robustez Operacional — Especificação Definitiva
 
 ---
 
-# 2️⃣ PHASE_6_1_TECH_SPECS.md
+# 1. PRINCÍPIOS NÃO NEGOCIÁVEIS
 
-**Arquitetura Técnica**
-Implementação de um **Seletor Dinâmico de Contexto** (Context-Aware Selector) vinculado ao `ConfigManager` e aplicação de herança cromática forçada no `SummaryPanel`.
+1. Nenhuma chamada de IA ocorre sem verificação de orçamento.
+2. Nenhuma operação de IA deixa de ser registrada em armazenamento transacional.
+3. Nenhuma informação financeira exibida na UI pode divergir do ledger persistido.
+4. Nenhum componente pode definir cor diretamente.
+5. Nenhum fallback depende de decisão manual.
+6. Nenhum estado concorrente pode gerar inconsistência visual ou contábil.
 
-**Componentes Afetados**
-*   `ui/components/status_chip.py`: Expansão da lógica de menu com validação de credenciais.
-*   `ui/tab_analysis.py`: Saneamento de cores no `SummaryPanel` e integração de telemetria.
-*   `ui/virtual_table.py`: Mapeamento de eventos de clique duplo.
+---
 
-**Fluxo de Dados (Mermaid)**
-```mermaid
-graph TD
-    SC[StatusChip Click] -->|Request| CM[ConfigManager: list_models]
-    CM -->|Check Keys| CRED[credentials.json]
-    CRED -->|Status: ✅/❌| MENU[Generate Grouped PopupMenu]
-    MENU -->|Select Model| AS[AppState: set_active_model]
-    AS -->|PubSub| PROC[Processor: Apply AI Governance]
-    PROC -->|Update| TEL[UI: TelemetryStrip]
+# 2. ARQUITETURA FINANCEIRA DEFINITIVA
+
+## 2.1 Persistência Obrigatória: SQLite
+
+É proibido uso de JSON como ledger primário.
+
+### Banco: `billing.db`
+
+### Tabela: `billing_events`
+
+```sql
+CREATE TABLE billing_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL,
+    request_id TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    model_id TEXT NOT NULL,
+    tokens_prompt INTEGER NOT NULL,
+    tokens_completion INTEGER NOT NULL,
+    price_prompt_per_1k REAL NOT NULL,
+    price_completion_per_1k REAL NOT NULL,
+    price_version TEXT NOT NULL,
+    cost_usd REAL NOT NULL,
+    status TEXT NOT NULL, -- success | failed | fallback_success | blocked_budget
+    error_code TEXT,
+    latency_ms INTEGER
+);
+
+CREATE INDEX idx_timestamp ON billing_events(timestamp);
+CREATE INDEX idx_request_id ON billing_events(request_id);
+CREATE INDEX idx_provider_model ON billing_events(provider, model_id);
 ```
 
-**Requisitos Funcionais**
-*   **RF-01 (Seletor Inteligente):** O menu popup deve usar `AppendSeparator` entre provedores. Modelos sem API Key configurada devem ser marcados com ❌ e utilizar `item.Enable(False)`.
-*   **RF-02 (Light Mode Absoluto):** Aplicar explicitamente `SetBackgroundColour(wx.WHITE)` e `SetForegroundColour(COLOR_FG)` em todos os contêineres do `SummaryPanel` e do visualizador Markdown.
-*   **RF-03 (Expansão por DClick):** Mapear `EVT_GRID_CELL_LEFT_DCLICK` na grade para disparar a lógica de `SplitHorizontally`.
-*   **RF-04 (Dashboard de Telemetria):** Inserir no topo do `SummaryPanel` uma `TelemetryStrip` exibindo: `[ 🤖 Modelo | 🪙 Tokens | 💸 Custo Est. ]`.
-
-**Performance Esperada**
-*   População do menu de LLMs em **< 50ms**.
-*   Redução total de jitter visual durante a expansão por comando manual.
-
 ---
 
-# 3️⃣ PHASE_6_1_1_STRUCTURAL_STANDARDS.md
+# 3. COST ENGINE
 
-**Padrão de Persistência**
-*   A seleção de modelos via chip deve ser salva atomicamente em `user_settings.json`.
+## 3.1 Input Contratual
 
-**Gestão de Estado**
-*   Utilizar o barramento `PubSub` com os tópicos `MODEL_CHANGED` e `SUMMARY_READY` para sincronia entre o motor de IA e a telemetria visual.
-
-**Padrões Arquiteturais**
-*   **Factory Pattern:** Mantido para instanciar adaptadores de LLM conforme o provedor selecionado.
-*   **Event Handling:** Centralização de gatilhos de UI (Enter e DoubleClick) para evitar redundância na expansão do cockpit.
-
-**Regras de Modularização**
-*   **TelemetryStrip:** Deve ser um componente desacoplado em `ui/components/` para futura reutilização na Aba 3.
-*   **Cores Zero-Hardcode:** É proibido o uso de hexadecimais diretos; utilizar as constantes `COLOR_BG` e `COLOR_FG`.
-
-**Estratégia de Testes**
-*   **Mock Handshake:** Validar se o menu desabilita corretamente os provedores quando as chaves são removidas do JSON.
-
----
-
-# 4️⃣ PHASE_6_1_1_EXECUTION.md
-
-**Lista Exata de Arquivos Impactados**
-1.  `core/app_state.py`
-2.  `ui/components/status_chip.py`
-3.  `ui/tab_analysis.py`
-4.  `ui/virtual_table.py`
-5.  `ui/components/telemetry_strip.py` [NEW]
-
-**Ordem Sequencial de Implementação**
-1.  **Refatoração do Seletor:** No `status_chip.py`, implementar o loop de menu que consulta o `ConfigManager` para aplicar os ícones ✅/❌ e agrupar por provedor.
-2.  **Sanitização de Tema:** No `tab_analysis.py`, forçar a aplicação do tema claro no `SummaryPanel` e no componente de exibição Markdown.
-3.  **Vínculo de Evento:** Adicionar o bind de `EVT_GRID_CELL_LEFT_DCLICK` na `VirtualVideoTable` para expandir o painel de detalhes.
-4.  **Implementação de Telemetria:** Criar a classe `TelemetryStrip` e integrá-la ao topo do `SummaryPanel`.
-
-**Pseudocódigo do Seletor Inteligente**
 ```python
-def populate_menu(self):
-    menu = wx.Menu()
-    for provider in self.config.get_providers():
-        menu.AppendSeparator()
-        for model in provider.models:
-            status = "✅" if self.config.has_valid_key(provider) else "❌"
-            item = menu.Append(wx.ID_ANY, f"{status} {model.name}")
-            if status == "❌": item.Enable(False)
-    return menu
+@dataclass(frozen=True)
+class SummaryMeta:
+    request_id: str
+    provider: str
+    model_id: str
+    tokens_prompt: int
+    tokens_completion: int
+    latency_ms: int
 ```
 
-**Critérios de Aceite (Gherkin)**
-*   **Cenário:** Seleção de modelo com validação.
-    *   **Dado** que clico no StatusChip.
-    *   **Quando** vejo um modelo com o ícone ❌.
-    *   **Então** o item deve estar desabilitado para clique, prevenindo erros de API.
-*   **Cenário:** Expansão manual (Modo Pro).
-    *   **Dado** que o Modo Pro está ativo.
-    *   **Quando** eu dou um clique duplo em uma linha da grade.
-    *   **Então** o cockpit analítico deve expandir-se instantaneamente para mostrar o detalhe.
+Objeto imutável. Nenhuma mutação posterior é permitida.
 
 ---
-**Garantia de Não Superficialidade:** Esta documentação remove a ambiguidade visual da triagem massiva e blinda o sistema contra disparos acidentais de IA sem chaves de API, consolidando o ContextFlow como uma ferramenta industrial de elite.
+
+## 3.2 Cálculo Determinístico
+
+```
+cost_prompt = (tokens_prompt / 1000) * price_prompt_per_1k
+cost_completion = (tokens_completion / 1000) * price_completion_per_1k
+total_cost = round(cost_prompt + cost_completion, 8)
+```
+
+### Regras
+
+* Arredondamento fixo em 8 casas.
+* Preço capturado no momento da execução.
+* `price_version` = hash SHA256 do ai_prices.json.
+
+---
+
+# 4. BUDGET GUARD (CONTROLE PREVENTIVO)
+
+## 4.1 Configuração
+
+```json
+{
+  "daily_budget_usd": 5.00,
+  "hard_block": true
+}
+```
+
+---
+
+## 4.2 Regra de Bloqueio
+
+Antes da execução:
+
+```
+estimated_cost = estimate(meta)
+
+if (today_total + estimated_cost) > daily_budget:
+    status = "blocked_budget"
+    registrar no ledger
+    abortar execução
+```
+
+Sem exceção.
+
+---
+
+# 5. HEALTH CHECK E VALIDAÇÃO LLM
+
+## 5.1 Estados Formais
+
+* NOT_CONFIGURED
+* CONFIGURED
+* VALIDATING
+* VALIDATED
+* ERROR
+* RATE_LIMIT_COOLDOWN
+* FALLBACK_ACTIVE
+* BLOCKED_BUDGET
+
+---
+
+## 5.2 Política de Health Check
+
+* Executado apenas no primeiro uso.
+* TTL mínimo: 30 minutos.
+* Nunca executado em paralelo para o mesmo provider.
+* Erros 401/402 → ERROR.
+* Erros 429 → RATE_LIMIT_COOLDOWN com backoff exponencial.
+
+---
+
+# 6. FALLBACK AUTOMÁTICO
+
+## 6.1 Ordenação Obrigatória
+
+Modelos ordenados por:
+
+1. Menor custo médio por 1k tokens.
+2. Latência média histórica.
+3. Prioridade configurada manualmente.
+
+---
+
+## 6.2 Política
+
+Se erro 429 ou 5xx:
+
+1. Selecionar próximo modelo elegível.
+2. Registrar evento:
+
+   * status = fallback_success
+   * error_code original
+3. Atualizar TelemetryStrip com indicador de fallback.
+
+Sem sugestão manual.
+
+---
+
+# 7. TELEMETRY STRIP — CONTRATO DEFINITIVO
+
+## 7.1 Fonte Única de Verdade
+
+UI só consome:
+
+```python
+@dataclass(frozen=True)
+class TelemetrySnapshot:
+    request_id: str
+    model_id: str
+    cost_operation: float
+    cost_session_total: float
+    daily_budget: float
+    burn_rate_rolling_avg: float
+    fallback_used: bool
+```
+
+Proibido calcular valores na UI.
+
+---
+
+## 7.2 Burn Rate
+
+Cálculo:
+
+```
+rolling_avg = média móvel das últimas 20 operações
+burn_rate_diário = rolling_avg * média diária de execuções
+```
+
+Jamais exibir “estimado” sem modelo explícito.
+
+---
+
+# 8. THEME MANAGER — PADRÃO IRREVERSÍVEL
+
+## 8.1 Proibição Absoluta
+
+É proibido:
+
+* `wx.Colour(...)`
+* Hexadecimais diretos
+* SetBackgroundColour fora do ThemeManager
+
+---
+
+## 8.2 Interface
+
+```python
+class ThemeManager:
+
+    def panel_bg(self) -> wx.Colour
+    def text_main(self) -> wx.Colour
+    def accent(self) -> wx.Colour
+    def telemetry_bg(self) -> wx.Colour
+    def status_ok(self) -> wx.Colour
+    def status_err(self) -> wx.Colour
+    def get_markdown_css(self) -> str
+```
+
+---
+
+## 8.3 Aplicação Obrigatória
+
+Todos componentes devem receber ThemeManager via injeção de dependência.
+
+Sem instância global implícita.
+
+---
+
+# 9. CONCORRÊNCIA E CONSISTÊNCIA
+
+## 9.1 Request Correlation
+
+Toda requisição possui:
+
+```
+request_id = UUID4
+```
+
+Ledger, fallback, telemetria e resposta são vinculados exclusivamente por `request_id`.
+
+---
+
+## 9.2 Garantia de Ordem
+
+A UI só atualiza se:
+
+```
+snapshot.request_id == active_request_id
+```
+
+Previne mistura de modelo A com modelo B.
+
+---
+
+# 10. TESTES OBRIGATÓRIOS
+
+## 10.1 Stress de Ledger
+
+* 1.000 operações simuladas concorrentes.
+* Verificar ausência de deadlock.
+* Verificar consistência de soma total.
+
+---
+
+## 10.2 Teste de Corrupção
+
+Simular:
+
+* Interrupção durante commit.
+* Encerramento abrupto.
+* Banco parcialmente bloqueado.
+
+Sistema deve:
+
+* Recuperar automaticamente.
+* Não perder registros já commitados.
+
+---
+
+## 10.3 Teste de Budget
+
+* Definir orçamento mínimo.
+* Disparar requisição superior.
+* Confirmar bloqueio.
+* Confirmar registro `blocked_budget`.
+
+---
+
+# 11. ROTINA DE MANUTENÇÃO
+
+## 11.1 Compactação
+
+* Arquivar eventos > 90 dias.
+* Exportar para CSV.
+* Manter banco operacional leve.
+
+---
+
+# 12. CRITÉRIOS FINAIS DE ACEITE
+
+1. Nenhuma requisição sem registro.
+2. Nenhum custo exibido divergente do ledger.
+3. Nenhuma chamada executada acima do orçamento.
+4. Nenhum fallback manual.
+5. Nenhuma cor hardcoded.
+6. Nenhuma race condition reproduzível em teste.
+
+---
+
+# VEREDICTO FINAL
+
+Com:
+
+* Persistência transacional (SQLite),
+* Versionamento de preço,
+* Bloqueio preventivo,
+* Fallback determinístico,
+* Snapshot imutável,
+* Injeção formal de tema,
+* Testes de concorrência reais,
+
+A margem para dívida técnica estrutural na Fase 6.1.1 torna-se mínima e controlável.
+
+Qualquer implementação fora deste contrato reintroduz risco financeiro, inconsistência contábil e fragilidade arquitetural.
