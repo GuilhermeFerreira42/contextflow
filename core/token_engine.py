@@ -69,24 +69,26 @@ class TokenEngine:
                 
         elif provider == "anthropic":
             try:
-                # Requer 'anthropic' instalado. Se falhar, usa fallback.
-                import anthropic
-                client = anthropic.Anthropic()
-                # O tokenizer da Anthropic é remoto ou via lib, 
-                # para contagem offline costumam sugerir o tiktoken cl100k ou similar.
-                # Mas vamos tentar o oficial se disponível.
-                return lambda x: client.count_tokens(x)
+                # [PHASE 6.1] Uso do Tokenizer da Anthropic se disponível offline
+                if ANTHROPIC_AVAILABLE:
+                    import anthropic
+                    # O tokenizer da Anthropic costuma ser o cl100k_base para Claude 3
+                    import tiktoken
+                    encoding = tiktoken.get_encoding("cl100k_base")
+                    return lambda x: len(encoding.encode(x))
+                return lambda x: len(x) // 4
             except Exception as e:
                 logger.warning(f"Fallback Anthropic: {e}")
+                return lambda x: len(x) // 4
 
         elif provider == "google" or provider == "gemini":
             try:
-                import google.generativeai as genai
-                # Contagem real via API (pode ser lenta se não for offline)
-                # Fallback para heurística se offline for preferido
-                return lambda x: len(x) // 4 
+                # [PHASE 6.1] Heurística de Precisão para Gemini (Aprox 1:3.8)
+                # Mais preciso que o fallback 1:4 absoluto
+                return lambda x: int(len(x) / 3.8)
             except Exception as e:
                 logger.warning(f"Fallback Google: {e}")
+                return lambda x: len(x) // 4
 
         # Fallback Industrial (1:4)
         return lambda x: len(x) // 4

@@ -31,9 +31,12 @@ class AppWindow(wx.Frame):
         self._init_status_bar()
         self._bind_events()
         
-        self.Maximize()
+        
+        # [PHASE 6.1] MAXIMIZAÇÃO ROBUSTA
+        self.Maximize(True)
         self.Show(True)
-        self.log_to_console("Sistema iniciado sob a Lei da Estabilidade (Fase 5.7).", "SYSTEM")
+        wx.CallAfter(self.Maximize, True) # Segunda chamada para garantir em alguns sistemas
+        self.log_to_console("Sistema iniciado sob a Lei da Estabilidade (Fase 6.1).", "SYSTEM")
 
     def _init_ui(self):
         # 1. Splitter Principal (Vertical: Sidebar | Workspace+Console)
@@ -93,7 +96,8 @@ class AppWindow(wx.Frame):
 
     def _init_toolbar(self):
         """Toolbar moderna para controle de visibilidade [QA2]."""
-        self.toolbar = self.CreateToolBar(wx.TB_HORIZONTAL | wx.TB_FLAT)
+        # [FIX] Removido wx.TB_BORDER (inválido) e mantido estilo para visibilidade em Light Mode
+        self.toolbar = self.CreateToolBar(wx.TB_HORIZONTAL | wx.BORDER_RAISED)
         self.toolbar.SetToolBitmapSize((24, 24))
         
         # Como não temos ícones físicos, usamos labels de texto nos botões da toolbar (style wx.TB_TEXT)

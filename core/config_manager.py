@@ -28,7 +28,9 @@ class ConfigManager:
         with self._lock:
             # Caminho absoluto para evitar confusão em diferentes CWDs
             base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            self.config_path = os.path.join(base_dir, "config", "credentials.json")
+            self.config_dir = os.path.join(base_dir, "config")
+            self.config_path = os.path.join(self.config_dir, "credentials.json")
+            self.user_settings_path = os.path.join(self.config_dir, "user_settings.json")
             
             self._config = self._get_default_config()
             self._load()
@@ -78,21 +80,36 @@ class ConfigManager:
                 "color_tags": True,
                 "dynamic_tags": True,
                 "dynamic_grid": True
+            },
+            "ux_preferences": {
+                "triage_mode": False
             }
         }
 
     def _load(self):
+        # [PHASE 6.1] Carregar credenciais
         if os.path.exists(self.config_path):
             try:
                 with open(self.config_path, 'r', encoding='utf-8') as f:
                     loaded = json.load(f)
                     # Deep merge para garantir chaves novas em versões futuras
                     self._merge_config(self._config, loaded)
-                logger.info(f"Config carregada de {self.config_path}")
+                logger.info(f"Credentials carregadas de {self.config_path}")
             except Exception as e:
-                logger.error(f"Erro ao carregar config: {e}")
-        else:
-            logger.info("Config não encontrada. Usando padrões e criando arquivo.")
+                logger.error(f"Erro ao carregar credentials: {e}")
+        
+        # [PHASE 6.1] Carregar preferências do usuário
+        if os.path.exists(self.user_settings_path):
+            try:
+                with open(self.user_settings_path, 'r', encoding='utf-8') as f:
+                    loaded_user = json.load(f)
+                    self._merge_config(self._config, loaded_user)
+                logger.info(f"User settings carregadas de {self.user_settings_path}")
+            except Exception as e:
+                logger.error(f"Erro ao carregar user_settings: {e}")
+        
+        # Salva padrões se arquivo não existia
+        if not os.path.exists(self.config_path) or not os.path.exists(self.user_settings_path):
             self.save()
 
     def _merge_config(self, base, update):
@@ -103,17 +120,28 @@ class ConfigManager:
                 base[key] = value
 
     def save(self):
+        """Salva as configurações dividindo entre arquivos de Credenciais e Preferências [PHASE 6.1]."""
         with self._lock:
             try:
-                config_dir = os.path.dirname(self.config_path)
-                if not os.path.exists(config_dir):
-                    os.makedirs(config_dir)
+                if not os.path.exists(self.config_dir):
+                    os.makedirs(self.config_dir)
+                
+                # 1. Separar dados sensíveis (credentials.json)
+                credentials_sections = ["api_keys", "ollama", "orchestration", "extraction_defense", "inputs", "subtitles"]
+                creds_data = {k: self._config[k] for k in credentials_sections if k in self._config}
                 
                 with open(self.config_path, 'w', encoding='utf-8') as f:
-                    json.dump(self._config, f, indent=2, ensure_ascii=False)
-                # logger.debug("Config salva com sucesso.")
+                    json.dump(creds_data, f, indent=2, ensure_ascii=False)
+                
+                # 2. Separar preferências de UI/UX (user_settings.json)
+                user_sections = ["ui", "ux_preferences"]
+                user_data = {k: self._config[k] for k in user_sections if k in self._config}
+                
+                with open(self.user_settings_path, 'w', encoding='utf-8') as f:
+                    json.dump(user_data, f, indent=2, ensure_ascii=False)
+                    
             except Exception as e:
-                logger.error(f"Erro ao salvar config: {e}")
+                logger.error(f"Erro ao salvar configs divididas: {e}")
 
     def get(self, section, key=None, default=None):
         with self._lock:

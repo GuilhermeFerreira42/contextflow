@@ -48,6 +48,8 @@ class SafeTextRenderer(wx.grid.GridCellStringRenderer):
     """Renderer de texto padrão com Clipping Region obrigatória para evitar overflow."""
     def Draw(self, grid, attr, dc, rect, row, col, isSelected):
         dc.SetClippingRegion(rect)
+        # Força alinhamento central em todos os renderers de texto puro
+        attr.SetAlignment(wx.ALIGN_CENTER, wx.ALIGN_CENTER)
         super().Draw(grid, attr, dc, rect, row, col, isSelected)
         dc.DestroyClippingRegion()
     def Clone(self): return SafeTextRenderer()
@@ -160,10 +162,11 @@ class RichTitleRenderer(wx.grid.GridCellRenderer):
         dc.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
         dc.SetTextForeground(txt_color)
         
-        # Alinhamento vertical centralizado para o título único
+        # Alinhamento vertical e horizontal centralizado para o título único
         tw, th = dc.GetTextExtent(title)
+        x_pos = rect.x + (rect.width - tw) // 2
         y_pos = rect.y + (rect.height - th) // 2
-        dc.DrawText(title, rect.x + 5, y_pos)
+        dc.DrawText(title, x_pos, y_pos)
         
         dc.DestroyClippingRegion()
 
@@ -352,7 +355,11 @@ class SummaryRenderer(wx.grid.GridCellStringRenderer):
             dc.SetTextForeground(COLOR_FG if not isSelected else wx.WHITE)
             dc.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
             
-        dc.DrawText(val, rect.x + 5, rect.y + (rect.height // 2 - 7))
+        # Alinhamento Centralizado
+        tw, th = dc.GetTextExtent(val)
+        x_pos = rect.x + (rect.width - tw) // 2
+        y_pos = rect.y + (rect.height - th) // 2
+        dc.DrawText(val, x_pos, y_pos)
         dc.DestroyClippingRegion()
     
     def Clone(self): return SummaryRenderer()
@@ -516,6 +523,9 @@ class VirtualVideoTable(wx.grid.GridTableBase):
         # [SSOT v5.9] Forçar cores do Design System em todas as células
         attr.SetBackgroundColour(COLOR_BG)
         attr.SetTextColour(COLOR_FG)
+        
+        # [PHASE 6.1] ALINHAMENTO CENTRAL GLOBAL
+        attr.SetAlignment(wx.ALIGN_CENTER, wx.ALIGN_CENTER)
 
         # [REQUISITO ABA 2] Heurística de Identificação Analítica
         is_ana_tab = ("Preview" in self.col_labels)

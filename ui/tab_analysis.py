@@ -133,6 +133,14 @@ class TabAnalysis(wx.Panel):
         self.grid.SetColSize(12, 60)  # Status
         self.grid.SetColSize(13, 250) # Resumo
         
+        # [PHASE 6.1] CARREGAMENTO DE LARGURAS PERSISTIDAS
+        from core.config_manager import ConfigManager
+        cfg = ConfigManager()
+        for i in range(len(self.col_labels)):
+            saved_width = cfg.get("ui", f"col_analysis_width_{i}")
+            if saved_width:
+                self.grid.SetColSize(i, int(saved_width))
+        
         # [QA2 REFINE] Trava de Layout: Desabilita redimensionamento manual de linhas
         self.grid.DisableDragRowSize()
         
@@ -206,6 +214,7 @@ class TabAnalysis(wx.Panel):
         self.grid.GetGridWindow().Bind(wx.EVT_MOTION, self.on_grid_motion)
         self.grid.Bind(wx.grid.EVT_GRID_CELL_LEFT_CLICK, self.on_grid_click)
         self.btn_triage.Bind(wx.EVT_TOGGLEBUTTON, self.on_toggle_triage)
+        self.grid.Bind(wx.grid.EVT_GRID_COL_SIZE, self.on_col_size)
 
     def on_state_mutation(self, event_type, data=None):
         if event_type in ['VIDEO_ADDED', 'VIDEO_UPDATED', 'TASK_COMPLETED', 'DATA_LOADED', 'VIDEOS_DELETED', 'VIDEO_PROMOTED', 'SELECTION_CHANGED']:
@@ -595,3 +604,11 @@ class TabAnalysis(wx.Panel):
         if wx.MessageBox("Deseja cancelar todas as tarefas pendentes?", "Confirmação", wx.YES_NO | wx.ICON_QUESTION) == wx.YES:
             PubSub.publish('REQUEST_CANCEL_ALL')
             wx.MessageBox("Comando de cancelamento enviado.", "Info", wx.OK)
+
+    def on_col_size(self, event):
+        """Persiste a largura da coluna no ConfigManager [PHASE 6.1]."""
+        col = event.GetRowOrCol()
+        width = self.grid.GetColSize(col)
+        from core.config_manager import ConfigManager
+        ConfigManager().set("ui", f"col_analysis_width_{col}", width)
+        event.Skip()
