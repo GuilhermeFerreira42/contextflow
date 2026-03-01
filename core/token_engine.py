@@ -83,9 +83,20 @@ class TokenEngine:
 
         elif provider == "google" or provider == "gemini":
             try:
-                # [PHASE 6.1] Heurística de Precisão para Gemini (Aprox 1:3.8)
-                # Mais preciso que o fallback 1:4 absoluto
-                return lambda x: int(len(x) / 3.8)
+                # [AUDIT 4.1] Tokenização Nativa via SDK google.generativeai
+                if GEMINI_AVAILABLE:
+                    import google.generativeai as genai
+                    gemini_model = genai.GenerativeModel(model or "gemini-1.5-flash")
+                    def _gemini_count(text):
+                        try:
+                            result = gemini_model.count_tokens(text)
+                            return result.total_tokens
+                        except Exception:
+                            return int(len(text) / 3.8)  # Fallback heurístico
+                    return _gemini_count
+                else:
+                    # Fallback heurístico quando SDK não instalado
+                    return lambda x: int(len(x) / 3.8)
             except Exception as e:
                 logger.warning(f"Fallback Google: {e}")
                 return lambda x: len(x) // 4

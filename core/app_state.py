@@ -36,30 +36,31 @@ class AppState:
             self._initialized = True
             self.db_handler = DatabaseHandler()
             
+            # [FASE 6.1.1] Infraestrutura de Elite
+            from core.theme_manager import ThemeManager
+            from core.cost_ledger import CostLedger
+            self.theme_manager = ThemeManager()
+            self.cost_ledger = CostLedger()
+            
             # State Storage
-            # _videos: Dict mapping video_id (str) -> dict (full metadata)
             self._videos: Dict[str, Dict[str, Any]] = {} 
-            
-            # _active_downloads: Dict mapping UUID -> dict (temp task data)
-            # Used for items currently in queue/processing before they have a real ID or final state
-            # Or as a way to track progress of specific operations.
             self._active_downloads: Dict[str, Dict[str, Any]] = {}
-            
-            # Observers: List of callbacks (event_type, data)
             self._observers: List[Callable[[str, Any], None]] = []
             
             # [QA4] Cache de Snapshot para Performance 10k
             self._snapshot_cache: List[Dict[str, Any]] = []
             self._cache_dirty = True
             
-            # [QA4] Pool de Workers Centralizado para Persistência e Tarefas Leves
+            # [QA4] Pool de Workers Centralizado
             self.executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="CF_CorePool")
             
             self.config = ConfigManager()
+            # Preferências de Triage (Modo Pro)
+            self.triage_mode = self.config.get("ux_preferences", "triage_mode", False)
+            
             self._cancel_requested = False # [PHASE_5_12] Kill-switch global
             
             # [PHASE 6] Live Analysis Context
-            # Armazena o resumo parcial sendo gerado em tempo real.
             self._live_analysis_buffer: Dict[str, str] = {} # video_id -> partial_text
             self._session_budget = 5.0 # Saldo inicial da sessão (USD)
             self._selected_ids = set() # [PHASE 6] Seleção Global Sincronizada
