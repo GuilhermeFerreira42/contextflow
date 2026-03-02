@@ -1,116 +1,61 @@
+
 # contextflow/core/token_engine.py
-import logging
-import threading
-from typing import Optional, Callable
+import tiktoken
+from typing import Tuple, Dict, Any, Optional
 
-logger = logging.getLogger("contextflow.tokens")
-
-# [PHASE 6.1] Disponibilidade de Bibliotecas (Diagnóstico em main.py)
 try:
-    import tiktoken
+    TOKEN_ENCODER = tiktoken.encoding_for_model("gpt-4o")
     TIKTOKEN_AVAILABLE = True
+    MODEL_NAME = "gpt-4o"
+    CONTEXT_INFO = f"{MODEL_NAME} (Tokenização real)"
 except ImportError:
+    TOKEN_ENCODER = None
     TIKTOKEN_AVAILABLE = False
+    MODEL_NAME = "N/A"
+    CONTEXT_INFO = "gpt-4o (tiktoken AUSENTE, usando bytes/4 como FALLBACK)"
 
-try:
-    import anthropic
-    ANTHROPIC_AVAILABLE = True
-except ImportError:
-    ANTHROPIC_AVAILABLE = False
-
-try:
-    import google.generativeai
-    GEMINI_AVAILABLE = True
-except ImportError:
-    GEMINI_AVAILABLE = False
-
-class TokenEngine:
-    """
-    Motor de Tokenização de Alta Precisão (Phase 6.1).
-    Utiliza o Strategy Pattern para carregar encoders oficiais sob demanda (Lazy Loading).
-    """
-    _instance = None
-    _lock = threading.RLock()
+def count_tokens(text: str) -> Tuple[int, str]:
+    """Calcula o número de tokens para o texto fornecido."""
+    if not text: return 0, CONTEXT_INFO
     
-    def __new__(cls):
-        with cls._lock:
-            if cls._instance is None:
-                cls._instance = super(TokenEngine, cls).__new__(cls)
-                cls._instance._initialized = False
-            return cls._instance
+    try:
+        if TIKTOKEN_AVAILABLE and TOKEN_ENCODER:
+            tokens = TOKEN_ENCODER.encode(text)
+            return len(tokens), MODEL_NAME
+        else:
+            # Fallback
+            # [SEGURANÇA FINANCEIRA] Se tiktoken falhar, usamos uma estimativa conservadora (4 bytes/char).
+            # Garante que o sistema nunca opere 'às cegas' em custo, mesmo sem libs nativas.
+            byte_size = len(text.encode('utf-8'))
+            estimated_tokens = max(1, byte_size // 4)
 
-    def __init__(self):
-        if self._initialized: return
-        with self._lock:
-            self._encoders = {}
-            self._initialized = True
-
-    def get_encoder(self, provider: str, model: str) -> Callable[[str], int]:
-        """Retorna uma função que conta tokens para o provedor/modelo especificado."""
-        provider = provider.lower()
-        
-        with self._lock:
-            if provider in self._encoders:
-                return self._encoders[provider]
+            return estimated_tokens, CONTEXT_INFO
             
-            encoder = self._load_strategy(provider, model)
-            self._encoders[provider] = encoder
-            return encoder
+    except Exception:
+        byte_size = len(text.encode('utf-8'))
+        estimated_tokens = max(1, byte_size // 4)
+        return estimated_tokens, CONTEXT_INFO
 
-    def _load_strategy(self, provider: str, model: str) -> Callable[[str], int]:
-        """Lazy loading dos encoders oficiais."""
-        if provider == "openai":
-            try:
-                import tiktoken
-                encoding = tiktoken.encoding_for_model(model)
-                return lambda x: len(encoding.encode(x))
-            except Exception as e:
-                logger.error(f"Fallback OpenAI: {e}")
-                
-        elif provider == "anthropic":
-            try:
-                # [PHASE 6.1] Uso do Tokenizer da Anthropic se disponível offline
-                if ANTHROPIC_AVAILABLE:
-                    import anthropic
-                    # O tokenizer da Anthropic costuma ser o cl100k_base para Claude 3
-                    import tiktoken
-                    encoding = tiktoken.get_encoding("cl100k_base")
-                    return lambda x: len(encoding.encode(x))
-                return lambda x: len(x) // 4
-            except Exception as e:
-                logger.warning(f"Fallback Anthropic: {e}")
-                return lambda x: len(x) // 4
+def get_encoder_info() -> str:
+    return CONTEXT_INFO
 
-        elif provider == "google" or provider == "gemini":
-            try:
-                # [AUDIT 4.1] Tokenização Nativa via SDK google.generativeai
-                if GEMINI_AVAILABLE:
-                    import google.generativeai as genai
-                    gemini_model = genai.GenerativeModel(model or "gemini-1.5-flash")
-                    def _gemini_count(text):
-                        try:
-                            result = gemini_model.count_tokens(text)
-                            return result.total_tokens
-                        except Exception:
-                            return int(len(text) / 3.8)  # Fallback heurístico
-                    return _gemini_count
-                else:
-                    # Fallback heurístico quando SDK não instalado
-                    return lambda x: int(len(x) / 3.8)
-            except Exception as e:
-                logger.warning(f"Fallback Google: {e}")
-                return lambda x: len(x) // 4
-
-        # Fallback Industrial (1:4)
-        return lambda x: len(x) // 4
-
-    def count_tokens(self, text: str, provider: str = "openai", model: str = "gpt-4o-mini") -> int:
-        encoder = self.get_encoder(provider, model)
+def get_tokenization_details(text: str) -> Dict[str, Any]:
+    token_count, encoder_info = count_tokens(text)
+    byte_size = len(text.encode('utf-8'))
+    
+    details = {
+        'tokens': token_count,
+        'byte_size': byte_size,
+        'encoder_info': encoder_info,
+        'token_list': None
+    }
+    
+    if TIKTOKEN_AVAILABLE and TOKEN_ENCODER:
         try:
-            return encoder(text)
-        except:
-            return len(text) // 4
+            tokens = [TOKEN_ENCODER.decode_single_token_bytes(t).decode('utf-8', errors='ignore') 
+                      for t in TOKEN_ENCODER.encode(text)]
+            details['token_list'] = tokens
+        except Exception:
+            pass
 
-def count_tokens(text: str, provider: str = "openai", model: str = "gpt-4o-mini") -> int:
-    """Wrapper top-level para compatibilidade com legados da Phase 6."""
-    return TokenEngine().count_tokens(text, provider, model)
+    return details

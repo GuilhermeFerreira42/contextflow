@@ -48,8 +48,6 @@ class SafeTextRenderer(wx.grid.GridCellStringRenderer):
     """Renderer de texto padrão com Clipping Region obrigatória para evitar overflow."""
     def Draw(self, grid, attr, dc, rect, row, col, isSelected):
         dc.SetClippingRegion(rect)
-        # Força alinhamento central em todos os renderers de texto puro
-        attr.SetAlignment(wx.ALIGN_CENTER, wx.ALIGN_CENTER)
         super().Draw(grid, attr, dc, rect, row, col, isSelected)
         dc.DestroyClippingRegion()
     def Clone(self): return SafeTextRenderer()
@@ -162,11 +160,10 @@ class RichTitleRenderer(wx.grid.GridCellRenderer):
         dc.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
         dc.SetTextForeground(txt_color)
         
-        # Alinhamento vertical e horizontal centralizado para o título único
+        # Alinhamento vertical centralizado para o título único
         tw, th = dc.GetTextExtent(title)
-        x_pos = rect.x + (rect.width - tw) // 2
         y_pos = rect.y + (rect.height - th) // 2
-        dc.DrawText(title, x_pos, y_pos)
+        dc.DrawText(title, rect.x + 5, y_pos)
         
         dc.DestroyClippingRegion()
 
@@ -264,41 +261,30 @@ class BadgeStatusRenderer(wx.grid.GridCellRenderer):
             return
         
         status = str(table.data[row].get('status', '')).upper()
+        
+        color = wx.Colour(100, 100, 100)
+        if status in ['COMPLETED', 'SUCCESS', 'DONE']: color = wx.Colour(40, 167, 69)
+        elif status == 'ERROR': color = wx.Colour(220, 53, 69)
+        elif status in ['PROCESSING', 'DOWNLOADING', 'QUEUED']: color = COLOR_ACCENT
+        
+        dc.SetBrush(wx.Brush(color))
+        dc.SetPen(wx.Pen(wx.WHITE, 1))
+        
+        # Desenha Círculo à esquerda
+        circle_x = rect.x + 10
+        circle_y = rect.y + rect.height // 2
+        dc.DrawCircle(circle_x, circle_y, 4)
+        
+        # Desenha Texto à direita do círculo
         text = table.GetValue(row, col)
+        dc.SetTextForeground(wx.BLACK if not isSelected else wx.WHITE)
+        dc.SetFont(wx.Font(8, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
         
-        color = wx.Colour(100, 100, 100) # Gray
-        bg_chip = wx.Colour(240, 240, 240)
-        
-        if status in ['COMPLETED', 'SUCCESS', 'DONE']: 
-            color = wx.Colour(21, 128, 61) # Green 700
-            bg_chip = wx.Colour(220, 252, 231) # Green 100
-        elif status == 'ERROR': 
-            color = wx.Colour(185, 28, 28) # Red 700
-            bg_chip = wx.Colour(254, 226, 226) # Red 100
-        elif status in ['PROCESSING', 'DOWNLOADING', 'QUEUED']: 
-            color = wx.Colour(29, 78, 216) # Blue 700
-            bg_chip = wx.Colour(219, 234, 254) # Blue 100
-        
-        # [ESTÉTICA CHIP]
-        gc = wx.GraphicsContext.Create(dc)
-        if gc:
-            gc.SetBrush(wx.Brush(bg_chip))
-            gc.SetPen(wx.Pen(color, 1))
+        # Se for progresso, usamos cor de destaque
+        if "⏳" in text:
+            dc.SetTextForeground(COLOR_ACCENT if not isSelected else wx.WHITE)
             
-            # Calcula largura do chip baseado no texto
-            gc.SetFont(wx.Font(8, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD), color)
-            tw, th = dc.GetTextExtent(text)
-            chip_pad = 8
-            chip_h = 18
-            chip_w = tw + (chip_pad * 2)
-            
-            # Desenha Chip Centralizado
-            cx = rect.x + 5
-            cy = rect.y + (rect.height - chip_h) // 2
-            gc.DrawRoundedRectangle(cx, cy, chip_w, chip_h, 9)
-            
-            # Desenha Texto
-            gc.DrawText(text, cx + chip_pad, cy + (chip_h - th) // 2)
+        dc.DrawText(text, circle_x + 10, rect.y + (rect.height // 2 - 7))
         
         dc.DestroyClippingRegion()
 
@@ -332,38 +318,6 @@ class LinkIconRenderer(wx.grid.GridCellRenderer):
     def GetBestSize(self, grid, attr, dc, row, col): return wx.Size(40, 45)
     def Clone(self): return LinkIconRenderer()
 
-class SummaryRenderer(wx.grid.GridCellStringRenderer):
-    """Renderiza snippet de resumo ou CTA vibrante."""
-    def Draw(self, grid, attr, dc, rect, row, col, isSelected):
-        dc.SetClippingRegion(rect)
-        table = grid.GetTable()
-        item = table.data[row] if row < len(table.data) else {}
-        val = table.GetValue(row, col)
-        
-        # Limpa fundo
-        bg_color = grid.GetDefaultCellBackgroundColour() if not isSelected else grid.GetSelectionBackground()
-        dc.SetBrush(wx.Brush(bg_color))
-        dc.SetPen(wx.TRANSPARENT_PEN)
-        dc.DrawRectangle(rect)
-        
-        if not item.get('summary_text'):
-            # Estilo CTA
-            dc.SetTextForeground(COLOR_ACCENT if not isSelected else wx.WHITE)
-            dc.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_ITALIC, wx.FONTWEIGHT_NORMAL))
-        else:
-            # Estilo Snippet
-            dc.SetTextForeground(COLOR_FG if not isSelected else wx.WHITE)
-            dc.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
-            
-        # Alinhamento Centralizado
-        tw, th = dc.GetTextExtent(val)
-        x_pos = rect.x + (rect.width - tw) // 2
-        y_pos = rect.y + (rect.height - th) // 2
-        dc.DrawText(val, x_pos, y_pos)
-        dc.DestroyClippingRegion()
-    
-    def Clone(self): return SummaryRenderer()
-
 # --- MESA DE DADOS VIRTUALIZADA ---
 
 class VirtualVideoTable(wx.grid.GridTableBase):
@@ -377,14 +331,15 @@ class VirtualVideoTable(wx.grid.GridTableBase):
         from core.config_manager import ConfigManager
         self.config = ConfigManager() # [PHASE_5_12]
         self.data = data or []
+        self.selected_ids = set()
         
         # Colunas customizáveis (Aba 1 vs Aba 2)
         if col_labels:
             self.col_labels = col_labels
         else:
-            # Coluna [x] é OBRIGATORIAMENTE a Coluna 0 (Mandato Fase 6)
+            # Padrão Aba 1 (Doca de Carga)
             self.col_labels = [
-                " [x] ", " # ", "Link", "Título", "Canal", 
+                " # ", " [x] ", "Link", "Título", "Canal", 
                 "Publicado", "Adicionado", "Playlist", "Duração", 
                 "Tokens", "Status"
             ]
@@ -392,21 +347,6 @@ class VirtualVideoTable(wx.grid.GridTableBase):
         # [ESTADO DE ORDENAÇÃO]
         self.sort_col = -1
         self.sort_ascending = True
-
-    # [PHASE 6] Seleção Global (Proxy para AppState)
-    @property
-    def selected_ids(self):
-        return self.app_state.get_selected_ids()
-        
-    @selected_ids.setter
-    def selected_ids(self, ids):
-        if ids is None:
-            self.app_state.clear_selection()
-        else:
-            # Sincroniza o set externo com o AppState
-            self.app_state.clear_selection()
-            for vid in ids:
-                self.app_state.set_selection(vid, True)
 
     def UpdateData(self, new_data):
         if self.GetView():
@@ -444,8 +384,9 @@ class VirtualVideoTable(wx.grid.GridTableBase):
             
             if label == "#": return str(row + 1)
             if label == "[x]":
-                vid = item.get('id') or item.get('uuid')
-                selected = self.app_state.is_selected(vid)
+                vid = item.get('id')
+                uuid_val = item.get('uuid')
+                selected = (vid in self.selected_ids) or (uuid_val in self.selected_ids)
                 return "1" if selected else "0"
             
             # Aba 2 Columns Mapping
@@ -458,8 +399,8 @@ class VirtualVideoTable(wx.grid.GridTableBase):
                 'Playlist': 'playlist_title',
                 'Tokens': 'token_count',
                 'Status': 'status',
-                'Duração': 'duration',
-                'Resumo': 'summary_text'
+                'Duração': 'duration', # Fallback
+                'Resumo': 'transcript_snippet'
             }
             
             if label in mapping:
@@ -467,7 +408,8 @@ class VirtualVideoTable(wx.grid.GridTableBase):
                 
                 # [QA2 REFINE] Estabilidade de Células: Retorna '-' se vazio
                 if val is None or str(val).strip() == "":
-                    if label == 'Resumo': return "✨ Clique aqui para resumir"
+                    # Exceção para Resumo que tem CTA próprio
+                    if label == 'Resumo': return "Clique para Resumir..."
                     return "-"
                 
                 # [QA4] Formatação de Milhares para Tokens
@@ -477,10 +419,11 @@ class VirtualVideoTable(wx.grid.GridTableBase):
                         return f"{num:,}".replace(",", ".")
                     except:
                         return str(val)
+                    if label == 'Resumo': return "✨ Clique aqui para resumir"
+                    return "-"
 
                 if label == 'Resumo': 
-                    # Exibe snippet do resumo se existir
-                    return str(val).replace('\n', ' ')[:150]
+                    return str(val)[:100]
                 
                 # [QA2 REFINE] Formatação de Data: YYYYMMDD -> DD/MM/AAAA
                 if label == 'Publicado':
@@ -513,8 +456,10 @@ class VirtualVideoTable(wx.grid.GridTableBase):
         if label == "[x]" and row < len(self.data):
             item = self.data[row]
             vid = item.get('id') or item.get('uuid')
-            selected = value in ["1", "True", 1, True]
-            self.app_state.set_selection(vid, selected)
+            if value in ["1", "True", 1, True]:
+                if vid: self.selected_ids.add(vid)
+            else:
+                self.selected_ids.discard(vid)
 
     def GetAttr(self, row, col, kind):
         attr = wx.grid.GridCellAttr()
@@ -523,9 +468,6 @@ class VirtualVideoTable(wx.grid.GridTableBase):
         # [SSOT v5.9] Forçar cores do Design System em todas as células
         attr.SetBackgroundColour(COLOR_BG)
         attr.SetTextColour(COLOR_FG)
-        
-        # [PHASE 6.1] ALINHAMENTO CENTRAL GLOBAL
-        attr.SetAlignment(wx.ALIGN_CENTER, wx.ALIGN_CENTER)
 
         # [REQUISITO ABA 2] Heurística de Identificação Analítica
         is_ana_tab = ("Preview" in self.col_labels)
@@ -553,7 +495,9 @@ class VirtualVideoTable(wx.grid.GridTableBase):
             attr.SetRenderer(BadgeStatusRenderer())
             attr.SetReadOnly(True)
         elif label == "Resumo" and is_ana_tab:
-            attr.SetRenderer(SummaryRenderer())
+            item = self.data[row] if row < len(self.data) else {}
+            if not item.get('transcript_snippet'):
+                attr.SetTextColour(COLOR_ACCENT) # Azul para o CTA de resumir
             attr.SetReadOnly(True)
         else:
             attr.SetRenderer(SafeTextRenderer())

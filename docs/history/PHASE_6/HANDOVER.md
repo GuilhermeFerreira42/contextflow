@@ -71,30 +71,3 @@ Embora a fundação esteja pronta, o código atual ainda requer o desenvolviment
 *   **Model Discovery:** Automatizar a busca de modelos do Ollama via API `/api/tags`.
 
 **Veredito:** O código atual é uma base **extremamente sólida**. Você pode iniciar a implementação da lógica analítica da Fase 6 sem medo de quebras estruturais básicas.
-
----
-
-# 🛡️ DOCUMENTO DE OBSERVAÇÃO TÉCNICA (GUARDRAILS DA FASE 6)
-
-> **Atenção IA Executora:** Este documento sobrepõe-se a qualquer interpretação visual do mockup fornecido. O objetivo é integrar a inteligência sem quebrar a **Lei da Estabilidade** [3_ContextFlow...].
-
-### 1. Integridade da Grade Virtual (Aba 2)
-Apesar do mockup visual ser uma referência de layout, a implementação física **deve** incluir:
-*   **Coluna de Seleção `[x]`:** Deve ser obrigatoriamente a **Coluna 0**. Ela é o gatilho essencial para a função "Resumo em Lote" [Turno 27].
-*   **Badge Status Renderer:** A coluna "Status" não deve ser apenas texto. Deve utilizar o renderizador de **círculo colorido** (Verde para `COMPLETED`, Vermelho para `ERROR`, Azul para `PROCESSING`) para triagem visual rápida [Turno 27, 1279].
-*   **Interatividade CTA:** Em vídeos sem resumo, a célula deve exibir obrigatoriamente o texto azul clicável: **"✨ Clique aqui para resumir"** [Turno 26, 1292].
-
-### 2. Comportamento Reativo (Smart Show)
-O mockup mostra o visualizador expandido para fins de design, mas a regra de execução é:
-*   **Estado Inicial:** O `wx.SplitterWindow` da Aba 2 deve iniciar obrigatoriamente em modo **Unsplit (oculto)**.
-*   **Gatilho de Expansão:** O painel inferior só "brota" se o vídeo selecionado possuir conteúdo processado ou se o usuário clicar no CTA de resumo.
-
-### 3. Rodapé de Observabilidade Industrial
-O rodapé visual deve ser ignorado em favor da lógica implementada na Fase 5.12. Ele deve exibir em tempo real:
-*   **Status do Escudo:** (Ativo/Inativo com tempo de cooldown).
-*   **Contagem de Rede:** (Número de proxies válidos carregados).
-*   **Integridade de Cookies:** (Estado OK ou Vazio baseada no arquivo físico).
-
-### 4. Travas de Hardware Inegociáveis
-*   **Ollama (Local):** Independente de qualquer botão na UI, o backend deve manter a **trava rígida de 1 tarefa simultânea** via semáforo para proteger a CPU/GPU do usuário.
-*   **Protocolo Zero-Knowledge:** A Aba 2 é terminantemente proibida de importar classes da Aba 1. A sincronia deve ser 100% via `AppState` e `PubSub` [1223, Turno 18].

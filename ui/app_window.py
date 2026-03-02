@@ -11,11 +11,10 @@ from ui.panel_detail import DetailPanel
 from ui.panel_console import ConsolePanel
 from ui.dialog_config import DialogConfig
 from ui.sidebar import Sidebar
-from ui.components.status_chip import StatusChip
 
 class AppWindow(wx.Frame):
     """
-    MAESTRO DA TOPOLOGIA (Fase 5.7 + 6.1.1)
+    MAESTRO DA TOPOLOGIA (Fase 5.7)
     Integra as abas sob o protocolo [ZERO KNOWLEDGE].
     """
     def __init__(self, parent=None):
@@ -31,11 +30,9 @@ class AppWindow(wx.Frame):
         self._init_status_bar()
         self._bind_events()
         
-        # [PHASE 6.1] MAXIMIZAÇÃO ROBUSTA
-        self.Maximize(True)
+        self.Maximize()
         self.Show(True)
-        wx.CallAfter(self.Maximize, True) # Segunda chamada para garantir em alguns sistemas
-        self.log_to_console("Sistema iniciado sob a Lei da Estabilidade (Fase 6.1).", "SYSTEM")
+        self.log_to_console("Sistema iniciado sob a Lei da Estabilidade (Fase 5.7).", "SYSTEM")
 
     def _init_ui(self):
         # 1. Splitter Principal (Vertical: Sidebar | Workspace+Console)
@@ -89,40 +86,22 @@ class AppWindow(wx.Frame):
         """Implementa o Indicador Visual Global mandatário [2, 3]."""
         self.CreateStatusBar(3)
         self.SetStatusWidths([-1, 200, 150])
-        self.SetStatusText("Ready: SSoT Fase 6.1.1 Ativa", 0)
+        self.SetStatusText("Ready: SSoT Fase 5.7 Ativa", 0)
         self.SetStatusText("RAM: < 200MB (Alvo)", 1)
         self.SetStatusText("VIRTUALIZAÇÃO: OK", 2)
 
     def _init_toolbar(self):
-        """Toolbar moderna com ícones de ALTO CONTRASTE para Light Mode [QA2 + Audit 1.3]."""
-        self.toolbar = self.CreateToolBar(wx.TB_HORIZONTAL | wx.TB_TEXT | wx.BORDER_RAISED)
+        """Toolbar moderna para controle de visibilidade [QA2]."""
+        self.toolbar = self.CreateToolBar(wx.TB_HORIZONTAL | wx.TB_FLAT)
         self.toolbar.SetToolBitmapSize((24, 24))
         
-        # [AUDIT 1.3] Bitmaps customizados de alto contraste (Dark on Light)
-        bmp_sidebar = self._create_hc_bitmap("☰", wx.Colour(30, 30, 30))
-        bmp_logs = self._create_hc_bitmap("📋", wx.Colour(30, 30, 30))
+        # Como não temos ícones físicos, usamos labels de texto nos botões da toolbar (style wx.TB_TEXT)
+        # Ou simplesmente criamos botões na toolbar.
         
-        self.toolbar.AddTool(2000, "Sidebar", bmp_sidebar, shortHelp="Alternar Sidebar")
-        self.toolbar.AddTool(2001, "Logs", bmp_logs, shortHelp="Alternar Console")
-        
-        # [FASE 6.1] Status Chip como Controle Global na Toolbar
-        self.status_chip = StatusChip(self.toolbar)
-        self.toolbar.AddControl(self.status_chip)
+        tsb = self.toolbar.AddTool(2000, "Sidebar", wx.ArtProvider.GetBitmap(wx.ART_LIST_VIEW, wx.ART_TOOLBAR))
+        tlog = self.toolbar.AddTool(2001, "Logs", wx.ArtProvider.GetBitmap(wx.ART_REPORT_VIEW, wx.ART_TOOLBAR))
         
         self.toolbar.Realize()
-
-    def _create_hc_bitmap(self, symbol, color):
-        """Cria um bitmap de alto contraste com símbolo centralizado."""
-        bmp = wx.Bitmap(24, 24)
-        dc = wx.MemoryDC(bmp)
-        dc.SetBackground(wx.Brush(wx.Colour(245, 245, 245)))
-        dc.Clear()
-        dc.SetTextForeground(color)
-        dc.SetFont(wx.Font(14, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
-        tw, th = dc.GetTextExtent(symbol)
-        dc.DrawText(symbol, (24 - tw) // 2, (24 - th) // 2)
-        dc.SelectObject(wx.NullBitmap)
-        return bmp
 
     def _bind_events(self):
         # Escuta sinais globais via PubSub para o StatusBar [3, 7]
@@ -268,3 +247,5 @@ class AppWindow(wx.Frame):
         with DialogConfig(self) as dlg:
             if dlg.ShowModal() == wx.ID_OK:
                 self.log_to_console("Configurações atualizadas.", "SYSTEM")
+                # Opcional: Notificar componentes que podem precisar de hot-reload
+                # Ex: Processor pode precisar ajustar max_workers

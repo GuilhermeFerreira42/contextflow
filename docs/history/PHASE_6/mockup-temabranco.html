@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html class="light" lang="pt-br">
+
+<head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>ContextFlow v6.0 - Master-Detail Dashboard</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography,container-queries"></script>
+    <link href="https://fonts.googleapis.com" rel="preconnect" />
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+        rel="stylesheet" />
+    <style type="text/tailwindcss">
+        :root {
+            --bg-main: #FFFFFF;
+            --bg-sidebar: #F3F3F3;
+            --accent: #005FB8;
+            --text-main: #333333;
+            --border: #E5E5E5;
+            --row-hover: #E8F2FF;
+        }
+        body {
+            background-color: var(--bg-main);
+            color: var(--text-main);
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #F3F3F3;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #C1C1C1;
+            border-radius: 3px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #A8A8A8;
+        }
+        .data-grid-header th {
+            position: sticky;
+            top: 0;
+            background: #F8F8F8;
+            z-index: 10;
+            border-bottom: 1px solid var(--border);
+        }
+    </style>
+</head>
+
+<body class="font-display h-screen flex flex-col overflow-hidden">
+    <header class="h-12 bg-[#F3F3F3] border-b border-[#E5E5E5] flex items-center px-4 justify-between select-none">
+        <div class="flex items-center gap-6">
+            <div class="flex items-center gap-2">
+                <span class="text-[var(--accent)] material-symbols-outlined text-xl">flowsheet</span>
+                <span class="font-bold text-sm tracking-tight text-[#333333]">ContextFlow <span
+                        class="text-[#858585] font-normal">v6.0</span></span>
+            </div>
+            <div class="h-4 w-[1px] bg-[#D1D1D1]"></div>
+            <div class="flex items-center gap-3">
+                <span
+                    class="flex items-center gap-1.5 px-2 py-0.5 rounded bg-green-600/10 text-green-700 text-[10px] font-bold border border-green-600/20 uppercase">
+                    <span class="w-1.5 h-1.5 rounded-full bg-green-600"></span> Seguro
+                </span>
+                <div class="flex items-center gap-4 text-[11px] font-mono text-[#666666]">
+                    <div class="flex flex-col">
+                        <span class="text-[9px] text-[#888888] uppercase leading-none">Gasto da Sessão</span>
+                        <span class="text-[var(--text-main)] font-semibold">$ 0.142</span>
+                    </div>
+                    <div class="flex flex-col">
+                        <span class="text-[9px] text-[#888888] uppercase leading-none">Token Count</span>
+                        <span class="text-[var(--text-main)] font-semibold">1,240,582</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="flex items-center gap-1 text-[#666666]">
+                <button class="p-1.5 hover:bg-[#E5E5E5] rounded transition-colors">
+                    <span class="material-symbols-outlined text-lg">search</span>
+                </button>
+                <button class="p-1.5 hover:bg-[#E5E5E5] rounded transition-colors">
+                    <span class="material-symbols-outlined text-lg">notifications</span>
+                </button>
+                <button class="p-1.5 hover:bg-[#E5E5E5] rounded transition-colors">
+                    <span class="material-symbols-outlined text-lg">settings</span>
+                </button>
+            </div>
+            <div class="flex gap-1.5">
+                <div class="w-3 h-3 rounded-full bg-[#ff5f56]"></div>
+                <div class="w-3 h-3 rounded-full bg-[#ffbd2e]"></div>
+                <div class="w-3 h-3 rounded-full bg-[#27c93f]"></div>
+            </div>
+        </div>
+    </header>
+
+    <div class="flex flex-1 overflow-hidden">
+        <aside class="w-64 bg-[#F3F3F3] border-r border-[#E5E5E5] flex flex-col">
+            <div class="p-3">
+                <h2
+                    class="text-[10px] font-bold uppercase tracking-widest text-[#888888] mb-3 flex items-center justify-between">
+                    <span>Histórico de Contexto</span>
+                    <span class="material-symbols-outlined text-xs cursor-pointer">add</span>
+                </h2>
+            </div>
+            <div class="flex-1 overflow-y-auto custom-scrollbar px-1">
+                <div class="space-y-0.5">
+                    <details class="group" open="">
+                        <summary
+                            class="flex items-center gap-2 p-1.5 text-xs font-medium hover:bg-[#E8E8E8] rounded cursor-pointer list-none text-[#444444]">
+                            <span
+                                class="material-symbols-outlined text-sm group-open:rotate-90 transition-transform">chevron_right</span>
+                            Podcast Completo
+                        </summary>
+                        <div class="ml-4 mt-0.5 space-y-0.5">
+                            <div
+                                class="flex items-center gap-2 p-1.5 text-xs text-[#666666] hover:bg-[var(--accent)] hover:text-white rounded cursor-pointer">
+                                <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                                <span class="truncate">Inteligência Ltda #890</span>
+                            </div>
+                            <div
+                                class="flex items-center gap-2 p-1.5 text-xs text-[#666666] hover:bg-[var(--accent)] hover:text-white rounded cursor-pointer">
+                                <span class="w-2 h-2 rounded-full bg-orange-500"></span>
+                                <span class="truncate">Flow Podcast - Especial</span>
+                            </div>
+                        </div>
+                    </details>
+                    <details class="group" open="">
+                        <summary
+                            class="flex items-center gap-2 p-1.5 text-xs font-medium hover:bg-[#E8E8E8] rounded cursor-pointer list-none text-[#444444]">
+                            <span
+                                class="material-symbols-outlined text-sm group-open:rotate-90 transition-transform">chevron_right</span>
+                            Série Devocional
+                        </summary>
+                        <div class="ml-4 mt-0.5 space-y-0.5">
+                            <div
+                                class="flex items-center gap-2 p-1.5 text-xs text-[#666666] hover:bg-[var(--accent)] hover:text-white rounded cursor-pointer">
+                                <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                                <span class="truncate">Salmos 91 Contexto</span>
+                            </div>
+                            <div
+                                class="flex items-center gap-2 p-1.5 text-xs text-[#666666] hover:bg-[var(--accent)] hover:text-white rounded cursor-pointer">
+                                <span class="w-2 h-2 rounded-full bg-red-500"></span>
+                                <span class="truncate">Análise: Gênesis 1</span>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+            </div>
+        </aside>
+
+        <main class="flex-1 flex flex-col min-w-0 bg-white">
+            <div class="h-10 bg-white border-b border-[#E5E5E5] flex items-center justify-between px-3">
+                <div class="flex items-center gap-2">
+                    <button
+                        class="flex items-center gap-1.5 px-3 py-1 bg-[var(--accent)] text-white text-[11px] font-semibold rounded-sm hover:brightness-110 transition-all">
+                        <span class="material-symbols-outlined text-sm">auto_awesome</span> Batch Summarize
+                    </button>
+                    <button
+                        class="flex items-center gap-1.5 px-3 py-1 bg-[#F3F3F3] text-[#333333] text-[11px] font-semibold rounded-sm hover:bg-[#E8E8E8] border border-[#D1D1D1] transition-all">
+                        <span class="material-symbols-outlined text-sm">folder_zip</span> Export ZIP/MD
+                    </button>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div class="relative">
+                        <span
+                            class="material-symbols-outlined absolute left-2 top-1.5 text-[#858585] text-sm">filter_list</span>
+                        <input
+                            class="w-48 pl-8 pr-2 py-1 bg-[#F3F3F3] border-[#D1D1D1] rounded text-[11px] focus:ring-0 focus:border-[var(--accent)] placeholder-[#999999]"
+                            placeholder="Filtro rápido..." type="text" />
+                    </div>
+                    <button class="text-[#858585] hover:text-[#333333]"><span
+                            class="material-symbols-outlined text-lg">settings</span></button>
+                </div>
+            </div>
+
+            <div class="flex-1 overflow-auto custom-scrollbar">
+                <table class="w-full text-left border-collapse text-[11px]">
+                    <thead class="data-grid-header">
+                        <tr class="text-[#666666] uppercase tracking-wider font-bold">
+                            <th class="p-2 w-8 text-center">#</th>
+                            <th class="p-2 w-8 text-center"><input
+                                    class="w-3 h-3 rounded bg-white border-[#CCC] text-[var(--accent)] focus:ring-0"
+                                    type="checkbox" /></th>
+                            <th class="p-2 min-w-[300px]">Título</th>
+                            <th class="p-2">Canal</th>
+                            <th class="p-2 w-16 text-center">Duração</th>
+                            <th class="p-2">Tags Detectadas</th>
+                            <th class="p-2 w-10 text-center">Link</th>
+                            <th class="p-2 w-20 text-center">Status</th>
+                            <th class="p-2 w-10 text-center">Resumo</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-[#EEEEEE]">
+                        <tr class="hover:bg-[var(--row-hover)] cursor-pointer bg-[#F9F9F9]">
+                            <td class="p-2 text-[#999999] text-center">1</td>
+                            <td class="p-2 text-center"><input
+                                    class="w-3 h-3 rounded bg-white border-[#CCC] text-[var(--accent)] focus:ring-0"
+                                    type="checkbox" /></td>
+                            <td class="p-2 font-medium">EVIL MORTY SERÁ O...9 - RICK & MORTY</td>
+                            <td class="p-2 text-[#666666]">Papo Nerd</td>
+                            <td class="p-2 text-center tabular-nums">11:40</td>
+                            <td class="p-2 flex gap-1">
+                                <span
+                                    class="px-1.5 py-0.5 rounded-full bg-[#E5E5E5] text-[#666] text-[9px]">Teoria</span>
+                                <span
+                                    class="px-1.5 py-0.5 rounded-full bg-[#E5E5E5] text-[#666] text-[9px]">Review</span>
+                            </td>
+                            <td class="p-2 text-center"><span
+                                    class="material-symbols-outlined text-sm text-[var(--accent)] hover:text-black transition-colors">link</span>
+                            </td>
+                            <td class="p-2 text-center text-green-600 font-bold text-[9px]">DONE</td>
+                            <td class="p-2 text-center">
+                                <button class="text-[#858585] hover:text-[var(--accent)] transition-colors"
+                                    title="Ver Resumo">
+                                    <span class="material-symbols-outlined text-lg">description</span>
+                                </button>
+                            </td>
+                        </tr>
+                        <tr class="hover:bg-[var(--row-hover)] cursor-pointer">
+                            <td class="p-2 text-[#999999] text-center">2</td>
+                            <td class="p-2 text-center"><input
+                                    class="w-3 h-3 rounded bg-white border-[#CCC] text-[var(--accent)] focus:ring-0"
+                                    type="checkbox" /></td>
+                            <td class="p-2 font-medium">Brasileiro pobre vivendo no Japão: Melhor país?</td>
+                            <td class="p-2 text-[#666666]">Rob Correa</td>
+                            <td class="p-2 text-center tabular-nums">01:39</td>
+                            <td class="p-2 flex gap-1">
+                                <span
+                                    class="px-1.5 py-0.5 rounded-full bg-[#E5E5E5] text-[#666] text-[9px]">Finance</span>
+                            </td>
+                            <td class="p-2 text-center"><span
+                                    class="material-symbols-outlined text-sm text-[var(--accent)] hover:text-black transition-colors">link</span>
+                            </td>
+                            <td class="p-2 text-center text-orange-600 font-bold text-[9px]">QUEUED</td>
+                            <td class="p-2 text-center">
+                                <button class="text-[#858585] hover:text-[var(--accent)] transition-colors"
+                                    title="Ver Resumo">
+                                    <span class="material-symbols-outlined text-lg">description</span>
+                                </button>
+                            </td>
+                        </tr>
+                        <tr class="hover:bg-[var(--row-hover)] bg-[#E8F2FF] border-l-2 border-[var(--accent)]">
+                            <td class="p-2 text-[#999999] text-center">3</td>
+                            <td class="p-2 text-center"><input checked=""
+                                    class="w-3 h-3 rounded bg-white border-[#CCC] text-[var(--accent)] focus:ring-0"
+                                    type="checkbox" /></td>
+                            <td class="p-2 font-medium">Poder Cast N 156 / Andre Batista</td>
+                            <td class="p-2 text-[#666666]">Pastor Ariston Junior</td>
+                            <td class="p-2 text-center tabular-nums">113:33</td>
+                            <td class="p-2 flex gap-1">
+                                <span
+                                    class="px-1.5 py-0.5 rounded-full bg-[#DDE7F5] text-[#555] text-[9px]">Podcast</span>
+                                <span
+                                    class="px-1.5 py-0.5 rounded-full bg-[#DDE7F5] text-[#555] text-[9px]">Religião</span>
+                            </td>
+                            <td class="p-2 text-center"><span
+                                    class="material-symbols-outlined text-sm text-[var(--accent)] hover:text-black transition-colors">link</span>
+                            </td>
+                            <td class="p-2 text-center text-green-600 font-bold text-[9px]">DONE</td>
+                            <td class="p-2 text-center">
+                                <button class="text-[var(--accent)] hover:text-black transition-colors"
+                                    title="Ocultar Resumo">
+                                    <span class="material-symbols-outlined text-lg">description</span>
+                                </button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="h-1 bg-[#E5E5E5] cursor-row-resize hover:bg-[var(--accent)] transition-colors"></div>
+
+            <div class="h-72 bg-white flex flex-col border-t border-[#E5E5E5]">
+                <div class="h-8 bg-[#F3F3F3] flex items-center px-3 justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="text-[10px] font-bold uppercase tracking-widest text-[#888888]">Detalhes do
+                            Item</span>
+                        <span class="text-[10px] text-[var(--accent)] font-medium underline">Poder Cast N 156</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span
+                            class="px-2 py-0.5 bg-blue-600/10 text-blue-700 text-[9px] font-bold rounded border border-blue-600/20">AI
+                            VERDICT: HIGH VALUE</span>
+                        <button class="text-[#858585] hover:text-[#333333]"><span
+                                class="material-symbols-outlined text-sm">fullscreen</span></button>
+                        <button class="text-[#858585] hover:text-[#333333]"><span
+                                class="material-symbols-outlined text-sm">close</span></button>
+                    </div>
+                </div>
+                <div class="flex-1 flex overflow-hidden p-4 gap-6">
+                    <div class="w-[320px] flex-shrink-0">
+                        <div
+                            class="aspect-video bg-gray-200 rounded overflow-hidden relative shadow-md ring-1 ring-black/5">
+                            <img alt="Detail preview" class="w-full h-full object-cover"
+                                src="https://lh3.googleusercontent.com/aida-public/AB6AXuDBPtkngsTrs_dpx8OL7avQTGAGA0qONsDyZlVBtp62RkHE8UDYm9I0FgOPjU7N94kUN-GZGc4CZ6eB0oI_FvkU4G7-Ydk2mTh2tvSTpuLLMi2kq_ttp3AE6Kr1khJSfvVL0UUGb8VquhaoInV4wtosU7wBleSj1HKYSqCdFjKJbdDrYmqlFTjObDyYTXVU3-44BjfkMTR3ek34x_zUSaq3fuIg8PgFiu1s_rxxoUhcjBNjYaCsQ_IGNol4a41DKtCxrhuslkIkGYo" />
+                            <div
+                                class="absolute bottom-2 right-2 px-1.5 py-0.5 bg-black/70 text-[10px] rounded text-white font-mono">
+                                01:53:33</div>
+                        </div>
+                        <div class="mt-4 space-y-3">
+                            <div>
+                                <span class="text-[9px] text-[#888888] uppercase font-bold block mb-1">Context
+                                    Tags</span>
+                                <div class="flex flex-wrap gap-1">
+                                    <span
+                                        class="px-2 py-0.5 bg-[#F0F0F0] text-[#666666] text-[10px] rounded border border-[#E5E5E5]">Espiritualidade</span>
+                                    <span
+                                        class="px-2 py-0.5 bg-[#F0F0F0] text-[#666666] text-[10px] rounded border border-[#E5E5E5]">Liderança</span>
+                                    <span
+                                        class="px-2 py-0.5 bg-[#F0F0F0] text-[#666666] text-[10px] rounded border border-[#E5E5E5]">Brasil</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex-1 overflow-y-auto custom-scrollbar pr-2">
+                        <div class="prose prose-sm max-w-none">
+                            <h3 class="text-[#333333] text-lg font-bold mb-2">Sumário Analítico</h3>
+                            <p class="text-[#555555] leading-relaxed">
+                                Esta sessão do <strong>Poder Cast</strong> explora profundamente os desafios da
+                                liderança espiritual no contexto contemporâneo. O convidado, Andre Batista, detalha
+                                metodologias de engajamento comunitário e a importância da resiliência psicológica.
+                            </p>
+                            <h4 class="text-[#333333] text-md font-bold mt-4 mb-1">Principais Insights:</h4>
+                            <ul class="text-[#555555] space-y-1 list-disc pl-4">
+                                <li><strong>Transparência Operacional:</strong> A importância de manter processos claros
+                                    em organizações sem fins lucrativos.</li>
+                                <li><strong>Impacto Social:</strong> Como as mídias digitais estão reformatando o
+                                    alcance da mensagem religiosa tradicional.</li>
+                                <li><strong>Gestão de Crise:</strong> Estratégias para lidar com o crescimento acelerado
+                                    de audiência digital.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div
+                class="h-7 bg-[#F3F3F3] border-t border-[#E5E5E5] flex items-center px-3 justify-between font-mono text-[10px]">
+                <div class="flex items-center gap-4">
+                    <span class="flex items-center gap-1.5 text-[#888888]">
+                        <span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                        LOG: Idle. Ready for batch processing.
+                    </span>
+                    <span class="text-[#D1D1D1]">|</span>
+                    <span class="text-[#666666] hover:text-black cursor-pointer">[15:42:01] Metadata cache
+                        refreshed.</span>
+                </div>
+                <button class="text-[#888888] hover:text-[#333333] flex items-center gap-1">
+                    <span>Console</span>
+                    <span class="material-symbols-outlined text-sm">keyboard_arrow_up</span>
+                </button>
+            </div>
+        </main>
+    </div>
+    <footer class="h-5 bg-[var(--accent)] text-white text-[9px] flex items-center px-3 justify-between font-medium">
+        <div class="flex items-center gap-4">
+            <span class="flex items-center gap-1 uppercase"><span
+                    class="material-symbols-outlined text-[10px]">cloud_done</span> Conectado</span>
+            <span class="opacity-80">Workspace: Main_Production</span>
+        </div>
+        <div class="flex items-center gap-4">
+            <span>RAM: 422MB / 2.4GB</span>
+            <span class="flex items-center gap-1 uppercase tracking-widest"><span
+                    class="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span> Service Active</span>
+        </div>
+    </footer>
+</body>
+
+</html>

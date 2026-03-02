@@ -18,21 +18,5 @@
             "input_1k": 0.003,
             "output_1k": 0.015
         }
-    },
-    "gemini": {
-        "gemini-1.5-flash": {
-            "input_1k": 0.000075,
-            "output_1k": 0.0003
-        },
-        "gemini-1.5-pro": {
-            "input_1k": 0.0035,
-            "output_1k": 0.0105
-        }
-    },
-    "ollama": {
-        "local": {
-            "input_1k": 0.0,
-            "output_1k": 0.0
-        }
     }
 }
