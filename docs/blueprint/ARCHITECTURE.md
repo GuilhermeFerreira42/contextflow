@@ -1,21 +1,31 @@
 # ARCHITECTURE: A Lei da Estabilidade (Maturidade Industrial)
 
-> **Versão:** 1.1 (Consolidado Phase 5.12)
+> **Versão:** 1.2 (Consolidado Phase 6.0 - Muro de Arrimo)
 > **Princípio Mestre:** Estabilidade Operacional > Features Complexas.
-> **Status:** ESTABILIZADO (Infraestrutura de Base Finalizada)
+> **Status:** BLINDADO (Núcleo Fragmentado em Gerentes)
 
 ## ⚠️ INTERDIÇÃO TÉCNICA E SEGURANÇA
-*   **EXTINÇÃO DEFINITIVA:** O arquivo `ui/panel_grid.py` foi removido ou é considerado inexistente. O sistema recusa qualquer importação dele.
+*   **EXTINÇÃO DEFINITIVA:** O arquivo `ui/panel_grid.py` foi removido fisicamente. Sua restauração é terminantemente proibida para manter a pureza da Grid Virtual.
+*   **LIGHT MODE ABSOLUTO:** O padrão visual imutável é o Fundo Branco (#FFFFFF) com Texto Escuro, gerido centralizadamente pelo `ThemeManager`.
 *   **MISSÃO:** Operação exclusiva via **Topologia de 3 Abas Independentes** sob o **Protocolo Zero-Knowledge**.
 
 ## 1. Topologia Oficial (Trindade de Isolamento)
 O sistema é estruturado em três entidades físicas e lógicas que não se conhecem (Zero-Knowledge):
 
-1.  **Aba 1 (Doca de Carga):** `ui/tab_batch.py`. Exclusiva para ingestão massiva e feedback de fila.
+1.  **Aba 1 (Doca de Carga):** `ui/tab_batch.py`. Ingestão massiva e feedback de fila.
 2.  **Aba 2 (Cockpit Analítico):** `ui/tab_analysis.py`. Centro de triagem Master-Detail utilizando `VirtualVideoTable`.
-3.  **Aba 3 (Leitura Imersiva):** `ui/panel_detail.py`. Visualização de conteúdo bruto sem distrações de grid.
+3.  **Aba 3 (Leitura Imersiva):** `ui/panel_detail.py`. Visualização de conteúdo e insights de IA.
 
-## 2. Padrões Arquiteturais Mandatários
+## 2. Padrão de Projeto: A Fachada de Delegação (Facade)
+
+O núcleo foi fragmentado para evitar a "God Class" `AppState`. Toda a inteligência reside em gerentes especializados:
+
+*   **`VideoManager`**: Responsável exclusivo por CRUD de vídeos, metadados e cache de snapshot (Performance 10k).
+*   **`FinanceManager`**: Gestor do **Cofre**. Controla o banco soberano `billing.db`.
+*   **`TaskManager`**: Orquestrador de threads com **Semáforo de Hardware** (IA Local limitada a 1 worker).
+*   **`ThemeManager`**: Fonte Única de Verdade para o design system Light Mode.
+
+**Regra de Ouro:** A UI interage APENAS com a fachada `AppState`, que delega as chamadas aos gerentes. Nenhum componente de UI deve instanciar ou acessar os gerentes diretamente (Isolamento de Camadas).
 
 ### 2.1. Virtualização de UI (Sempre-Virtual)
 A Grid no Cockpit Analítico (`ui/tab_analysis.py`) opera **exclusivamente** através de `ui/virtual_table.py`.
@@ -35,21 +45,21 @@ A transição de tarefas temporárias (`_active_downloads`) para registros persi
 
 ```mermaid
 graph TD
-    TabBatch[ui/tab_batch.py] -->|Read| AppState
-    TabAnalysis[ui/tab_analysis.py] -->|Read| AppState
-    TabDetail[ui/panel_detail.py] -->|Read| AppState
+    UI[User Interface - Abas 1/2/3] -->|Interact| AS[AppState Facade]
     
-    TabBatch -->|Subscribe| PubSub
-    TabAnalysis -->|Subscribe| PubSub
-    TabDetail -->|Subscribe| PubSub
+    subgraph Core_Managers [Gerentes Especializados]
+        AS --> VM[VideoManager]
+        AS --> FM[FinanceManager]
+        AS --> TM[TaskManager]
+        AS --> TH[ThemeManager]
+    end
+
+    VM -->|Data| DB_Main[contextflow.db]
+    FM -->|Audit| DB_Billing[billing.db]
+    TM -->|Exec| Local_AI[Ollama Semaphore 1]
     
-    Processor[Core Layer] -->|Write| AppState
-    Processor -->|Publish| PubSub
-    Processor -->|Use| YouTubeManager
-    
-    ExportService -->|Read| AppState
-    
-    AppState -->|Read/Write| DB[SQLite]
+    AS -->|Broadast| PubSub[Event Bus]
+    PubSub -->|Notify| UI
 ```
 
 ## 4. Regras Pétreas (Auditoria de Integridade)

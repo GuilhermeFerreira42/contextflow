@@ -136,6 +136,18 @@ class DatabaseHandler:
                 print("Migrando DB: Adicionando added_at...")
                 cursor.execute("ALTER TABLE videos ADD COLUMN added_at TEXT")
                 
+            # [INTEGRIDADE] Garantir que system_config existe (correção de regressão)
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='system_config'")
+            if not cursor.fetchone():
+                print("Migrando DB: Criando tabela system_config...")
+                cursor.execute('''
+                    CREATE TABLE system_config (
+                        key TEXT PRIMARY KEY,
+                        value TEXT NOT NULL,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
+                
             conn.commit()
         except Exception as e:
             print(f"Erro na migração de DB: {e}")

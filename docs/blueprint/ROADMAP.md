@@ -1,7 +1,7 @@
 # ROADMAP: ContextFlow
 
 > **Visão:** Do Caos ao Contexto Acionável - Estabilidade e Performance para o Analista Solo.
-> **Status Atual:** FASE 5.7 (Consolidação Estrutural).
+> **Status Atual:** FASE 6.1 (Preparação para IA e Valor).
 > **Princípio:** "Construir a fundação antes de erguer o teto."
 
 ## ✅ FASE 1-4: Fundação (Concluído)
@@ -24,23 +24,16 @@
 
 ---
 
-## 🚧 FASE 5.7: Consolidação Estrutural (EM ANDAMENTO)
-> **Foco:** Segregação Tática de UI e Estabilização do Core.
-> **Meta:** Zero vazamento de layout e isolamento físico das abas.
-
-### 5.7.1. Segregação Física de UI
-* **Aba 1 (Doca de Carga):** Criação do `ui/tab_batch.py` focado em ingestão massiva, sem splitters ou grid.
-* **Aba 2 (Cockpit Analítico):** Criação do `ui/tab_analysis.py` com layout Master-Detail e Grid Virtualizada.
-* **Protocolo Zero-Knowledge:** Garantir que nenhuma aba possua referência ou importação direta de outra.
-
-### 5.7.2. Performance e Reatividade Hardened
-* **Debouncing (Restart-on-Event):** Implementação de `wx.Timer` de 250ms que reinicia a cada evento de update, protegendo a UI durante cargas massivas.
-* **Virtualização de Status:** Feedback de carga na Aba 1 preparado para 10.000 URLs.
-* **Demolição do Legado:** Extinção física do arquivo `ui/panel_grid.py` e limpeza de heranças obsoletas.
+## ✅ FASE 6.0: Blindagem Estrutural (Concluído)
+* **Arquitetura Facade**: AppState refatorado como fachada de delegação pura.
+* **Gerentes Especializados**: Criação de `VideoManager`, `FinanceManager`, `TaskManager` e `ThemeManager`.
+* **Cofre (billing.db)**: Implementação de banco isolado e transacional para auditoria financeira.
+* **Semáforo de IA Local**: Controle de concorrência rígido (Max: 1) para o provedor Ollama.
+* **Saneamento de UI**: 100% de adesão ao `ThemeManager` e extinção física de `ui/panel_grid.py`.
 
 ---
 
-## 🔒 FASES FUTURAS (Interditadas)
+## 🚧 FASES FUTURAS (Interditadas)
 > **Nota:** O desenvolvimento das fases abaixo está bloqueado até a homologação total da estabilidade física da Fase 5.7.
 
 * **FASE 6:** Insights, Valor e IA (Resumos, Tags automáticas, UI de leitura melhorada).

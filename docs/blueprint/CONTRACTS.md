@@ -1,7 +1,7 @@
 # CONTRATOS E GARANTIAS DO SISTEMA
 
 > **Objetivo:** Definir interfaces rígidas que não podem ser quebradas sem refatoração maior.
-> **Vigência:** Fase 5.7 (Segregação Tática).
+> **Vigência:** Fase 6.0 (Blindagem Estrutural).
 
 ## 1. PubSub Eventos (`core/pubsub.py`)
 
@@ -46,8 +46,21 @@ A tabela virtual é a única visualização permitida para listas longas.
 *   **Render:** O método `GetValue(row, col)` deve retornar em **< 0.1ms**.
 *   **Lógica:** Nenhuma formatação pesada (ex: parsing de data complexo) dentro do `GetValue`. Dados devem vir pré-formatados ou ser formatados de forma trivial.
 
-## 4. Serviços de Exportação (`services/export_service.py`)
+## 4. Governança Financeira (`data/billing.db`)
 
-*   **Independência:** Deve aceitar lista de IDs e funcionar mesmo sem `wx.App` instanciado (usado em testes).
-*   **Feedback:** Aceita callback de progresso genérico.
+O banco de cobrança é o registro soberano de gastos do usuário.
+
+### Estrutura (Tabela `billing_events`)
+*   **Timestamp**: Registro atômico (ISO8601).
+*   **Transacional**: Cada chamada de LLM deve ser registrada via `FinanceManager.log_transaction`.
+*   **Soberania**: O banco é isolado do `contextflow.db` para garantir que logs financeiros nunca sejam perdidos em resets de metadata.
+
+## 5. Orquestração de Threads (`core/managers/task_manager.py`)
+
+O `TaskManager` garante que o hardware do usuário não seja exaurido por IA local.
+
+### Semáforo de Hardware
+*   **Provedor Local (Ollama)**: Limite rígido de **1 worker simultâneo**.
+*   **Provedores Nuvem (OpenAI/Gemini)**: Limite elástico baseado no plano (Default: 4 workers).
+*   **Kill-Switch**: Ativação do Kill-Switch deve interromper e purgar a fila em **< 500ms**.
 
