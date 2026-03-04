@@ -1,157 +1,134 @@
-# 6️⃣ PHASE\_6\_EXECUTION.md
+# 6️⃣ PHASE_6_EXECUTION.md: Blindagem Estrutural (Muro de Arrimo)
 
-## 1\. Sequência de Implementação (10 Etapas)
+**Função:** Manual Determinístico de Refatoração e Governança.
+**Objetivo:** Transição do Monolito Singleton para Fachada com Delegação e Estabilização de UI/UX.
+**Status:** **Mandatório - Nenhuma lógica de IA ou API deve ser implementada nesta fase.**
 
-A implementação deve seguir esta ordem rigorosa para garantir que a fundação (Dados e Estado) esteja sólida antes de construir a interface.
+---
 
-### 🟢 Passo 1: Snapshot e Preparação
+## 🏗️ 1. Roteiro de Implementação (5 Passos de Engenharia)
 
--   **Ação:** Criar tag Git `PRE_PHASE_6`.
-    
--   **Ação:** Validar que todos os testes da Fase 5 estão em "Pass".
-    
--   **Ação:** Criar estrutura de diretórios: `core/state/` e `services/ai/`.
-    
+### Passo 1: Fundação Core (Gerentes Especializados)
 
-### 🟢 Passo 2: Migração de Dados (Data Layer)
+* **Ação:** Criar diretório `core/managers/` e implementar classes de responsabilidade única.
+* **Classes Obrigatórias:**
+* `VideoManager`: CRUD e estado da lista de vídeos (extraído do `app_state.py`).
+* `FinanceManager`: Cálculo de tokens (estático/placeholder) e controle de custos simulados.
+* `TaskManager`: Orquestrador de threads com suporte a `StopIteration` e Kill-Switch.
+* `ThemeManager`: Singleton de estilo forçando **Light Mode Absoluto** (Background: `#FFFFFF`, Texto: `#000000`).
 
--   **Arquivo:** `storage/db_handler.py`.
-    
--   **Ação:** Implementar o script SQL definido na `TECH_SPECS`.
-    
--   **Validação:** Abrir o SQLite Browser e confirmar a existência das tabelas `video_insights`, `video_tags`, `rel_video_tags` e `ai_tasks`.
-    
 
-### 🟢 Passo 3: Refatoração "Bisturi" (6.0)
+* **Invariante:** O `ThemeManager` deve sobrescrever qualquer configuração de cores hardcoded nos componentes de UI.
 
--   **Arquivos:** `core/state/state_manager.py`, `core/state/video_store.py`.
-    
--   **Ação:** Mover lógica de banco e lista de vídeos do `app_state.py` para o `video_store.py`.
-    
--   **Ação:** Transformar `app_state.py` em uma **Facade** (casca) que apenas aponta para o `StateManager`.
-    
--   **Validação:** O app deve abrir e listar os vídeos exatamente como antes.
-    
+### Passo 2: Refatoração da Fachada (AppState Leve)
 
-### 🟢 Passo 4: Serviço de Descoberta (6.1)
+* **Ação:** Esvaziar o corpo dos métodos lógicos em `core/app_state.py`.
+* **Implementação:** Transformar `AppState` em uma **Fachada de Delegação**.
+* *Exemplo:* `self.get_videos()` deve retornar `self.video_manager.get_all()`.
 
--   **Arquivo:** `services/ai_discovery.py`.
-    
--   **Ação:** Implementar chamadas `subprocess` para Ollama e SDK para Google.
-    
--   **Validação:** Criar um script temporário `test_discovery.py` que imprima no console os modelos detectados.
-    
 
-### 🟢 Passo 5: Configuração e Seletor (6.1 cont.)
+* **Retrocompatibilidade:** É proibido alterar as assinaturas (nomes de métodos e parâmetros) para não quebrar os eventos de UI existentes.
 
--   **Arquivos:** `core/state/ai_manager.py`, `ui/dialog_config.py`.
-    
--   **Ação:** Criar o gerenciador de escolhas do usuário.
-    
--   **Ação:** Adicionar dropdown dinâmico na UI de configurações que chama o `AIDiscovery`.
-    
--   **Validação:** Selecionar um modelo, fechar o app, abrir novamente e ver se a escolha persiste.
-    
+### Passo 3: Saneamento de Layout Grid (VirtualVideoTable)
 
-### 🟢 Passo 6: Token Engine Multimodal (6.3)
+* **Arquivo:** `ui/components/virtual_grid.py`.
+* **Ação:** Atualizar o método `GetAttr` para padronização visual.
+* **Regra de Alinhamento:**
+* Se `column_name == 'Título'`: Manter `wx.ALIGN_LEFT`.
+* Para todas as outras colunas: Aplicar obrigatoriamente `attr.SetAlignment(wx.ALIGN_CENTER, wx.ALIGN_CENTER)`.
 
--   **Arquivo:** `core/token_engine.py`.
-    
--   **Ação:** Implementar o método `count_by_family` com suporte a Tiktoken e Llama (char-based logic).
-    
--   **Validação:** Comparar contagem de um texto curto entre as 3 famílias.
-    
 
-### 🟢 Passo 7: Motor de Execução Isolado (6.2)
+* **Visual:** Definir `attr.SetBackgroundColour("#FFFFFF")` para garantir a integridade do Light Mode na grade.
 
--   **Arquivo:** `services/ai_executor.py`.
-    
--   **Ação:** Implementar a lógica de envio de prompt estruturado e recebimento de JSON.
-    
--   **Validação:** Rodar um teste unitário enviando uma transcrição curta e verificando se o retorno segue o formato `<ID> | <Tópico> | <Análise>`.
-    
+### Passo 4: Interatividade Analítica (Cockpit Expandido)
 
-### 🟢 Passo 8: Orquestrador de Fila e Slots (6.4)
+* **Arquivo:** `ui/tabs/analysis_tab.py`.
+* **Ação:** Vincular o evento `wx.grid.EVT_GRID_CELL_LEFT_DCLICK`.
+* **Lógica:**
+* Ao disparar o clique duplo, o `wx.SplitterWindow` deve ajustar a posição do `Sash` para expandir a área de detalhes (Cockpit).
+* Implementar verificação `if self.user_mode == "PRO"` para permitir a expansão máxima.
 
--   **Arquivo:** `core/state/task_worker.py`.
-    
--   **Ação:** Implementar a fila com `threading.Semaphore` (Local=1, Cloud=3).
-    
--   **Ação:** Lógica de escrita atômica no banco após o sucesso da IA.
-    
--   **Validação:** Mandar 3 vídeos para o Ollama simultaneamente; verificar se eles são processados um por um (fila).
-    
 
-### 🟢 Passo 9: Pop-up de Check-out (6.4 cont.)
+* **Placeholder:** Os botões de "Gerar Resumo" devem exibir um `wx.MessageDialog` informativo: *"Módulo de IA em fase de homologação estrutural"*.
 
--   **Arquivo:** `ui/dialog_checkout.py`.
-    
--   **Ação:** Criar a interface que soma tokens e pede confirmação.
-    
--   **Validação:** Selecionar 5 vídeos na grade -> Clicar em Resumir -> Confirmar se a soma de tokens faz sentido.
-    
+### Passo 5: Governança de Hardware (Semaforização Ollama)
 
-### 🟢 Passo 10: Painel de Insights e Tags (6.3 cont.)
+* **Arquivo:** `core/managers/task_manager.py`.
+* **Ação:** Implementar `ThreadPoolExecutor` com controle rígido de concorrência.
+* **Configuração:** * `max_workers=1` para tarefas vinculadas ao provedor 'Ollama'.
+* Filas de prioridade para garantir que o download não concorra com a futura thread de IA.
 
--   **Arquivos:** `ui/panel_detail.py`, `ui/tab_analysis.py`.
-    
--   **Ação:** Criar a renderização dos cards de resumo e a nuvem de tags do vídeo.
-    
--   **Validação:** O resumo deve aparecer automaticamente na tela assim que o `PubSub` emitir o sinal de conclusão.
-    
 
-* * *
+* **Proteção:** O sistema deve impedir o disparo de uma segunda tarefa local se uma já estiver em `RUNNING`.
 
-## 2\. Pseudocódigo Crítico (Lógica de Slot)
+---
 
-```
-# Exemplo de lógica para o TaskWorker
-class TaskWorker:
-    _local_slot = threading.Semaphore(1)
-    _cloud_slot = threading.Semaphore(3)
+## 💻 2. Pseudocódigo Crítico: TaskManager & Kill-Switch
 
-    def _execute(self, task):
-        semaphore = self._local_slot if task.provider == 'ollama' else self._cloud_slot
-        with semaphore:
-            self._update_status(task.id, 'RUNNING')
-            result = AIExecutor.run(task)
-            if result.success:
-                VideoStore.save_insight(result)
-                PubSub.publish("RESUMO_PRONTO", video_id=task.video_id)
+```python
+class TaskManager:
+    def __init__(self):
+        self._executor = ThreadPoolExecutor(max_workers=1) # Proteção de Hardware
+        self._active_tasks = {}
+        self._kill_event = threading.Event()
+
+    def submit_task(self, task_id, func, *args):
+        if self._kill_event.is_set():
+            return False
+        
+        future = self._executor.submit(self._wrap_task, task_id, func, *args)
+        self._active_tasks[task_id] = future
+        return True
+
+    def _wrap_task(self, task_id, func, *args):
+        try:
+            if not self._kill_event.is_set():
+                return func(*args)
+        finally:
+            self._active_tasks.pop(task_id, None)
+
+    def atomic_kill_switch(self):
+        """Cancela todas as operações pendentes e sinaliza parada imediata."""
+        self._kill_event.set()
+        for task_id, future in self._active_tasks.items():
+            future.cancel()
+        self._executor.shutdown(wait=False, cancel_futures=True)
+        # Reset para permitir reinicialização futura
+        self._kill_event.clear()
+        self._executor = ThreadPoolExecutor(max_workers=1)
 
 ```
 
-* * *
+---
 
-## 3\. Plano de Rollback
+## ✅ 3. Critérios de Aceite (Gherkin)
 
-| Cenário de Falha | Procedimento de Reversão |
-| --- | --- |
-| Erro Crítico na Refatoração 6.0 | git checkout core/app_state.py e deletar pasta core/state/. |
-| Corrupção de Banco de Dados | Substituir database.db pelo backup automático criado no Passo 2. |
-| Memory Leak em Vídeos Longos | Desativar processamento paralelo reduzindo Slots de Cloud para 1. |
+**Cenário: Saneamento Cromático e Estético**
 
-* * *
+* **Dado** que o sistema foi iniciado
+* **Quando** qualquer componente de UI solicitar cores de fundo
+* **Então** o `ThemeManager` deve retornar `#FFFFFF`
+* **E** a `VirtualVideoTable` deve exibir todas as colunas (exceto Título) centralizadas.
 
-## 4\. Critérios de Aceite em Gherkin
+**Cenário: Expansão do Cockpit Analítico**
 
-**Cenário: Resumo Bem-Sucedido com Soberania de Escolha**
+* **Dado** que o usuário está na `AnalysisTab` em Modo PRO
+* **Quando** realizar um duplo clique em uma célula da grade
+* **Então** o painel de detalhes (Splitter) deve expandir para ocupar 70% da área visível
+* **E** nenhum erro de renderização deve ocorrer no redimensionamento.
 
--   **Dado** que eu selecionei "Ollama" e o modelo "Llama3" nas configurações
-    
--   **E** selecionei um vídeo de 2 horas na grade principal
-    
--   **Quando** eu clico em "Gerar Insights"
-    
--   **Então** o sistema deve mostrar o Pop-up de Check-out com a contagem de tokens
-    
--   **E** após minha confirmação, o status do vídeo deve mudar para "Processando..."
-    
--   **E** ao finalizar, o resumo estruturado deve aparecer no painel de detalhes sem que a interface tenha travado em nenhum momento.
-    
+---
 
-* * *
+## ⚠️ 4. Declaração de Invariantes de Fase
 
-> **Fim da Documentação da Fase 6.** Este manual é auto-suficiente. A IA executora deve segui-lo do Passo 1 ao 10, validando cada etapa antes de avançar.
+1. **Isolamento de IA:** É terminantemente proibido importar `ollama` ou `google.generativeai` nesta sub-fase.
+2. **Placeholders:** Botões de ação de IA devem estar em estado `Enabled(True)`, mas suas funções devem ser apenas logs ou diálogos estáticos.
+3. **Muro de Arrimo:** O sucesso desta fase é definido pela capacidade do sistema de rodar sem o Singleton monolítico, mantendo a UI funcional.
 
-**A documentação completa da Fase 6 está finalizada. Deseja que eu faça um resumo executivo para você apresentar ou já quer iniciar a implementação do Passo 1 e 2?**
+---
+
+**Protocolo de Verificação:**
+
+* [ ] Executar `python -m pytest tests/test_facade_delegation.py`
+* [ ] Validar visualmente a centralização da grade (Align Center).
+* [ ] Testar Kill-Switch via console de debug durante simulado de tarefa.

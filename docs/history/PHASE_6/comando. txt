@@ -1,0 +1,45 @@
+Com base nas diretrizes de arquitetura, governança e saneamento técnico consolidadas para o projeto **ContextFlow**, aqui está o plano determinístico para ser entregue à inteligência artificial de implementação.
+
+Este plano foca na **Fase 6.0: Blindagem Estrutural (Muro de Arrimo)** como pré-requisito obrigatório antes da injeção de inteligência analítica, garantindo que o sistema não sofra regressões ou instabilidades.
+
+---
+
+### 🏛️ PLANO DE IMPLEMENTAÇÃO: FASE 6.0 – BLINDAGEM ESTRUTURAL
+
+**Atue como Arquiteto de Software Sênior e Engenheiro de Integridade.** Sua missão é realizar uma refatoração cirúrgica no núcleo do sistema para elevar sua **Maturidade Industrial**, aplicando o princípio de **Responsabilidade Única** e isolando a lógica de negócio da interface.
+
+#### 1. Ordem Sequencial de Execução (Roteiro "Bisturi")
+Você deve seguir rigorosamente esta sequência para evitar falhas de dependência:
+
+1.  **Infraestrutura de Gerentes Especializados:** Criar o diretório `core/managers/` e implementar as classes:
+    *   **`VideoManager`**: Responsável exclusivo por CRUD de vídeos, metadados e cache de memória.
+    *   **`FinanceManager`**: Gestor do **Cofre**. Deve criar e gerenciar o banco **`billing.db`** (tabela `billing_events`) para governança financeira transacional.
+    *   **`TaskManager`**: Orquestrador de threads. Deve implementar o `ThreadPoolExecutor` com um **Semáforo de Hardware** limitando o provedor local (Ollama) a exatamente **1 tarefa simultânea**.
+    *   **`ThemeManager`**: Singleton global para impor o **Light Mode Absoluto** (#FFFFFF), eliminando hexadecimais *hardcoded* espalhados pelo código.
+
+2.  **Refatoração da Fachada (`AppState`):** 
+    *   Esvaziar a lógica interna do arquivo `core/app_state.py`.
+    *   Convertê-lo em um **Facade Pattern** (Fachada de Delegação).
+    *   O `AppState` deve apenas instanciar os novos gerentes e repassar as chamadas originais (ex: `get_all_videos`) para eles, mantendo a retrocompatibilidade com as abas da UI.
+
+3.  **Saneamento de Layout (Virtual Table):**
+    *   No arquivo `ui/virtual_table.py`, atualizar o método `GetAttr` para forçar o **alinhamento centralizado** (vertical e horizontal) em 100% das células, exceto na coluna "Título", que permanece à esquerda.
+    *   Implementar `dc.SetClippingRegion` em todos os renderizadores customizados para eliminar o vazamento de texto (overflow) entre colunas.
+
+4.  **Interatividade de Cockpit (Aba 2):**
+    *   No arquivo `ui/tab_analysis.py`, vincular o evento de **clique duplo** na grade (`EVT_GRID_CELL_LEFT_DCLICK`) para disparar a expansão instantânea do cockpit analítico através do comando `SplitHorizontally`.
+
+#### 2. Invariantes Técnicos e Regras de Blindagem
+*   **Protocolo Zero-Knowledge:** É terminantemente proibido que a `Aba 1` importe classes da `Aba 2`. Toda sincronia deve ser feita via fachada do `AppState` e barramento `PubSub`.
+*   **Contrato de Mídia:** O carregamento de miniaturas deve ser **assíncrono** com um **LRU Cache** limitado estritamente a 50 bitmaps para manter a RAM estável.
+*   **Esterilização de IA:** Nesta fase 6.0, não implemente chamadas reais de API (OpenAI/Gemini). Trate os botões de resumo como placeholders funcionais na UI que apenas exibem um diálogo de "Módulo em homologação".
+
+#### 3. Critérios de Aceite (Definition of Done)
+O sistema será considerado homologado nesta fase se atender aos seguintes requisitos binários:
+*   [ ] O arquivo `ui/panel_grid.py` e resíduos da "Arquitetura Frankenstein" foram excluídos fisicamente.
+*   [ ] O sistema inicia ocupando 100% da tela (Maximizado) e em fundo branco absoluto.
+*   [ ] O scroll na grade mantém **60 FPS** com 10.000 itens carregados no `AppState`.
+*   [ ] O uso de RAM em carga massiva permanece **inferior a 250MB**.
+*   [ ] O banco `billing.db` é criado e registra corretamente o esqueleto de transações.
+
+**Diretriz Final:** "Não utilize marreta onde precisamos de um bisturi. Preserve a estabilidade do motor industrial v36 enquanto separa as responsabilidades do núcleo."
