@@ -4,12 +4,14 @@ import wx
 import wx.html2
 import os
 from constants import THUMBNAILS_DIR
+from core.managers.theme_manager import ThemeManager
 
 class DetailPanel(wx.Panel):
     def __init__(self, parent):
         super().__init__(parent)
-        self.SetBackgroundColour(wx.WHITE)
-        self.SetForegroundColour(wx.Colour(40, 40, 40)) # COLOR_FG
+        self.theme = ThemeManager()
+        self.SetBackgroundColour(self.theme.get_bg_color())
+        self.SetForegroundColour(self.theme.get_fg_color())
         self._init_ui()
 
     def _init_ui(self):

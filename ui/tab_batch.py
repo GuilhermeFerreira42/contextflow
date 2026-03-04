@@ -4,8 +4,8 @@ import wx.grid
 import os
 import webbrowser
 from core.pubsub import PubSub
-# ... (rest of imports remains same)
 from core.app_state import AppState
+from core.managers.theme_manager import ThemeManager
 from ui.virtual_table import VirtualVideoTable
 from services.export_service import ExportService
 
@@ -19,8 +19,10 @@ class TabBatch(wx.Panel):
     def __init__(self, parent):
         super().__init__(parent)
         self.app_state = AppState()
+        self.theme = ThemeManager()
         self.export_service = ExportService(self.app_state)
         self.table = VirtualVideoTable()
+        self.SetBackgroundColour(self.theme.get_bg_color())
         
         self.debounce_timer = wx.Timer(self)
         
@@ -51,7 +53,7 @@ class TabBatch(wx.Panel):
         self.btn_reset_safety.SetForegroundColour(wx.Colour(200, 50, 50))
         
         self.btn_process = wx.Button(self, label="PROCESSAR FILA")
-        self.btn_process.SetBackgroundColour(wx.Colour(0, 120, 215))
+        self.btn_process.SetBackgroundColour(self.theme.get_accent_color())
         self.btn_process.SetForegroundColour(wx.WHITE)
         
         btn_sizer.Add(self.btn_clear, 0, wx.RIGHT, 5)
@@ -79,7 +81,7 @@ class TabBatch(wx.Panel):
         self.grid.SetColLabelSize(25)
         self.grid.SetRowLabelSize(0)
         self.grid.EnableGridLines(True)
-        self.grid.SetGridLineColour(wx.Colour(220, 220, 220)) # Cinza claro para contraste no branco
+        self.grid.SetGridLineColour(self.theme.get_border_color()) # Cinza claro para contraste no branco
         
         # [AFFORDANCE] Define larguras conforme SSoT de Usabilidade
         self.grid.SetColSize(0, 40)   # #

@@ -6,7 +6,7 @@ import threading
 from typing import Dict, Optional, List
 from services.utils import format_duration
 from core.app_state import AppState
-from constants import COLOR_BG, COLOR_FG, COLOR_ACCENT
+from core.managers.theme_manager import ThemeManager
 
 # --- LRU CACHE DE MIDIA (Mandato 5.9) ---
 class BitmapCache:
@@ -144,8 +144,9 @@ class RichTitleRenderer(wx.grid.GridCellRenderer):
         item = table.data[row]
         title = item.get('title', '-')
         
+        theme = ThemeManager()
         # Cores baseadas na seleção
-        txt_color = COLOR_FG if not isSelected else wx.WHITE
+        txt_color = theme.get_fg_color() if not isSelected else wx.WHITE
         
         # Limpa fundo
         bg_color = grid.GetDefaultCellBackgroundColour() if not isSelected else grid.GetSelectionBackground()
@@ -153,7 +154,6 @@ class RichTitleRenderer(wx.grid.GridCellRenderer):
         dc.SetPen(wx.TRANSPARENT_PEN)
         dc.DrawRectangle(rect)
 
-        # [REQUISITO 5.9] Clipping manual e Título Puro (Sem Canal)
         dc.SetClippingRegion(rect)
         
         # Renderiza Título (Negrito)
@@ -263,9 +263,10 @@ class BadgeStatusRenderer(wx.grid.GridCellRenderer):
         status = str(table.data[row].get('status', '')).upper()
         
         color = wx.Colour(100, 100, 100)
+        theme = ThemeManager()
         if status in ['COMPLETED', 'SUCCESS', 'DONE']: color = wx.Colour(40, 167, 69)
         elif status == 'ERROR': color = wx.Colour(220, 53, 69)
-        elif status in ['PROCESSING', 'DOWNLOADING', 'QUEUED']: color = COLOR_ACCENT
+        elif status in ['PROCESSING', 'DOWNLOADING', 'QUEUED']: color = theme.get_accent_color()
         
         dc.SetBrush(wx.Brush(color))
         dc.SetPen(wx.Pen(wx.WHITE, 1))
@@ -282,7 +283,7 @@ class BadgeStatusRenderer(wx.grid.GridCellRenderer):
         
         # Se for progresso, usamos cor de destaque
         if "⏳" in text:
-            dc.SetTextForeground(COLOR_ACCENT if not isSelected else wx.WHITE)
+            dc.SetTextForeground(theme.get_accent_color() if not isSelected else wx.WHITE)
             
         dc.DrawText(text, circle_x + 10, rect.y + (rect.height // 2 - 7))
         
@@ -303,7 +304,8 @@ class LinkIconRenderer(wx.grid.GridCellRenderer):
         dc.SetClippingRegion(rect)
 
         # [QA2 REFINE] Se estiver selecionado, muda para branco para contraste sobre fundo azul
-        icon_color = COLOR_ACCENT if not isSelected else wx.WHITE
+        theme = ThemeManager()
+        icon_color = theme.get_accent_color() if not isSelected else wx.WHITE
         dc.SetTextForeground(icon_color)
         dc.SetFont(wx.Font(10, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
         
@@ -464,10 +466,17 @@ class VirtualVideoTable(wx.grid.GridTableBase):
     def GetAttr(self, row, col, kind):
         attr = wx.grid.GridCellAttr()
         label = self.col_labels[col].strip()
+        theme = ThemeManager()
         
-        # [SSOT v5.9] Forçar cores do Design System em todas as células
-        attr.SetBackgroundColour(COLOR_BG)
-        attr.SetTextColour(COLOR_FG)
+        # [FASE 6.0] Forçar Light Mode Absoluto via ThemeManager
+        attr.SetBackgroundColour(theme.get_bg_color())
+        attr.SetTextColour(theme.get_fg_color())
+
+        # [FASE 6.0] ALINHAMENTO CENTRAL MUNDIAL (Exceto Título)
+        if label != "Título":
+            attr.SetAlignment(wx.ALIGN_CENTER, wx.ALIGN_CENTER)
+        else:
+            attr.SetAlignment(wx.ALIGN_LEFT, wx.ALIGN_CENTER)
 
         # [REQUISITO ABA 2] Heurística de Identificação Analítica
         is_ana_tab = ("Preview" in self.col_labels)
@@ -497,7 +506,7 @@ class VirtualVideoTable(wx.grid.GridTableBase):
         elif label == "Resumo" and is_ana_tab:
             item = self.data[row] if row < len(self.data) else {}
             if not item.get('transcript_snippet'):
-                attr.SetTextColour(COLOR_ACCENT) # Azul para o CTA de resumir
+                attr.SetTextColour(theme.get_accent_color()) # Azul para o CTA de resumir
             attr.SetReadOnly(True)
         else:
             attr.SetRenderer(SafeTextRenderer())

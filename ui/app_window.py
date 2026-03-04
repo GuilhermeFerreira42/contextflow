@@ -3,6 +3,7 @@ import wx
 from core.pubsub import PubSub
 from constants import APP_NAME, APP_VERSION
 from core.app_state import AppState
+from core.managers.theme_manager import ThemeManager
 
 # Importação das novas entidades segregadas (Fase 5.7)
 from ui.tab_batch import TabBatch
@@ -20,6 +21,8 @@ class AppWindow(wx.Frame):
     def __init__(self, parent=None):
         super().__init__(parent, title=f"{APP_NAME} v{APP_VERSION}", size=(1280, 850))
         self.app_state = AppState()
+        self.theme = ThemeManager()
+        self.SetBackgroundColour(self.theme.get_bg_color())
         
         # [SSOT] Reconexão Lógica: Instanciamento e Início do Motor de Processamento
         from core.processor import Processor
@@ -48,6 +51,7 @@ class AppWindow(wx.Frame):
         
         # [QA4] Container para Notebook
         self.nb_container = wx.Panel(self.right_splitter)
+        self.nb_container.SetBackgroundColour(self.theme.get_bg_color())
         
         # 2. Notebook (Topologia de 3 Abas conforme ARCHITECTURE.md)
         self.notebook = wx.Notebook(self.nb_container)

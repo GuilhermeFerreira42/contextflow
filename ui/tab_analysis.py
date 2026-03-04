@@ -5,8 +5,8 @@ import os
 import webbrowser
 from core.app_state import AppState
 from core.pubsub import PubSub
+from core.managers.theme_manager import ThemeManager
 from ui.virtual_table import VirtualVideoTable
-from constants import COLOR_BG, COLOR_FG, COLOR_ACCENT, COLOR_HIGHLIGHT
 
 class TabAnalysis(wx.Panel):
     """
@@ -17,7 +17,8 @@ class TabAnalysis(wx.Panel):
     def __init__(self, parent):
         super().__init__(parent)
         self.app_state = AppState()
-        self.SetBackgroundColour(COLOR_BG)
+        self.theme = ThemeManager()
+        self.SetBackgroundColour(self.theme.get_bg_color())
         
         # Colunas Analíticas [Specs 5.9 Expansion]
         self.col_labels = [
@@ -43,19 +44,22 @@ class TabAnalysis(wx.Panel):
         
         # --- TOOLBAR ANALÍTICA (Modern Style) ---
         self.toolbar = wx.Panel(self)
-        self.toolbar.SetBackgroundColour(COLOR_BG)
+        self.toolbar.SetBackgroundColour(self.theme.get_bg_color())
         self.toolbar.SetMinSize((-1, 40))
         tb_sizer = wx.BoxSizer(wx.HORIZONTAL)
         
-        # Botões Placeholder (Esterilização Funcional v5.9)
+        # Botões Placeholder (Esterilização Funcional Fase 6.0)
         btn_summarize = wx.Button(self.toolbar, label="✨ Batch Summarize")
-        btn_summarize.SetBackgroundColour(COLOR_ACCENT)
+        btn_summarize.SetBackgroundColour(self.theme.get_accent_color())
         btn_summarize.SetForegroundColour(wx.WHITE)
         btn_summarize.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
+        btn_summarize.Bind(wx.EVT_BUTTON, lambda e: wx.MessageBox(
+            "Módulo de IA em fase de homologação estrutural.\nNenhuma chamada de API permitida na Fase 6.0.", 
+            "AI ContextFlow", wx.OK | wx.ICON_INFORMATION))
         
         self.btn_export = wx.Button(self.toolbar, label="📁 Export ZIP/MD")
         self.btn_export.SetBackgroundColour(wx.Colour(230, 230, 230))
-        self.btn_export.SetForegroundColour(COLOR_FG)
+        self.btn_export.SetForegroundColour(self.theme.get_fg_color())
         
         self.btn_cancel = wx.Button(self.toolbar, label="🛑 Cancelar")
         self.btn_cancel.SetForegroundColour(wx.Colour(200, 50, 50))
@@ -75,13 +79,13 @@ class TabAnalysis(wx.Panel):
         
         # --- SPLITTER WINDOW (Master-Detail) ---
         self.splitter = wx.SplitterWindow(self, style=wx.SP_3D | wx.SP_LIVE_UPDATE | wx.SP_NO_XP_THEME)
-        self.splitter.SetBackgroundColour(wx.Colour(230, 230, 230)) # COLOR_BORDER Light
+        self.splitter.SetBackgroundColour(self.theme.get_border_color()) 
         self.splitter.SetSashGravity(0.5) # [MANDATO 5.9] Redimensionamento proporcional
         self.splitter.SetMinimumPaneSize(50) # [REVERSIBILIDADE v5.12] Previne travamento em 0
         
         # MASTER PANEL (Top)
         self.pnl_master = wx.Panel(self.splitter)
-        self.pnl_master.SetBackgroundColour(COLOR_BG)
+        self.pnl_master.SetBackgroundColour(self.theme.get_bg_color())
         master_sizer = wx.BoxSizer(wx.VERTICAL)
         
         self.grid = wx.grid.Grid(self.pnl_master)
@@ -118,7 +122,7 @@ class TabAnalysis(wx.Panel):
         
         # DETAIL PANEL (Bottom)
         self.pnl_detail = wx.Panel(self.splitter)
-        self.pnl_detail.SetBackgroundColour(COLOR_BG) # Adaptado para Light Mode
+        self.pnl_detail.SetBackgroundColour(self.theme.get_bg_color()) # Adaptado para Light Mode
         detail_sizer = wx.BoxSizer(wx.HORIZONTAL)
         
         # Lateral com Thumbnail Expandida e Controles
@@ -135,7 +139,7 @@ class TabAnalysis(wx.Panel):
         
         self.lbl_side_title = wx.StaticText(self.pnl_side_info, label="Selecione um item")
         self.lbl_side_title.SetFont(wx.Font(11, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
-        self.lbl_side_title.SetForegroundColour(COLOR_ACCENT)
+        self.lbl_side_title.SetForegroundColour(self.theme.get_accent_color())
         self.lbl_side_title.Wrap(320)
         
         side_sizer.Add(self.btn_close_viewer, 0, wx.ALL | wx.EXPAND, 5)
@@ -145,8 +149,8 @@ class TabAnalysis(wx.Panel):
         
         # Conteúdo Textual
         self.txt_summary = wx.TextCtrl(self.pnl_detail, style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_RICH2 | wx.NO_BORDER)
-        self.txt_summary.SetBackgroundColour(COLOR_BG)
-        self.txt_summary.SetForegroundColour(COLOR_FG)
+        self.txt_summary.SetBackgroundColour(self.theme.get_bg_color())
+        self.txt_summary.SetForegroundColour(self.theme.get_fg_color())
         self.txt_summary.SetFont(wx.Font(10, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
         
         detail_sizer.Add(self.pnl_side_info, 0, wx.EXPAND)
@@ -178,6 +182,9 @@ class TabAnalysis(wx.Panel):
         self.Bind(wx.EVT_TIMER, self.on_debounce_tick, self.debounce_timer)
         self.grid.GetGridWindow().Bind(wx.EVT_MOTION, self.on_grid_motion)
         self.grid.Bind(wx.grid.EVT_GRID_CELL_LEFT_CLICK, self.on_grid_click)
+        
+        # [FASE 6.0] Expansão do Cockpit via Double Click
+        self.grid.Bind(wx.grid.EVT_GRID_CELL_LEFT_DCLICK, self.on_grid_dclick)
 
     def on_state_mutation(self, event_type, data=None):
         if event_type in ['VIDEO_ADDED', 'VIDEO_UPDATED', 'TASK_COMPLETED', 'DATA_LOADED', 'VIDEOS_DELETED', 'VIDEO_PROMOTED']:
@@ -350,6 +357,16 @@ class TabAnalysis(wx.Panel):
         if label == "Link":
             url = self.table.data[row].get('url')
             if url: webbrowser.open(url)
+        event.Skip()
+
+    def on_grid_dclick(self, event):
+        """[FASE 6.0] Expansão instantânea do cockpit analítico."""
+        if not self.splitter.IsSplit():
+            # Expande para 70% da tela (Cockpit Expandido)
+            h = self.GetSize().height
+            self.splitter.SplitHorizontally(self.pnl_master, self.pnl_detail, int(h * 0.3))
+        else:
+            self.splitter.Unsplit(self.pnl_detail)
         event.Skip()
 
     def on_select_video(self, event):

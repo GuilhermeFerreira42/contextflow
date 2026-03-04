@@ -3,6 +3,7 @@
 import wx
 import collections
 from core.app_state import AppState
+from core.managers.theme_manager import ThemeManager
 
 class Sidebar(wx.Panel):
     def __init__(self, parent, on_selection_callback, on_data_changed_callback=None, app_state: AppState = None):
@@ -10,6 +11,8 @@ class Sidebar(wx.Panel):
         self.on_selection = on_selection_callback
         self.on_data_changed = on_data_changed_callback
         self.app_state = app_state # Expected to be injected
+        self.theme = ThemeManager()
+        self.SetBackgroundColour(self.theme.get_bg_color())
         
         # If not injected (legacy fallback?), get singleton
         if not self.app_state:
@@ -34,7 +37,7 @@ class Sidebar(wx.Panel):
         
         self.btn_toggle = wx.Button(self, label="☰", size=(30, 30), style=wx.BU_EXACTFIT)
         self.btn_toggle.SetToolTip("Ocultar Sidebar")
-        self.btn_toggle.SetBackgroundColour(wx.Colour(240, 240, 240))
+        self.btn_toggle.SetBackgroundColour(self.theme.get_border_color())
         
         header_sizer.Add(header_lbl, 1, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 5)
         header_sizer.Add(self.btn_toggle, 0, wx.RIGHT, 5)

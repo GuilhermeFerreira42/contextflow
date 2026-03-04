@@ -2,10 +2,12 @@
 # contextflow/ui/panel_console.py
 import wx
 import datetime
+from core.managers.theme_manager import ThemeManager
 
 class ConsolePanel(wx.Panel):
     def __init__(self, parent):
         super().__init__(parent)
+        self.theme = ThemeManager()
         self._init_ui()
 
     def _init_ui(self):
@@ -50,7 +52,7 @@ class ConsolePanel(wx.Panel):
         self.txt_log.SetDefaultStyle(wx.TextAttr(color))
         self.txt_log.AppendText(formatted_msg)
         # Reseta estilo para não vazar
-        self.txt_log.SetDefaultStyle(wx.TextAttr(wx.BLACK))
+        self.txt_log.SetDefaultStyle(wx.TextAttr(self.theme.get_fg_color()))
 
 import logging
 class WxLogHandler(logging.Handler):
@@ -88,6 +90,7 @@ class WxLogHandler(logging.Handler):
                 
                 self.text_ctrl.SetDefaultStyle(wx.TextAttr(color))
                 self.text_ctrl.AppendText(msg)
-                self.text_ctrl.SetDefaultStyle(wx.TextAttr(wx.BLACK))
+                theme = ThemeManager()
+                self.text_ctrl.SetDefaultStyle(wx.TextAttr(theme.get_fg_color()))
         except:
             pass

@@ -6,6 +6,7 @@ import time
 from core.config_manager import ConfigManager
 from core.pubsub import PubSub
 from core.cooldown_manager import CooldownManager
+from core.managers.theme_manager import ThemeManager
 
 logger = logging.getLogger("contextflow.ui.config")
 
@@ -20,7 +21,8 @@ class DialogConfig(wx.Dialog):
                          style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
         self.config = ConfigManager()
         self.cooldown_mgr = CooldownManager()
-        self.SetBackgroundColour(wx.WHITE)
+        self.theme = ThemeManager()
+        self.SetBackgroundColour(self.theme.get_bg_color())
         
         self.timer = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, self.on_update_status, self.timer)
@@ -33,16 +35,16 @@ class DialogConfig(wx.Dialog):
 
         # Header Estilizado
         header_panel = wx.Panel(self)
-        header_panel.SetBackgroundColour(wx.WHITE)
+        header_panel.SetBackgroundColour(self.theme.get_bg_color())
         header_sizer = wx.BoxSizer(wx.VERTICAL)
         
         lbl_title = wx.StaticText(header_panel, label="Console de Governança & Parâmetros de Core")
         lbl_title.SetFont(wx.Font(12, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
-        lbl_title.SetForegroundColour(wx.Colour(15, 23, 42)) 
+        lbl_title.SetForegroundColour(self.theme.get_fg_color()) 
         
         lbl_subtitle = wx.StaticText(header_panel, label="Monitoramento soberano e configuração de resiliência.")
         lbl_subtitle.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
-        lbl_subtitle.SetForegroundColour(wx.Colour(100, 116, 139)) 
+        lbl_subtitle.SetForegroundColour(wx.Colour(100, 116, 139)) # Mantido para hierarquia visual
         
         header_sizer.Add(lbl_title, 0, wx.TOP | wx.LEFT | wx.RIGHT, 15)
         header_sizer.Add(lbl_subtitle, 0, wx.BOTTOM | wx.LEFT | wx.RIGHT, 15)
@@ -68,7 +70,7 @@ class DialogConfig(wx.Dialog):
 
         # Rodapé de Observabilidade (Status em Tempo Real)
         self.status_bar = wx.Panel(self)
-        self.status_bar.SetBackgroundColour(wx.Colour(241, 245, 249)) # Slate 100
+        self.status_bar.SetBackgroundColour(self.theme.get_highlight_color())
         status_sizer = wx.BoxSizer(wx.HORIZONTAL)
         
         self.lbl_status_shield = wx.StaticText(self.status_bar, label="Escudo: Inativo")
@@ -90,7 +92,7 @@ class DialogConfig(wx.Dialog):
 
         # Rodapé de Ações
         action_panel = wx.Panel(self)
-        action_panel.SetBackgroundColour(wx.WHITE)
+        action_panel.SetBackgroundColour(self.theme.get_bg_color())
         action_sizer = wx.BoxSizer(wx.HORIZONTAL)
         
         btn_cancel = wx.Button(action_panel, wx.ID_CANCEL, label="Cancelar", size=(100, 35))
@@ -111,7 +113,7 @@ class DialogConfig(wx.Dialog):
     def _create_tab_extraction(self):
         panel = wx.ScrolledWindow(self.nb)
         panel.SetScrollRate(0, 20)
-        panel.SetBackgroundColour(wx.Colour(248, 250, 252))
+        panel.SetBackgroundColour(self.theme.get_bg_color())
         sizer = wx.BoxSizer(wx.VERTICAL)
 
         # BLOCO A: Controle de Limites e Proteção
@@ -141,7 +143,7 @@ class DialogConfig(wx.Dialog):
     def _create_tab_ai(self):
         panel = wx.ScrolledWindow(self.nb)
         panel.SetScrollRate(0, 20)
-        panel.SetBackgroundColour(wx.Colour(248, 250, 252))
+        panel.SetBackgroundColour(self.theme.get_bg_color())
         sizer = wx.BoxSizer(wx.VERTICAL)
 
         # BLOCO: Credenciais de API (Saneamento de Persistência)
@@ -258,7 +260,7 @@ class DialogConfig(wx.Dialog):
     def _create_tab_orchestration(self):
         panel = wx.ScrolledWindow(self.nb)
         panel.SetScrollRate(0, 20)
-        panel.SetBackgroundColour(wx.Colour(248, 250, 252))
+        panel.SetBackgroundColour(self.theme.get_bg_color())
         sizer = wx.BoxSizer(wx.VERTICAL)
 
         # BLOCO: Concurrency Pool
