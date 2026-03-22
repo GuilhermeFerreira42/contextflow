@@ -1,0 +1,28 @@
+# INSTRUÇÕES DE CONTEXTO PARA IA — ContextFlow
+
+## Ler OBRIGATORIAMENTE antes de qualquer tarefa
+1. `docs/CURRENT_STATE.md` — Estado atual completo do sistema
+2. O código-fonte em `core/`, `services/`, `storage/`, `ui/` — Implementação real
+
+## Ler APENAS QUANDO NECESSÁRIO
+3. `docs/DECISION_LOG.md` — Quando precisar entender "por quê"
+4. `docs/BACKLOG_FUTURO.md` — Para entender funcionalidades planejadas
+5. `docs/blueprint/PRD.md` — Para referência de requisitos originais
+6. `docs/history/PHASE_6/document.md` — Apenas se implementando a Fase 6
+
+## NUNCA LER (ignorar completamente)
+- `docs/history/*` — Blueprints arquivados (extensão .resolved)
+- `docs/history/PHASE_5.*/**` — Blueprints arquivados (extensão .resolved)
+- `docs/history/AUDIT_LOGS.md` — Histórico de auditoria (humanos)
+- `.git/` — Controle de versão
+- `__pycache__/` — Cache Python
+- `data/` — Dados de runtime
+- `config/` — Credenciais (segurança)
+- `scripts/` — Scripts de debug/verificação
+
+## Workflow de nova fase
+1. Ler `docs/CURRENT_STATE.md`
+2. Ler o blueprint da nova fase (fornecido pelo usuário)
+3. Ler apenas os arquivos de código que serão modificados
+4. Implementar
+5. Após validação: executar `docs/ARCHIVING_PROTOCOL.md`
