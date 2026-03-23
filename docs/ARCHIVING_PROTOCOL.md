@@ -24,7 +24,15 @@ Após a conclusão e validação de cada nova fase do projeto.
 - Consolidar fases antigas em sumário de 1 linha por fase
 - Manter as 10 fases mais recentes no formato detalhado
 
-### 5. Sugira para o usuario um nome de commit para o github
+### 5. limpeza do projeto
+- Mova os scripts de verificação para a pasta adequada
+- elimine os scripts que não são mais necessários
+- mova o blueprint da fase para a pasta adequada
+- renomeie o arquivo do blueprint para document.resolved
+- copie para a pasta da fase o arquivo walkthrough.md.resolved
+- deixe tudo em pt-br
+
+### 6. Sugira para o usuario um nome de commit para o github
 - O nome deve ser curto e descritivo
 - O nome deve ser em portugues
 - O nome deve ser em maiusculo

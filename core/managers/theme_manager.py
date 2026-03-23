@@ -43,6 +43,9 @@ class ThemeManager:
     def get_border_color(self) -> wx.Colour:
         return self.COLOR_BORDER
 
+    def get_highlight_color(self) -> wx.Colour:
+        return self.COLOR_HIGHLIGHT
+
     def apply_theme(self, window: wx.Window):
         """Aplica recursivamente o tema a um widget e seus filhos."""
         window.SetBackgroundColour(self.COLOR_BG)

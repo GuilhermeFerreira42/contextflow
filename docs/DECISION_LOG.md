@@ -32,3 +32,12 @@ F6.0| RULE | Kill-Switch Atômico | Controle total sobre threads | `core/manager
 - | DEL | Documentação Obsoleta | Reduzir ruído e consumo de tokens | `docs/blueprint/`, `docs/tracking/`
 - | MOD | Arquivamento Progressivo | Renomear histórico para `.resolved` | `docs/history/PHASE_5.*`
 - | ADD | Instruções SSoT (.ai-context) | Blindar IA contra histórico antigo | `.ai-context`, `.humano`
+
+### Fase 6.1a — Infraestrutura de IA
+F6.1a| ADD | Provider Ollama (HTTP direto) | Validado em teste: 27K tokens, 4.86s | `services/ai_providers/ollama_provider.py`
+F6.1a| ADD | Discovery automático via HTTP | /api/tags + /api/show em vez de subprocess | `services/ai_discovery.py`
+F6.1a| ADD | AIExecutor com Map-Reduce | Encapsulado: UI só vê summarizing→summarized | `services/ai_executor.py`
+F6.1a| ADD | Migração DB (tags, summary_status) | JSON string + 4 estados de status | `storage/db_handler.py`
+F6.1a| ADD | PubSub Events de IA | SUMMARY_STARTED, COMPLETED, ERROR | `services/ai_executor.py`
+F6.1a| RULE | HTTP Direto Obrigatório | Sem subprocess, sem biblioteca ollama | `services/ai_providers/`
+F6.1a| RULE | Zero UI na Fase 6.1a | Separação total infra/view | Todos os novos arquivos

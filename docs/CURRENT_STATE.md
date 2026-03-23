@@ -1,5 +1,5 @@
 # CURRENT_STATE — ContextFlow
-> Última atualização: Fase 6.0 | 2026-03-22
+> Última atualização: Fase 6.1a | 2026-03-23
 
 ## Arquitetura Ativa
 - **Padrão**: Fachada Singleton (`AppState`) com delegação para **Gerentes Especializados** (`core/managers/`).
@@ -19,9 +19,12 @@
 | Cooldown | `core/cooldown_manager.py` | `trigger_cooldown(duration)`, `is_cooling_down() -> bool` | F5.12 |
 | Proxy Manager | `core/proxy_manager.py` | `get_next_proxy() -> str`, `report_failure(proxy_url)` | F5.12 |
 | YT Manager | `services/youtube_manager.py` | `get_metadata(url) -> Dict`, `get_transcript(video_id) -> str` | F1 |
-| AI Discovery | `services/ai_discovery.py` | `list_available_models(provider) -> List` | F6.0 |
-| AI Executor | `services/ai_executor.py` | `execute_summary(video_id) -> Future` | F6.0 |
-| DB Handler | `storage/db_handler.py` | `add_video_entry(data)`, `get_all_videos()`, `set_setting(k, v)` | F1 |
+| AI Provider | `services/ai_provider.py` | `AIProvider.summarize()`, `AIProvider.list_models()` | F6.1a |
+| Ollama Provider | `services/ai_providers/ollama_provider.py` | `OllamaProvider(endpoint)`, HTTP direto | F6.1a |
+| Google Provider | `services/ai_providers/google_provider.py` | `GoogleProvider(api_key)`, Stub (F6.1b) | F6.1a |
+| AI Discovery | `services/ai_discovery.py` | `discover_models(provider)`, `get_model_context_limit(model)` | F6.1a |
+| AI Executor | `services/ai_executor.py` | `execute_summary(video_id) -> Dict` | F6.1a |
+| DB Handler | `storage/db_handler.py` | `add_video_entry(data)`, `get_video(id)`, `set_setting(k, v)` | F1 |
 | VirtualTable | `ui/virtual_table.py` | `VirtualVideoTable(parent)`, `SetItemCount(count)`, `RefreshRows()` | F5.5 |
 
 ## Fluxo Principal

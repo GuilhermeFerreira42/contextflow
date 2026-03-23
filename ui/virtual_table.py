@@ -176,10 +176,12 @@ class ChipTagRenderer(wx.grid.GridCellRenderer):
     def _get_tag_color(self, name: str):
         """Gera uma cor pastel baseada no hash do nome da tag."""
         import hashlib
+        import colorsys
         # Gera um valor hash estável 0-359 (Hue)
         h = int(hashlib.md5(name.encode()).hexdigest(), 16) % 360
-        # h, s, l: s=70%, l=90% para tons pastel suaves
-        return wx.Colour().SetHSB(h/360.0, 0.4, 0.95)
+        # h, s, l: s=70%, l=90% para tons pastel suaves (l=0.9, s=0.4)
+        r, g, b = colorsys.hls_to_rgb(h/360.0, 0.9, 0.4)
+        return wx.Colour(int(r*255), int(g*255), int(b*255))
 
     def Draw(self, grid, attr, dc, rect, row, col, isSelected):
         # Limpa fundo

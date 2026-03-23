@@ -135,6 +135,14 @@ class DatabaseHandler:
             if 'added_at' not in columns:
                 print("Migrando DB: Adicionando added_at...")
                 cursor.execute("ALTER TABLE videos ADD COLUMN added_at TEXT")
+
+            if 'tags' not in columns:
+                print("Migrando DB: Adicionando tags...")
+                cursor.execute("ALTER TABLE videos ADD COLUMN tags TEXT DEFAULT '[]'")
+
+            if 'summary_status' not in columns:
+                print("Migrando DB: Adicionando summary_status...")
+                cursor.execute("ALTER TABLE videos ADD COLUMN summary_status TEXT")
                 
             # [INTEGRIDADE] Garantir que system_config existe (correção de regressão)
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='system_config'")
@@ -160,39 +168,55 @@ class DatabaseHandler:
         cursor = conn.cursor()
         try:
             # created_at is NOT updated on conflict regarding requirement
+            # [REGRESSÃO FIX] Se for apenas um update parcial (ex: status), precisamos dos dados existentes para o INSERT
+            existing = self.get_video(video_data['id'])
+            
             cursor.execute('''
-                INSERT INTO videos (id, url, title, channel_name, duration, upload_date, thumbnail_path, playlist_id, playlist_title, token_count, status, created_at, added_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO videos (id, url, title, channel_name, duration, upload_date,
+                    thumbnail_path, playlist_id, playlist_title, token_count, status,
+                    created_at, added_at, tags, summary_status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
-                    title=excluded.title,
-                    channel_name=excluded.channel_name,
-                    playlist_id=excluded.playlist_id,
-                    playlist_title=excluded.playlist_title,
-                    token_count=excluded.token_count,
-                    status=excluded.status,
-                    thumbnail_path=excluded.thumbnail_path,
-                    duration=excluded.duration
-                    -- created_at e added_at NÃO são atualizados
+                    title=COALESCE(excluded.title, title),
+                    channel_name=COALESCE(excluded.channel_name, channel_name),
+                    playlist_id=COALESCE(excluded.playlist_id, playlist_id),
+                    playlist_title=COALESCE(excluded.playlist_title, playlist_title),
+                    token_count=COALESCE(excluded.token_count, token_count),
+                    status=COALESCE(status, excluded.status),
+                    thumbnail_path=COALESCE(excluded.thumbnail_path, thumbnail_path),
+                    duration=COALESCE(excluded.duration, duration),
+                    tags=COALESCE(excluded.tags, tags),
+                    summary_status=COALESCE(excluded.summary_status, summary_status)
             ''', (
-                video_data['id'],
-                video_data['url'],
-                video_data.get('title', 'Unknown'),
-                video_data.get('channel_name', video_data.get('channel', '')), 
-                video_data.get('duration', 0),
-                video_data.get('upload_date', ''),
-                video_data.get('thumbnail_path', ''),
-                video_data.get('playlist_id'),
-                video_data.get('playlist_title'),
-                video_data.get('token_count', 0),
-                video_data.get('status', 'pending'),
-                # created_at (novo registro)
+                video_data.get('id'),
+                video_data.get('url') or (existing.get('url') if existing else ''),
+                video_data.get('title') or (existing.get('title') if existing else 'Unknown'),
+                video_data.get('channel_name') or video_data.get('channel') or (existing.get('channel_name') if existing else ''),
+                video_data.get('duration') or (existing.get('duration') if existing else 0),
+                video_data.get('upload_date') or (existing.get('upload_date') if existing else ''),
+                video_data.get('thumbnail_path') or (existing.get('thumbnail_path') if existing else ''),
+                video_data.get('playlist_id') or (existing.get('playlist_id') if existing else None),
+                video_data.get('playlist_title') or (existing.get('playlist_title') if existing else None),
+                video_data.get('token_count') or (existing.get('token_count') if existing else 0),
+                video_data.get('status') or (existing.get('status') if existing else 'pending'),
                 datetime.datetime.now().isoformat(),
-                # added_at (novo registro) - Se vier no video_data, usa, senão usa agora
-                video_data.get('added_at') or datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+                video_data.get('added_at') or (existing.get('added_at') if existing else datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")),
+                video_data.get('tags') or (existing.get('tags') if existing else '[]'),
+                video_data.get('summary_status') or (existing.get('summary_status') if existing else None)
             ))
             conn.commit()
-        except Exception as e:
-            print(f"DB Error (add_video): {e}")
+        finally:
+            conn.close()
+
+    def get_video(self, video_id: str) -> Optional[Dict[str, Any]]:
+        """Busca um único vídeo pelo ID."""
+        conn = self._get_connection()
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        try:
+            cursor.execute('SELECT * FROM videos WHERE id = ?', (video_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
         finally:
             conn.close()
 

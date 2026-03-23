@@ -160,3 +160,42 @@ class AppState:
 
     def is_cancel_requested(self) -> bool:
         return self.task_manager.is_cancelled()
+
+    # ─── Delegation: AI Summary (FASE 6.1a) ───────────────────
+
+    def get_video_tags(self, video_id: str) -> list:
+        """Retorna tags do vídeo como lista Python."""
+        return self.video_manager.get_video_tags(video_id)
+
+    def get_summary_status(self, video_id: str) -> str:
+        """Retorna status de resumo do vídeo."""
+        return self.video_manager.get_summary_status(video_id)
+
+    def get_videos_pending_summary(self) -> list:
+        """Retorna vídeos elegíveis para resumo."""
+        return self.video_manager.get_videos_pending_summary()
+
+    def request_summary(self, video_id: str):
+        """
+        Submete pedido de resumo ao TaskManager.
+        [THREAD SAFETY] O executor roda na pool de IA (max_workers=1 para Ollama).
+        """
+        from services.ai_executor import AIExecutor
+        executor = AIExecutor(self)
+
+        provider = self.config.get("orchestration", "active_provider", "ollama")
+        self.task_manager.submit_task(
+            f"summary_{video_id}",
+            executor.execute_summary,
+            video_id,
+            provider=provider
+        )
+
+    def request_batch_summary(self, video_ids: list):
+        """
+        Submete múltiplos pedidos de resumo.
+        Cada vídeo é enfileirado como tarefa separada.
+        O TaskManager controla a concorrência (1 para Ollama, N para cloud).
+        """
+        for vid in video_ids:
+            self.request_summary(vid)

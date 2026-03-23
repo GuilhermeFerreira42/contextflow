@@ -31,3 +31,55 @@ COLOR_FG = wx.Colour(40, 40, 40)      # Dark Gray
 COLOR_HIGHLIGHT = wx.Colour(240, 240, 240) # Light highlight
 COLOR_ACCENT = wx.Colour(0, 120, 215)  # Blue accent
 
+# --- AI Summary Configuration (FASE 6.1a) ---
+CONTEXTFLOW_JSON_SCHEMA = {
+    "summary": "Resumo narrativo completo do conteúdo...",
+    "tags": ["tag1", "tag2", "tag3"],
+    "language": "pt-BR"
+}
+
+SUMMARY_SYSTEM_PROMPT = """Você é um assistente especializado em análise de conteúdo de vídeo.
+Sua tarefa é analisar a transcrição abaixo e gerar um resumo estruturado em JSON.
+
+## REGRAS OBRIGATÓRIAS:
+1. Responda APENAS com JSON válido, sem texto antes ou depois
+2. Não use markdown (sem ```json)
+3. O campo "summary" deve ter entre 200-500 palavras
+4. O campo "tags" deve ter entre 3-8 tags relevantes em português
+5. Idioma do resumo: português do Brasil (pt-BR)
+6. As tags devem ser substantivos ou expressões curtas que descrevam os temas centrais
+
+## SCHEMA DE SAÍDA:
+{schema}
+
+## TRANSCRIÇÃO DO VÍDEO:
+{transcript}"""
+
+SUMMARY_MAP_PROMPT = """Você é um assistente especializado em análise de conteúdo.
+Extraia os pontos-chave do trecho abaixo. Responda APENAS com JSON válido.
+
+## SCHEMA:
+{{"key_points": ["ponto 1", "ponto 2", ...], "partial_tags": ["tag1", "tag2"]}}
+
+## TRECHO:
+{chunk}"""
+
+SUMMARY_REDUCE_PROMPT = """Você é um assistente especializado em síntese de conteúdo.
+Abaixo estão extrações parciais de um vídeo longo. Consolide tudo em um resumo final.
+Responda APENAS com JSON válido.
+
+## SCHEMA:
+{schema}
+
+## EXTRAÇÕES PARCIAIS:
+{partial_summaries}"""
+
+# Limites de segurança para IA
+AI_DEFAULT_CONTEXT_FALLBACK = 4096
+AI_CONTEXT_USAGE_RATIO = 0.75  # Usa no máximo 75% do contexto do modelo
+AI_MAP_CHUNK_RATIO = 0.60      # Cada chunk usa 60% do contexto (reserva para prompt+resposta)
+AI_DEFAULT_TIMEOUT = 600       # 10 minutos
+AI_DEFAULT_TEMPERATURE = 0.7
+AI_DEFAULT_TOP_P = 0.9
+AI_DEFAULT_NUM_PREDICT = 2048
+

@@ -140,3 +140,36 @@ class VideoManager:
             for vid in to_remove:
                 del self._videos[vid]
             self._cache_dirty = True
+
+    # ─── TAGS & SUMMARY (FASE 6.1a) ─────────────────────────
+
+    def get_video_tags(self, video_id: str) -> list:
+        """Retorna tags como lista Python (parse do JSON string)."""
+        import json
+        video = self.get_video(video_id)
+        if video:
+            tags_str = video.get("tags", "[]")
+            try:
+                if isinstance(tags_str, str):
+                    return json.loads(tags_str)
+                elif isinstance(tags_str, list):
+                    return tags_str
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return []
+
+    def get_summary_status(self, video_id: str) -> str:
+        """Retorna o status de resumo do vídeo."""
+        video = self.get_video(video_id)
+        if video:
+            return video.get("summary_status") or ""
+        return ""
+
+    def get_videos_pending_summary(self) -> list:
+        """Retorna vídeos completados que ainda não foram resumidos."""
+        with self._lock:
+            return [
+                v for v in self._videos.values()
+                if v.get("status") == "completed"
+                and not v.get("summary_status")
+            ]
