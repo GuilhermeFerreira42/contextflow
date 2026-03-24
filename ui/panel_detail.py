@@ -145,18 +145,30 @@ class DetailPanel(wx.Panel):
         self.theme = ThemeManager()
         bg = self.theme.get_bg_color()
         fg = self.theme.get_fg_color()
-        
+
         self.SetBackgroundColour(bg)
         self.SetForegroundColour(fg)
-        
-        # Se houver conteúdo no browser, precisamos recarregar com novo CSS
+
+        # Labels
+        if hasattr(self, 'lbl_title'):
+            self.lbl_title.SetForegroundColour(fg)
+        if hasattr(self, 'lbl_meta'):
+            self.lbl_meta.SetForegroundColour(fg)
+        if hasattr(self, 'lbl_stats'):
+            self.lbl_stats.SetForegroundColour(fg)
+
+        # WebView — injeta CSS via JavaScript
         if self.browser:
-            # Injeta CSS de troca de tema via JS se o browser suportar
-            js = f"document.body.style.backgroundColor='{bg.GetAsString(wx.C2S_HTML_SYNTAX)}';"
-            js += f"document.body.style.color='{fg.GetAsString(wx.C2S_HTML_SYNTAX)}';"
-            self.browser.RunScript(js)
+            bg_hex = bg.GetAsString(wx.C2S_HTML_SYNTAX)
+            fg_hex = fg.GetAsString(wx.C2S_HTML_SYNTAX)
+            js = f"document.body.style.backgroundColor='{bg_hex}';"
+            js += f"document.body.style.color='{fg_hex}';"
+            try:
+                self.browser.RunScript(js)
+            except Exception:
+                pass
         elif hasattr(self, "txt_content"):
             self.txt_content.SetBackgroundColour(bg)
             self.txt_content.SetForegroundColour(fg)
-        
+
         self.Refresh()

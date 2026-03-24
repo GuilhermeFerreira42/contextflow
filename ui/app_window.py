@@ -303,38 +303,39 @@ class AppWindow(wx.Frame):
         self.theme.toggle_theme()
 
     def _on_theme_changed(self, theme, **kwargs):
-        """[FASE 6.2] Handler global de troca de tema."""
+        """[FASE 6.2] Handler global de troca de tema — propagação controlada."""
         def _apply():
-            # Atualiza Toolbar label
+            # 1. Atualiza Toolbar
             theme_label = "Modo Claro" if theme == "dark" else "Modo Escuro"
             self.toolbar.SetToolShortHelp(2005, theme_label)
             self.toolbar.Realize()
 
-            # Atualiza menu de tema
-            if theme == "dark":
-                self.GetMenuBar().Check(2007, True)
-            else:
-                self.GetMenuBar().Check(2006, True)
+            # 2. Atualiza menu de tema
+            try:
+                if theme == "dark":
+                    self.GetMenuBar().Check(2007, True)
+                else:
+                    self.GetMenuBar().Check(2006, True)
+            except Exception:
+                pass
 
-            # Aplica cores na janela principal
+            # 3. Atualiza janela principal e containers
             self.SetBackgroundColour(self.theme.get_bg_color())
             self.nb_container.SetBackgroundColour(self.theme.get_bg_color())
 
-            # Aplica nos componentes que têm apply_theme próprio
-            components = [
-                self.sidebar, self.tab_batch, self.tab_analysis,
-                self.panel_detail, self.panel_console
-            ]
-            for comp in components:
-                if hasattr(comp, 'apply_theme'):
-                    try:
+            # 4. Propaga para cada componente de alto nível (cada um sabe seus filhos)
+            for comp in [self.sidebar, self.tab_batch, self.tab_analysis,
+                         self.panel_detail, self.panel_console]:
+                try:
+                    if hasattr(comp, 'apply_theme'):
                         comp.apply_theme()
-                    except Exception as e:
-                        import logging
-                        logging.getLogger("contextflow").debug(f"Theme apply skip: {e}")
+                except Exception as e:
+                    import logging
+                    logging.getLogger("contextflow").debug(f"Theme skip: {e}")
 
+            # 5. Força repintura global
             self.Refresh()
             self.Update()
-            self.log_to_console(f"Tema visual alterado para: {theme.upper()}", "SYSTEM")
+            self.log_to_console(f"Tema alterado para: {theme.upper()}", "SYSTEM")
 
         wx.CallAfter(_apply)

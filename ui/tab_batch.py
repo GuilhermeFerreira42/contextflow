@@ -565,14 +565,34 @@ class TabBatch(wx.Panel):
     def apply_theme(self):
         """[FASE 6.2] Atualiza cores e refresca a grade de processamento."""
         self.theme = ThemeManager()
-        self.SetBackgroundColour(self.theme.get_bg_color())
+        bg = self.theme.get_bg_color()
+        fg = self.theme.get_fg_color()
 
-        # Grid — tratamento especial
+        self.SetBackgroundColour(bg)
+
+        # Grid — tratamento especializado
         if hasattr(self, 'grid'):
-            self.theme._apply_grid_theme(self.grid)
+            self.theme.apply_grid_theme(self.grid)
 
-        # Botão de processo
+        # Botões com cores semânticas
         self.btn_process.SetBackgroundColour(self.theme.get_accent_color())
         self.btn_process.SetForegroundColour(wx.WHITE)
+
+        # Input de URLs
+        if hasattr(self, 'txt_input'):
+            self.txt_input.SetBackgroundColour(self.theme.get_input_bg())
+            self.txt_input.SetForegroundColour(self.theme.get_input_fg())
+
+        # Botões genéricos
+        for btn in [self.btn_clear, self.btn_delete, self.btn_unify,
+                     self.btn_download_md, self.btn_export_zip]:
+            try:
+                btn.SetBackgroundColour(self.theme.get_highlight_color())
+                btn.SetForegroundColour(fg)
+            except Exception:
+                pass
+
+        # Botão cancelar mantém vermelho
+        self.btn_cancel.SetForegroundColour(wx.Colour(200, 50, 50))
 
         self.Refresh()

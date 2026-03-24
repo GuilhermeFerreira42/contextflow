@@ -1,3 +1,4 @@
+# contextflow/core/managers/theme_manager.py
 import wx
 import wx.grid
 import logging
@@ -6,10 +7,6 @@ logger = logging.getLogger("contextflow.theme")
 
 
 class ThemeManager:
-    """
-    SINGLETON de Governança Estética.
-    [FASE 6.2] Evoluído de "Light Mode Absoluto" para "Multi-Theme" (Light/Dark).
-    """
     _instance = None
 
     def __new__(cls):
@@ -21,12 +18,10 @@ class ThemeManager:
     def __init__(self):
         if self._initialized:
             return
-
         from core.config_manager import ConfigManager
         self.config = ConfigManager()
         self._current_theme = self.config.get("ui", "theme", "light")
 
-        # Paletas de Cores
         self.PALETTES = {
             "light": {
                 "bg": wx.Colour(255, 255, 255),
@@ -48,8 +43,6 @@ class ThemeManager:
                 "button_fg": wx.Colour(30, 30, 30),
                 "console_bg": wx.Colour(30, 30, 30),
                 "console_fg": wx.Colour(212, 212, 212),
-                "tag_text_dark": wx.Colour(40, 40, 40),
-                "tag_text_light": wx.Colour(245, 245, 245),
             },
             "dark": {
                 "bg": wx.Colour(30, 30, 30),
@@ -71,8 +64,6 @@ class ThemeManager:
                 "button_fg": wx.Colour(220, 220, 220),
                 "console_bg": wx.Colour(20, 20, 20),
                 "console_fg": wx.Colour(200, 200, 200),
-                "tag_text_dark": wx.Colour(40, 40, 40),
-                "tag_text_light": wx.Colour(245, 245, 245),
             }
         }
 
@@ -94,7 +85,6 @@ class ThemeManager:
             return
         self._current_theme = name
         self.config.set("ui", "theme", name)
-
         from core.pubsub import PubSub
         PubSub.publish("THEME_CHANGED", theme=name)
         logger.info(f"Tema alterado para: {name}")
@@ -121,43 +111,29 @@ class ThemeManager:
     def get_console_fg(self) -> wx.Colour: return self._get_color("console_fg")
 
     def css_color(self, key: str) -> str:
-        """Retorna cor como string CSS hex."""
         c = self._get_color(key)
         return c.GetAsString(wx.C2S_HTML_SYNTAX)
 
     def apply_theme(self, window: wx.Window):
-        """Aplica recursivamente o tema a um widget e seus filhos."""
+        """Aplica o tema NÃO recursivamente. Delega para componentes com apply_theme próprio."""
+        # ESTRATÉGIA: NÃO faz recursão genérica.
+        # Cada componente de alto nível (tab_analysis, sidebar, etc.) tem apply_theme() próprio
+        # que sabe exatamente quais sub-widgets precisa atualizar.
+        # A recursão genérica causa problemas porque:
+        # 1. Não sabe quais widgets têm cores hardcoded intencionais
+        # 2. Corrompe estado ao voltar para light
+        # 3. wx.grid.Grid precisa de tratamento especial
         try:
-            # Skip widgets que têm tratamento especial
-            if isinstance(window, wx.grid.Grid):
-                self._apply_grid_theme(window)
-                return
-
-            window.SetBackgroundColour(self.get_bg_color())
-            window.SetForegroundColour(self.get_fg_color())
-
-            # Chamada específica para widgets que têm apply_theme próprio
-            if hasattr(window, "apply_theme") and window != self:
+            if hasattr(window, "apply_theme"):
                 window.apply_theme()
             else:
-                # Trata tipos específicos
-                if isinstance(window, wx.TextCtrl):
-                    window.SetBackgroundColour(self.get_input_bg())
-                    window.SetForegroundColour(self.get_input_fg())
-                elif isinstance(window, wx.SearchCtrl):
-                    pass  # SearchCtrl não aceita SetBackgroundColour bem em todos os OS
-                elif isinstance(window, wx.TreeCtrl):
-                    window.SetBackgroundColour(self.get_bg_color())
-                    window.SetForegroundColour(self.get_fg_color())
-
-            for child in window.GetChildren():
-                self.apply_theme(child)
-
-            window.Refresh()
+                window.SetBackgroundColour(self.get_bg_color())
+                window.SetForegroundColour(self.get_fg_color())
+                window.Refresh()
         except Exception as e:
             logger.debug(f"apply_theme skip: {e}")
 
-    def _apply_grid_theme(self, grid: wx.grid.Grid):
+    def apply_grid_theme(self, grid: wx.grid.Grid):
         """Aplica tema especificamente para wx.grid.Grid."""
         try:
             grid.SetDefaultCellBackgroundColour(self.get_grid_bg())
@@ -167,12 +143,18 @@ class ThemeManager:
             grid.SetLabelTextColour(self.get_grid_label_fg())
             grid.SetSelectionBackground(self.get_grid_selection_bg())
             grid.SetSelectionForeground(self.get_grid_selection_fg())
-
-            # Fundo da janela da grid
             grid_window = grid.GetGridWindow()
             if grid_window:
                 grid_window.SetBackgroundColour(self.get_grid_bg())
-
+            corner = grid.GetGridCornerLabelWindow()
+            if corner:
+                corner.SetBackgroundColour(self.get_grid_label_bg())
+            row_label = grid.GetGridRowLabelWindow()
+            if row_label:
+                row_label.SetBackgroundColour(self.get_grid_label_bg())
+            col_label = grid.GetGridColLabelWindow()
+            if col_label:
+                col_label.SetBackgroundColour(self.get_grid_label_bg())
             grid.ForceRefresh()
         except Exception as e:
-            logger.debug(f"_apply_grid_theme error: {e}")
+            logger.debug(f"apply_grid_theme error: {e}")

@@ -414,8 +414,18 @@ class Sidebar(wx.Panel):
     def apply_theme(self):
         """[FASE 6.2] Atualiza cores internas da Sidebar."""
         self.theme = ThemeManager()
-        self.SetBackgroundColour(self.theme.get_bg_color())
-        self.tree.SetBackgroundColour(self.theme.get_bg_color())
-        self.tree.SetForegroundColour(self.theme.get_fg_color())
-        # Atualiza a árvore para aplicar novas cores nos itens se necessário
-        self.load_history(self.search_ctrl.GetValue())
+        bg = self.theme.get_bg_color()
+        fg = self.theme.get_fg_color()
+
+        self.SetBackgroundColour(bg)
+        self.tree.SetBackgroundColour(bg)
+        self.tree.SetForegroundColour(fg)
+        self.btn_toggle.SetBackgroundColour(self.theme.get_border_color())
+
+        # Recarrega a árvore para aplicar cores
+        try:
+            self.load_history(self.search_ctrl.GetValue())
+        except Exception:
+            pass
+
+        self.Refresh()

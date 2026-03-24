@@ -138,8 +138,22 @@ class AnalysisToolbar(wx.Panel):
 
     def apply_theme(self):
         self.theme = ThemeManager()
-        self.SetBackgroundColour(self.theme.get_bg_color())
+        bg = self.theme.get_bg_color()
+        fg = self.theme.get_fg_color()
+
+        self.SetBackgroundColour(bg)
+
+        # Botão de resumir mantém cor accent
         self.btn_summarize.SetBackgroundColour(self.theme.get_accent_color())
         self.btn_summarize.SetForegroundColour(wx.WHITE)
-        self.btn_export.SetForegroundColour(self.theme.get_fg_color())
+
+        # Botão export
+        self.btn_export.SetBackgroundColour(self.theme.get_highlight_color())
+        self.btn_export.SetForegroundColour(fg)
+
+        # Labels
+        for child in self.GetChildren():
+            if isinstance(child, wx.StaticText):
+                child.SetForegroundColour(fg)
+
         self.Refresh()

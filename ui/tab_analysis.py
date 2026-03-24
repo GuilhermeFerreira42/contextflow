@@ -723,32 +723,48 @@ class TabAnalysis(wx.Panel):
     def apply_theme(self):
         """[FASE 6.2] Atualiza cores e refresca a grade analítica."""
         self.theme = ThemeManager()
-        self.SetBackgroundColour(self.theme.get_bg_color())
+        bg = self.theme.get_bg_color()
+        fg = self.theme.get_fg_color()
 
-        # Toolbar
+        self.SetBackgroundColour(bg)
+
+        # Toolbar (componente com apply_theme próprio)
         if hasattr(self, 'toolbar_ctrl'):
             self.toolbar_ctrl.apply_theme()
 
-        # Grid — tratamento especial
+        # Grid — tratamento especializado
         if hasattr(self, 'grid'):
-            self.theme._apply_grid_theme(self.grid)
+            self.theme.apply_grid_theme(self.grid)
 
-        # Painéis de detalhe
-        if hasattr(self, 'pnl_master'):
-            self.pnl_master.SetBackgroundColour(self.theme.get_bg_color())
-        if hasattr(self, 'pnl_detail'):
-            self.pnl_detail.SetBackgroundColour(self.theme.get_bg_color())
-        if hasattr(self, 'pnl_side_info'):
-            self.pnl_side_info.SetBackgroundColour(self.theme.get_bg_color())
+        # Painéis estruturais
+        for panel in [self.pnl_master, self.pnl_detail, self.pnl_side_info]:
+            if hasattr(self, panel.__class__.__name__) or panel:
+                try:
+                    panel.SetBackgroundColour(bg)
+                except Exception:
+                    pass
+
+        # Labels e textos
         if hasattr(self, 'lbl_side_title'):
             self.lbl_side_title.SetForegroundColour(self.theme.get_accent_color())
+
+        # TagWrapPanel (componente com apply_theme próprio)
         if hasattr(self, 'pnl_tags'):
             self.pnl_tags.apply_theme()
+
+        # TextCtrl do resumo
         if hasattr(self, 'txt_summary'):
-            self.txt_summary.SetBackgroundColour(self.theme.get_bg_color())
-            self.txt_summary.SetForegroundColour(self.theme.get_fg_color())
+            self.txt_summary.SetBackgroundColour(bg)
+            self.txt_summary.SetForegroundColour(fg)
+
+        # Splitter
         if hasattr(self, 'splitter'):
             self.splitter.SetBackgroundColour(self.theme.get_border_color())
+
+        # Botão fechar viewer
+        if hasattr(self, 'btn_close_viewer'):
+            self.btn_close_viewer.SetBackgroundColour(self.theme.get_highlight_color())
+            self.btn_close_viewer.SetForegroundColour(fg)
 
         self.Refresh()
 
