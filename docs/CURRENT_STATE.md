@@ -1,5 +1,5 @@
 # CURRENT_STATE — ContextFlow
-> Última atualização: Fase 6.1b | 2026-03-23
+> Última atualização: Fase 6.2 | 2026-03-24 (UI Polish & Multi-Theme)
 
 ## Arquitetura Ativa
 - **Padrão**: Fachada Singleton (`AppState`) com delegação para **Gerentes Especializados** (`core/managers/`).
@@ -14,7 +14,7 @@
 | VideoManager | `core/managers/video_manager.py` | `get_all_videos() -> List`, `promote_task_to_video(uuid, data)`, `delete_videos(ids)` | F6.0 |
 | TaskManager | `core/managers/task_manager.py` | `submit_task(id, func, *args)`, `is_cancelled() -> bool`, `atomic_kill_switch()` | F6.0 |
 | FinanceManager | `core/managers/finance_manager.py` | `log_transaction(amount, type)`, `get_balance() -> float` | F6.0 |
-| ThemeManager | `core/managers/theme_manager.py` | `get_colors() -> Dict`, `apply_theme(parent)` | F6.0 |
+| ThemeManager | `core/managers/theme_manager.py` | `get_theme_name()`, `set_theme(name)`, `apply_theme(parent)` | F6.2 |
 | AI Governance | `core/ai_governance.py` | `TokenCounter.count_tokens(text)`, `AICostCalculator.estimate_cost(prompt, completion)` | F5.6 |
 | Cooldown | `core/cooldown_manager.py` | `trigger_cooldown(duration)`, `is_cooling_down() -> bool` | F5.12 |
 | Proxy Manager | `core/proxy_manager.py` | `get_next_proxy() -> str`, `report_failure(proxy_url)` | F5.12 |
@@ -32,8 +32,9 @@
 2. **Extração**: `TaskManager` orquestra `YTManager` → Metadados salvos no DB → Notificação via PubSub.
 3. **Análise**: `VirtualTable` em `TabAnalysis` exibe dados → Seletor de modelo na toolbar.
 4. **Inteligência**: Usuário seleciona vídeos → "✨ Resumir" → `AIExecutor` processa via Ollama/Google.
-5. **Feedback**: PubSub notifica UI → Grid atualiza tags/resumo em tempo real → Viewer condicional.
-6. **Insights**: Resumo persistido → `DetailPanel` renderiza via texto reativamente.
+5. **Feedback**: PubSub notifica UI → Grid atualiza tags/resumo em tempo real → `SummaryStatusRenderer` fornece feedback visual rico.
+6. **Insights**: Resumo persistido → `TagWrapPanel` exibe tags completas -> `DetailPanel` renderiza via WebView com CSS dinâmico (Dark/Light).
+7. **Persistência UI**: Temas e larguras de colunas são salvos no `credentials.json` via `ConfigManager`.
 
 ## Invariantes Globais (nunca violar)
 1. UUIDs são imutáveis após a primeira ingestão do vídeo.

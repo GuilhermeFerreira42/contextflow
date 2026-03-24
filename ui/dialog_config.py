@@ -17,7 +17,8 @@ class DialogConfig(wx.Dialog):
     3 Abas: Extração, Conectividade IA, Orquestração.
     """
     def __init__(self, parent):
-        super().__init__(parent, title="Painel de Controle Operacional — ContextFlow", size=(800, 600), 
+        super().__init__(parent, title="Painel de Controle Operacional — ContextFlow", 
+                         size=(980, 720),
                          style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
         self.config = ConfigManager()
         self.cooldown_mgr = CooldownManager()
@@ -150,113 +151,116 @@ class DialogConfig(wx.Dialog):
         panel.SetBackgroundColour(self.theme.get_bg_color())
         sizer = wx.BoxSizer(wx.VERTICAL)
 
-        # BLOCO: Credenciais de API (Saneamento de Persistência)
+        # ══════════════════════════════════════════════
+        # BLOCO: Credenciais de API (Apenas Google Gemini)
+        # ══════════════════════════════════════════════
         sec_api = wx.StaticBox(panel, label="Credenciais de Provedores Cloud")
-        sec_api.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
+        sec_api.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT,
+                                wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
         api_sizer = wx.StaticBoxSizer(sec_api, wx.VERTICAL)
-        
-        grid = wx.FlexGridSizer(rows=4, cols=2, vgap=10, hgap=10)
+
+        grid = wx.FlexGridSizer(rows=1, cols=2, vgap=10, hgap=10)
         grid.AddGrowableCol(1)
-        
-        providers = [
-            ("OpenAI API Key:", "openai"),
-            ("Google Gemini:", "google"),
-            ("Grok (xAI):", "grok"),
-            ("GROQ API:", "groq")
-        ]
-        
+
+        # [FASE 6.2] Apenas Google Gemini visível na UI
+        # OpenAI, Grok, Groq permanecem no credentials.json mas não são expostos
         self.ai_inputs = {}
-        for label, key in providers:
-            grid.Add(wx.StaticText(panel, label=label), 0, wx.ALIGN_CENTER_VERTICAL)
-            
-            row_api = wx.BoxSizer(wx.HORIZONTAL)
-            txt = wx.TextCtrl(panel, style=wx.TE_PASSWORD)
-            txt.SetValue(self.config.get("api_keys", key, ""))
-            row_api.Add(txt, 1, wx.EXPAND)
-            
-            # Botão de Olho (Toggle Visibilidade)
-            btn_eye = wx.Button(panel, label="👁", size=(30, 24))
-            btn_eye.SetToolTip(f"Mostrar/Ocultar {label}")
-            row_api.Add(btn_eye, 0, wx.LEFT, 5)
-            
-            def on_toggle_visibility(event, b=btn_eye, k=key, sz=row_api):
-                # [WINDOWS STABILITY] Recreação atômica com Freeze para evitar blink
-                panel.Freeze()
-                try:
-                    current_t = self.ai_inputs[k]
-                    val = current_t.GetValue()
-                    is_pw = bool(current_t.GetWindowStyleFlag() & wx.TE_PASSWORD)
-                    new_style = wx.TE_LEFT if is_pw else wx.TE_PASSWORD
-                    
-                    # Cria novo mantendo proporções do Sizer
-                    new_t = wx.TextCtrl(panel, style=new_style)
-                    new_t.SetValue(val)
-                    
-                    # Swap físico no sizer
-                    sz.Replace(current_t, new_t)
-                    current_t.Destroy()
-                    
-                    self.ai_inputs[k] = new_t
-                    b.SetLabel("👁" if not is_pw else "👓")
-                    
-                    panel.Layout()
-                    new_t.SetFocus()
-                    new_t.SetInsertionPointEnd()
-                finally:
-                    panel.Thaw()
-                
-            btn_eye.Bind(wx.EVT_BUTTON, on_toggle_visibility)
-            
-            grid.Add(row_api, 1, wx.EXPAND)
-            self.ai_inputs[key] = txt
-            
+
+        grid.Add(wx.StaticText(panel, label="Google Gemini API Key:"), 0,
+                 wx.ALIGN_CENTER_VERTICAL)
+
+        row_api = wx.BoxSizer(wx.HORIZONTAL)
+        txt = wx.TextCtrl(panel, style=wx.TE_PASSWORD)
+        txt.SetValue(self.config.get("api_keys", "google", ""))
+        row_api.Add(txt, 1, wx.EXPAND)
+
+        # Botão de Olho (Toggle Visibilidade)
+        btn_eye = wx.Button(panel, label="👁", size=(30, 24))
+        btn_eye.SetToolTip("Mostrar/Ocultar chave")
+        row_api.Add(btn_eye, 0, wx.LEFT, 5)
+
+        def on_toggle_visibility(event, b=btn_eye, k="google", sz=row_api):
+            panel.Freeze()
+            try:
+                current_t = self.ai_inputs[k]
+                val = current_t.GetValue()
+                is_pw = bool(current_t.GetWindowStyleFlag() & wx.TE_PASSWORD)
+                new_style = wx.TE_LEFT if is_pw else wx.TE_PASSWORD
+
+                new_t = wx.TextCtrl(panel, style=new_style)
+                new_t.SetValue(val)
+
+                sz.Replace(current_t, new_t)
+                current_t.Destroy()
+
+                self.ai_inputs[k] = new_t
+                b.SetLabel("🔒" if not is_pw else "👁")
+
+                panel.Layout()
+                new_t.SetFocus()
+                new_t.SetInsertionPointEnd()
+            finally:
+                panel.Thaw()
+
+        btn_eye.Bind(wx.EVT_BUTTON, on_toggle_visibility)
+
+        grid.Add(row_api, 1, wx.EXPAND)
+        self.ai_inputs["google"] = txt
+
         api_sizer.Add(grid, 1, wx.EXPAND | wx.ALL, 10)
-        
+
         # Legenda de Segurança
-        lbl_sec = wx.StaticText(panel, label="* As chaves são armazenadas localmente em config/credentials.json.")
-        lbl_sec.SetFont(wx.Font(8, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_ITALIC, wx.FONTWEIGHT_NORMAL))
+        lbl_sec = wx.StaticText(panel,
+            label="* As chaves são armazenadas localmente em config/credentials.json.\n"
+                  "  Provedores não listados (OpenAI, Grok, Groq) mantêm dados existentes no arquivo.")
+        lbl_sec.SetFont(wx.Font(8, wx.FONTFAMILY_DEFAULT,
+                                wx.FONTSTYLE_ITALIC, wx.FONTWEIGHT_NORMAL))
         lbl_sec.SetForegroundColour(wx.Colour(100, 116, 139))
         api_sizer.Add(lbl_sec, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
 
         sizer.Add(api_sizer, 0, wx.EXPAND | wx.ALL, 15)
 
+        # ══════════════════════════════════════════════
         # BLOCO: Ollama (Conectividade Local)
+        # ══════════════════════════════════════════════
         sec_local = wx.StaticBox(panel, label="Ollama (Conectividade Local)")
-        sec_local.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
+        sec_local.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT,
+                                  wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
         local_sizer = wx.StaticBoxSizer(sec_local, wx.VERTICAL)
         
         l_grid = wx.FlexGridSizer(rows=2, cols=2, vgap=10, hgap=10)
         l_grid.AddGrowableCol(1)
         
-        l_grid.Add(wx.StaticText(panel, label="Endpoint URL:"), 0, wx.ALIGN_CENTER_VERTICAL)
+        l_grid.Add(wx.StaticText(panel, label="Endpoint URL:"), 0,
+                   wx.ALIGN_CENTER_VERTICAL)
         self.txt_ollama_url = wx.TextCtrl(panel)
-        self.txt_ollama_url.SetValue(self.config.get("ollama", "endpoint", "http://localhost:11434"))
+        self.txt_ollama_url.SetValue(
+            self.config.get("ollama", "endpoint", "http://localhost:11434"))
         l_grid.Add(self.txt_ollama_url, 1, wx.EXPAND)
         
-        l_grid.Add(wx.StaticText(panel, label="Model Name:"), 0, wx.ALIGN_CENTER_VERTICAL)
+        l_grid.Add(wx.StaticText(panel, label="Model Name:"), 0,
+                   wx.ALIGN_CENTER_VERTICAL)
         self.txt_ollama_model = wx.TextCtrl(panel)
-        self.txt_ollama_model.SetValue(self.config.get("ollama", "model", "llama3"))
+        self.txt_ollama_model.SetValue(
+            self.config.get("ollama", "model", "llama3"))
         l_grid.Add(self.txt_ollama_model, 1, wx.EXPAND)
         
         local_sizer.Add(l_grid, 1, wx.EXPAND | wx.ALL, 10)
+
+        # Nota informativa
+        lbl_note = wx.StaticText(panel,
+            label="💡 O provedor ativo e modelo são selecionados diretamente na "
+                  "toolbar da Aba 2 (Cockpit Analítico).")
+        lbl_note.SetFont(wx.Font(8, wx.FONTFAMILY_DEFAULT,
+                                 wx.FONTSTYLE_ITALIC, wx.FONTWEIGHT_NORMAL))
+        lbl_note.SetForegroundColour(wx.Colour(37, 99, 235))
+        local_sizer.Add(lbl_note, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+
         sizer.Add(local_sizer, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 15)
 
-        # BLOCO: Seletor de Provedor Ativo
-        sec_sel = wx.StaticBox(panel, label="Seletor de Inteligência Ativa")
-        sec_sel.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
-        sel_sizer = wx.StaticBoxSizer(sec_sel, wx.VERTICAL)
-        
-        row = wx.BoxSizer(wx.HORIZONTAL)
-        row.Add(wx.StaticText(panel, label="Provedor Padrão:"), 0, wx.ALIGN_CENTER_VERTICAL)
-        self.choice_provider = wx.Choice(panel, choices=["openai", "google", "anthropic", "grok", "ollama"])
-        current_provider = self.config.get("orchestration", "active_provider", "openai")
-        idx = self.choice_provider.FindString(current_provider)
-        if idx != wx.NOT_FOUND: self.choice_provider.SetSelection(idx)
-        else: self.choice_provider.SetSelection(0)
-        row.Add(self.choice_provider, 1, wx.LEFT | wx.EXPAND, 10)
-        
-        sel_sizer.Add(row, 0, wx.EXPAND | wx.ALL, 10)
-        sizer.Add(sel_sizer, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 15)
+        # [FASE 6.2] Seletor de Provedor Ativo REMOVIDO
+        # O seletor agora vive exclusivamente na toolbar da Aba 2
+        # Isso evita duplicidade de controle e inconsistência de estado
 
         panel.SetSizer(sizer)
         return panel
@@ -275,13 +279,13 @@ class DialogConfig(wx.Dialog):
         p_grid = wx.FlexGridSizer(rows=2, cols=3, vgap=15, hgap=10)
         
         p_grid.Add(wx.StaticText(panel, label="Limite Nuvem (API):"), 0, wx.ALIGN_CENTER_VERTICAL)
-        self.spin_cloud = wx.SpinCtrl(panel, value="2", min=1, max=4)
+        self.spin_cloud = wx.SpinCtrl(panel, value="2", min=1, max=100)
         self.spin_cloud.SetValue(self.config.get("orchestration", "max_cloud_tasks", 2))
         p_grid.Add(self.spin_cloud, 0, wx.ALIGN_CENTER_VERTICAL)
         p_grid.Add(wx.StaticText(panel, label="tarefas simultâneas"), 0, wx.ALIGN_CENTER_VERTICAL)
         
-        p_grid.Add(wx.StaticText(panel, label="Limite Local (Ollama):"), 0, wx.ALIGN_CENTER_VERTICAL)
-        self.spin_local = wx.SpinCtrl(panel, value="1", min=1, max=2)
+        p_grid.Add(wx.StaticText(panel, label="Máximo de Resumos Locais (Ollama):"), 0, wx.ALIGN_CENTER_VERTICAL)
+        self.spin_local = wx.SpinCtrl(panel, value="1", min=1, max=100)
         self.spin_local.SetValue(self.config.get("orchestration", "max_local_tasks", 1))
         p_grid.Add(self.spin_local, 0, wx.ALIGN_CENTER_VERTICAL)
         p_grid.Add(wx.StaticText(panel, label="tarefas simultâneas (recomendado: 1)"), 0, wx.ALIGN_CENTER_VERTICAL)
@@ -528,13 +532,20 @@ class DialogConfig(wx.Dialog):
         
         self.config.set("subtitles", "language_order", ",".join(self.list_langs.GetStrings()))
         
-        # ABA 2: IA (RESTAURAÇÃO COMPLETA DO SALVAMENTO)
-        for key, ctrl in self.ai_inputs.items():
-            self.config.set("api_keys", key, ctrl.GetValue()) # PERSISTÊNCIA DAS CHAVES
-            
-        self.config.set("ollama", "endpoint", self.txt_ollama_url.GetValue())
-        self.config.set("ollama", "model", self.txt_ollama_model.GetValue())
-        self.config.set("orchestration", "active_provider", self.choice_provider.GetStringSelection())
+        # ABA 2: IA
+        # [FASE 6.2] Apenas Google key é salva pela UI
+        # Chaves de provedores removidos da UI permanecem intactas no JSON
+        if "google" in self.ai_inputs:
+            self.config.set("api_keys", "google",
+                            self.ai_inputs["google"].GetValue())
+
+        self.config.set("ollama", "endpoint",
+                        self.txt_ollama_url.GetValue())
+        self.config.set("ollama", "model",
+                        self.txt_ollama_model.GetValue())
+
+        # [FASE 6.2] Provedor ativo NÃO é mais salvo aqui
+        # A toolbar da Aba 2 é a SSoT para active_provider
         
         # ABA 3: ORQUESTRAÇÃO
         self.config.set("orchestration", "max_cloud_tasks", self.spin_cloud.GetValue())

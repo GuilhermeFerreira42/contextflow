@@ -1,0 +1,2135 @@
+# BLUEPRINT — FASE 6.2: Refinamento, UX/UI e Organização
+
+**Projeto:** ContextFlow  
+**Fase:** 6.2  
+**Status Base:** Fases 6.1a/6.1b ESTÁVEIS ✅  
+**Data:** 2026-03-23  
+**Escopo:** Polimento visual, saneamento, persistência de preferências, Dark Mode
+
+---
+
+## 1. VISÃO GERAL E ESCOPO
+
+### 1.1 Missão da Fase
+
+Transformar o ContextFlow de uma ferramenta funcional em uma experiência polida. O motor de IA está pronto — agora pintamos a carroceria, organizamos a garagem e instalamos o painel de instrumentos intuitivo.
+
+### 1.2 O Que Está INCLUSO
+
+| ID | Subtarefa | Complexidade | Bloco |
+|---|---|---|---|
+| T01 | Limpeza de scripts e arquivamento | Baixa | 6.2a |
+| T02 | Saneamento do DialogConfig | Baixa | 6.2a |
+| T03 | Alinhamento de defaults do ConfigManager | Baixa | 6.2a |
+| T04 | Tags completas no viewer da Aba 2 | Média | 6.2b |
+| T05 | Menu "Resumir" na Sidebar | Média | 6.2b |
+| T06 | Coluna Resumo como indicador visual | Média | 6.2b |
+| T07 | Persistência de largura de colunas | Média | 6.2c |
+| T08 | ThemeManager multi-tema (light/dark) | Alta | 6.2c |
+| T09 | Toggle de tema na AppWindow | Média | 6.2c |
+| T10 | Adaptação de componentes ao tema | Alta | 6.2c |
+
+### 1.3 O Que Está EXCLUSO
+
+- Qualquer alteração em `services/ai_executor.py`, `services/ai_provider.py`, `services/ai_providers/*`
+- Qualquer alteração em `core/processor.py`, `core/ai_governance.py`
+- Qualquer migração de banco de dados (`storage/db_handler.py`)
+- Novos providers de IA
+- Funcionalidades de RAG, busca semântica ou vetores
+
+### 1.4 Princípios Invioláveis
+
+1. **Zero-Knowledge** — Nenhuma aba importa outra. Comunicação exclusiva via `AppState` e `PubSub`
+2. **Thread Safety** — Todo callback PubSub que toca UI usa `wx.CallAfter`
+3. **Import Barrier** — `ui/` NUNCA importa `services/` diretamente
+4. **Bisturi** — Modificações cirúrgicas, arquivos ≤700 linhas
+5. **Falha Graceful** — Erro de preferência nunca trava o app
+
+---
+
+## 2. ARQUITETURA
+
+### 2.1 Mapa de Dependências da Fase
+
+```
+T01 (Limpeza scripts)
+ └─ Sem dependência
+
+T02 (DialogConfig) ──────┐
+T03 (Defaults Config) ───┤── Bloco A (independentes)
+                          │
+T04 (Tags viewer) ────────┤── Bloco B (independentes entre si)
+T05 (Sidebar resumir) ────┤
+T06 (Coluna resumo) ──────┘
+                          │
+T07 (Persistência cols) ──┤── Bloco C (T08 antes de T09/T10)
+T08 (ThemeManager) ───────┤
+T09 (Toggle tema) ────────┤── depende de T08
+T10 (Adaptar widgets) ────┘── depende de T08
+```
+
+### 2.2 Fluxo do Dark Mode
+
+```
+Usuário clica "Tema Escuro" no menu Exibir
+    │
+    ▼
+AppWindow.on_toggle_theme()
+    │
+    ├── ThemeManager.set_theme("dark")
+    │       └── ConfigManager.set("ui", "theme", "dark")
+    │
+    └── PubSub.publish("THEME_CHANGED", theme="dark")
+            │
+            ├── AppWindow._on_theme_changed()
+            ├── TabAnalysis._on_theme_changed()
+            ├── TabBatch._on_theme_changed()
+            ├── Sidebar._on_theme_changed()
+            ├── ConsolePanel._on_theme_changed()
+            └── DetailPanel._on_theme_changed()
+                    └── Recarrega HTML com CSS do tema
+```
+
+### 2.3 Fluxo de Persistência de Colunas
+
+```
+Usuário redimensiona coluna na Grid
+    │
+    ▼
+EVT_GRID_COL_SIZE disparado
+    │
+    ▼
+TabAnalysis._on_col_resized(event)
+    │
+    ├── Lê label da coluna pelo índice
+    ├── Atualiza dicionário em memória
+    └── Agenda salvamento com debounce (500ms)
+            │
+            ▼
+        _save_column_widths()
+            │
+            └── ConfigManager.set("ui", "column_widths", {...})
+                    └── credentials.json atualizado
+
+Na inicialização:
+    TabAnalysis.__init__()
+        └── _restore_column_widths()
+                └── ConfigManager.get("ui", "column_widths", {})
+                        └── Aplica SetColSize() para cada coluna
+```
+
+---
+
+## 3. ESPECIFICAÇÕES TÉCNICAS POR ARQUIVO
+
+### 3.1 BLOCO A — Limpeza e Organização
+
+---
+
+#### T01 — Limpeza de Scripts e Arquivamento
+
+**Ações no filesystem (sem código):**
+
+```
+REMOVER:
+  scripts/debug/debug_imports.py
+  scripts/debug/debug_transcript.py
+  scripts/debug/                      (diretório inteiro)
+
+MOVER/CRIAR:
+  docs/history/PHASE_6.1/             (criar diretório se não existir)
+  
+  Mover blueprint 6.1a para:
+    docs/history/PHASE_6.1a/document.resolved
+  
+  Mover blueprint 6.1b para:
+    docs/history/PHASE_6.1b/document.resolved
+
+MANTER INTACTO:
+  scripts/verification/verify_brake.py
+  scripts/verification/verify_integrity.py
+  scripts/verification/verify_shield.py
+  scripts/verification/verify_telemetry.py
+  scripts/verification/history/
+```
+
+**Verificação:**
+- Confirmar que `scripts/debug/` não existe
+- Confirmar que `scripts/verification/` contém 4 scripts de verificação
+- Confirmar que `docs/history/PHASE_6.1a/document.resolved` existe
+- Confirmar que `docs/history/PHASE_6.1b/document.resolved` existe
+
+---
+
+#### T02 — Saneamento do DialogConfig
+
+**Arquivo:** `ui/dialog_config.py`
+
+**Mudança 1 — Tamanho inicial do dialog**
+
+```python
+# ANTES (linha ~57):
+super().__init__(parent, title="Painel de Controle Operacional — ContextFlow",
+                 size=(800, 600),
+                 style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
+
+# DEPOIS:
+super().__init__(parent, title="Painel de Controle Operacional — ContextFlow",
+                 size=(980, 720),
+                 style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
+```
+
+**Mudança 2 — Remover provedores não utilizados da Aba 2 (Conectividade IA)**
+
+Substituir o método `_create_tab_ai` completo:
+
+```python
+def _create_tab_ai(self):
+    panel = wx.ScrolledWindow(self.nb)
+    panel.SetScrollRate(0, 20)
+    panel.SetBackgroundColour(self.theme.get_bg_color())
+    sizer = wx.BoxSizer(wx.VERTICAL)
+
+    # ══════════════════════════════════════════════
+    # BLOCO: Credenciais de API (Apenas Google Gemini)
+    # ══════════════════════════════════════════════
+    sec_api = wx.StaticBox(panel, label="Credenciais de Provedores Cloud")
+    sec_api.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT,
+                            wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
+    api_sizer = wx.StaticBoxSizer(sec_api, wx.VERTICAL)
+
+    grid = wx.FlexGridSizer(rows=1, cols=2, vgap=10, hgap=10)
+    grid.AddGrowableCol(1)
+
+    # [FASE 6.2] Apenas Google Gemini visível na UI
+    # OpenAI, Grok, Groq permanecem no credentials.json mas não são expostos
+    self.ai_inputs = {}
+
+    grid.Add(wx.StaticText(panel, label="Google Gemini API Key:"), 0,
+             wx.ALIGN_CENTER_VERTICAL)
+
+    row_api = wx.BoxSizer(wx.HORIZONTAL)
+    txt = wx.TextCtrl(panel, style=wx.TE_PASSWORD)
+    txt.SetValue(self.config.get("api_keys", "google", ""))
+    row_api.Add(txt, 1, wx.EXPAND)
+
+    # Botão de Olho (Toggle Visibilidade)
+    btn_eye = wx.Button(panel, label="👁", size=(30, 24))
+    btn_eye.SetToolTip("Mostrar/Ocultar chave")
+    row_api.Add(btn_eye, 0, wx.LEFT, 5)
+
+    def on_toggle_visibility(event, b=btn_eye, k="google", sz=row_api):
+        panel.Freeze()
+        try:
+            current_t = self.ai_inputs[k]
+            val = current_t.GetValue()
+            is_pw = bool(current_t.GetWindowStyleFlag() & wx.TE_PASSWORD)
+            new_style = wx.TE_LEFT if is_pw else wx.TE_PASSWORD
+
+            new_t = wx.TextCtrl(panel, style=new_style)
+            new_t.SetValue(val)
+
+            sz.Replace(current_t, new_t)
+            current_t.Destroy()
+
+            self.ai_inputs[k] = new_t
+            b.SetLabel("🔒" if not is_pw else "👁")
+
+            panel.Layout()
+            new_t.SetFocus()
+            new_t.SetInsertionPointEnd()
+        finally:
+            panel.Thaw()
+
+    btn_eye.Bind(wx.EVT_BUTTON, on_toggle_visibility)
+
+    grid.Add(row_api, 1, wx.EXPAND)
+    self.ai_inputs["google"] = txt
+
+    api_sizer.Add(grid, 1, wx.EXPAND | wx.ALL, 10)
+
+    # Legenda de Segurança
+    lbl_sec = wx.StaticText(panel,
+        label="* As chaves são armazenadas localmente em config/credentials.json.\n"
+              "  Provedores não listados (OpenAI, Grok, Groq) mantêm dados existentes no arquivo.")
+    lbl_sec.SetFont(wx.Font(8, wx.FONTFAMILY_DEFAULT,
+                            wx.FONTSTYLE_ITALIC, wx.FONTWEIGHT_NORMAL))
+    lbl_sec.SetForegroundColour(wx.Colour(100, 116, 139))
+    api_sizer.Add(lbl_sec, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+
+    sizer.Add(api_sizer, 0, wx.EXPAND | wx.ALL, 15)
+
+    # ══════════════════════════════════════════════
+    # BLOCO: Ollama (Conectividade Local)
+    # ══════════════════════════════════════════════
+    sec_local = wx.StaticBox(panel, label="Ollama (Conectividade Local)")
+    sec_local.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT,
+                              wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
+    local_sizer = wx.StaticBoxSizer(sec_local, wx.VERTICAL)
+
+    l_grid = wx.FlexGridSizer(rows=2, cols=2, vgap=10, hgap=10)
+    l_grid.AddGrowableCol(1)
+
+    l_grid.Add(wx.StaticText(panel, label="Endpoint URL:"), 0,
+               wx.ALIGN_CENTER_VERTICAL)
+    self.txt_ollama_url = wx.TextCtrl(panel)
+    self.txt_ollama_url.SetValue(
+        self.config.get("ollama", "endpoint", "http://localhost:11434"))
+    l_grid.Add(self.txt_ollama_url, 1, wx.EXPAND)
+
+    l_grid.Add(wx.StaticText(panel, label="Model Name:"), 0,
+               wx.ALIGN_CENTER_VERTICAL)
+    self.txt_ollama_model = wx.TextCtrl(panel)
+    self.txt_ollama_model.SetValue(
+        self.config.get("ollama", "model", "llama3"))
+    l_grid.Add(self.txt_ollama_model, 1, wx.EXPAND)
+
+    local_sizer.Add(l_grid, 1, wx.EXPAND | wx.ALL, 10)
+
+    # Nota informativa
+    lbl_note = wx.StaticText(panel,
+        label="💡 O provedor ativo e modelo são selecionados diretamente na "
+              "toolbar da Aba 2 (Cockpit Analítico).")
+    lbl_note.SetFont(wx.Font(8, wx.FONTFAMILY_DEFAULT,
+                             wx.FONTSTYLE_ITALIC, wx.FONTWEIGHT_NORMAL))
+    lbl_note.SetForegroundColour(wx.Colour(37, 99, 235))
+    local_sizer.Add(lbl_note, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+
+    sizer.Add(local_sizer, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 15)
+
+    # [FASE 6.2] Seletor de Provedor Ativo REMOVIDO
+    # O seletor agora vive exclusivamente na toolbar da Aba 2
+    # Isso evita duplicidade de controle e inconsistência de estado
+
+    panel.SetSizer(sizer)
+    return panel
+```
+
+**Mudança 3 — Ajustar SpinCtrl de concorrência (Aba 3 - Orquestração)**
+
+No método `_create_tab_orchestration`, localizar e substituir:
+
+```python
+# ANTES:
+self.spin_cloud = wx.SpinCtrl(panel, value="2", min=1, max=4)
+# ...
+self.spin_local = wx.SpinCtrl(panel, value="1", min=1, max=2)
+
+# DEPOIS:
+self.spin_cloud = wx.SpinCtrl(panel, value="2", min=1, max=100)
+# ...
+self.spin_local = wx.SpinCtrl(panel, value="1", min=1, max=100)
+```
+
+**Mudança 4 — Ajustar `on_save` para não salvar provedor ativo**
+
+No método `on_save`, localizar e modificar a seção "ABA 2":
+
+```python
+def on_save(self, event):
+    # ABA 1: EXTRAÇÃO (sem mudanças)
+    self.config.set("orchestration", "max_queue_warning",
+                    self.spin_q_limit.GetValue())
+    self.config.set("orchestration", "auto_defense_enabled",
+                    self.chk_protection.GetValue())
+    self.config.set("orchestration", "proxy_rotation_mode",
+                    self.choice_rotation.GetStringSelection())
+
+    self.config.set("extraction_defense", "errors_429_limit",
+                    self.spin_fail_limit.GetValue())
+    self.config.set("extraction_defense", "cooldown_secs",
+                    self.spin_cooldown.GetValue())
+    self.config.set("extraction_defense", "use_proxies",
+                    self.chk_proxies.GetValue())
+
+    self.config.set("inputs", "cookie_text",
+                    self.txt_cookies.GetValue())
+    self.config.set("inputs", "proxy_text",
+                    self.txt_proxies.GetValue())
+
+    self.config.set("subtitles", "language_order",
+                    ",".join(self.list_langs.GetStrings()))
+
+    # ABA 2: IA
+    # [FASE 6.2] Apenas Google key é salva pela UI
+    # Chaves de provedores removidos da UI permanecem intactas no JSON
+    if "google" in self.ai_inputs:
+        self.config.set("api_keys", "google",
+                        self.ai_inputs["google"].GetValue())
+
+    self.config.set("ollama", "endpoint",
+                    self.txt_ollama_url.GetValue())
+    self.config.set("ollama", "model",
+                    self.txt_ollama_model.GetValue())
+
+    # [FASE 6.2] Provedor ativo NÃO é mais salvo aqui
+    # A toolbar da Aba 2 é a SSoT para active_provider
+
+    # ABA 3: ORQUESTRAÇÃO
+    self.config.set("orchestration", "max_cloud_tasks",
+                    self.spin_cloud.GetValue())
+    self.config.set("orchestration", "max_local_tasks",
+                    self.spin_local.GetValue())
+    self.config.set("ui", "dynamic_grid",
+                    self.chk_dynamic_grid.GetValue())
+    self.config.set("ui", "auto_open_viewer",
+                    self.chk_auto_open.GetValue())
+    self.config.set("orchestration", "resume_tasks",
+                    self.chk_resume.GetValue())
+
+    # Sincronização Atômica
+    self.config.save()
+    self.config.update_physical_files()
+
+    logger.info("Governança atualizada e sincronizada (Fase 6.2).")
+    self.EndModal(wx.ID_OK)
+```
+
+**Invariantes T02:**
+- Chaves existentes de OpenAI/Grok/Groq/Anthropic no `credentials.json` NÃO são removidas
+- Apenas o campo visual é oculto
+- O seletor de provedor ativo foi removido do dialog (SSoT = toolbar Aba 2)
+
+---
+
+#### T03 — Alinhamento de Defaults do ConfigManager
+
+**Arquivo:** `core/config_manager.py`
+
+Localizar `_get_default_config` e ajustar:
+
+```python
+def _get_default_config(self):
+    return {
+        "api_keys": {
+            "openai": "",
+            "anthropic": "",
+            "google": "",
+            "grok": "",
+            "groq": "",
+            "proxy_auth": ""
+        },
+        "ollama": {
+            "endpoint": "http://localhost:11434",
+            "model": "llama3"
+        },
+        "orchestration": {
+            "active_provider": "ollama",      # [FASE 6.2] Era "openai"
+            "max_cloud_tasks": 2,
+            "max_local_tasks": 1,
+            "auto_export": False,
+            "resume_tasks": True,
+            "max_queue_warning": 20,
+            "auto_defense_enabled": True,
+            "proxy_rotation_mode": "Aleatório"
+        },
+        "extraction_defense": {
+            "cooldown_secs": 3600,
+            "errors_429_limit": 5,
+            "use_cookies": False,
+            "use_proxies": False
+        },
+        "inputs": {
+            "cookie_text": "",
+            "proxy_text": ""
+        },
+        "subtitles": {
+            "language_order": "pt,pt-BR,en",
+            "fallback_auto": True
+        },
+        "ui": {
+            "color_tags": True,
+            "dynamic_tags": True,
+            "dynamic_grid": True,
+            "auto_open_viewer": True,
+            "theme": "light",                  # [FASE 6.2] NOVO
+            "column_widths": {                 # [FASE 6.2] NOVO
+                "tab_analysis": {},
+                "tab_batch": {}
+            }
+        }
+    }
+```
+
+**Invariante:** O deep-merge existente garante que instalações antigas recebam as novas chaves sem perder dados existentes.
+
+---
+
+### 3.2 BLOCO B — Funcionalidades de UX
+
+---
+
+#### T04 — Tags Completas no Viewer da Aba 2
+
+**Arquivo NOVO:** `ui/components/__init__.py`
+
+```python
+# contextflow/ui/components/__init__.py
+```
+
+**Arquivo NOVO:** `ui/components/tag_wrap_panel.py`
+
+```python
+# contextflow/ui/components/tag_wrap_panel.py
+"""
+Painel de tags com layout flow/wrap para exibição completa.
+[FASE 6.2] Componente extraído para manter tab_analysis.py < 700 linhas.
+"""
+import wx
+import hashlib
+import colorsys
+from core.managers.theme_manager import ThemeManager
+
+
+class TagWrapPanel(wx.Panel):
+    """
+    Exibe tags como chips coloridos com layout wrap.
+    Usado no viewer lateral da Aba 2 para mostrar TODAS as tags,
+    diferente da grid que mostra no máximo 2.
+    """
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.theme = ThemeManager()
+        self.SetBackgroundColour(self.theme.get_bg_color())
+        self._tags = []
+        self._chip_panels = []
+
+        self._sizer = wx.WrapSizer(wx.HORIZONTAL)
+        self.SetSizer(self._sizer)
+
+    def set_tags(self, tags: list):
+        """
+        Atualiza as tags exibidas.
+        Destrói chips antigos e cria novos.
+
+        Args:
+            tags: Lista de strings com nomes das tags
+        """
+        self._tags = tags or []
+
+        # Limpa chips existentes
+        for chip in self._chip_panels:
+            chip.Destroy()
+        self._chip_panels.clear()
+        self._sizer.Clear(delete_windows=False)
+
+        if not self._tags:
+            lbl = wx.StaticText(self, label="Sem tags")
+            lbl.SetFont(wx.Font(8, wx.FONTFAMILY_DEFAULT,
+                                wx.FONTSTYLE_ITALIC, wx.FONTWEIGHT_NORMAL))
+            lbl.SetForegroundColour(self.theme.get_muted_color())
+            self._sizer.Add(lbl, 0, wx.ALL, 2)
+            self._chip_panels.append(lbl)
+        else:
+            for tag in self._tags:
+                chip = self._create_chip(tag)
+                self._sizer.Add(chip, 0, wx.RIGHT | wx.BOTTOM, 4)
+                self._chip_panels.append(chip)
+
+        self.Layout()
+        self.GetParent().Layout()
+
+    def _create_chip(self, tag_name: str) -> wx.Panel:
+        """Cria um chip individual com cor baseada em hash."""
+        chip = wx.Panel(self)
+        bg_color = self._get_tag_color(tag_name)
+        chip.SetBackgroundColour(bg_color)
+
+        lbl = wx.StaticText(chip, label=f" {tag_name} ")
+        lbl.SetFont(wx.Font(8, wx.FONTFAMILY_DEFAULT,
+                            wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
+
+        # Contraste automático de texto
+        lbl.SetForegroundColour(self._contrast_text(bg_color))
+
+        sizer = wx.BoxSizer(wx.HORIZONTAL)
+        sizer.Add(lbl, 0, wx.ALL, 2)
+        chip.SetSizer(sizer)
+        chip.Fit()
+
+        return chip
+
+    def _get_tag_color(self, name: str) -> wx.Colour:
+        """Gera uma cor pastel estável baseada no hash do nome."""
+        h = int(hashlib.md5(name.encode()).hexdigest(), 16) % 360
+        r, g, b = colorsys.hls_to_rgb(h / 360.0, 0.85, 0.45)
+        return wx.Colour(int(r * 255), int(g * 255), int(b * 255))
+
+    @staticmethod
+    def _contrast_text(bg: wx.Colour) -> wx.Colour:
+        """Retorna preto ou branco conforme luminância do fundo."""
+        luminance = (0.299 * bg.Red() + 0.587 * bg.Green() + 0.114 * bg.Blue())
+        return wx.Colour(40, 40, 40) if luminance > 160 else wx.Colour(245, 245, 245)
+
+    def apply_theme(self):
+        """Reaplica cores do tema atual."""
+        self.theme = ThemeManager()
+        self.SetBackgroundColour(self.theme.get_bg_color())
+        # Recria chips com cores atualizadas
+        self.set_tags(self._tags)
+```
+
+**Arquivo MODIFICADO:** `ui/tab_analysis.py`
+
+Adicionar import:
+
+```python
+# No topo do arquivo, após os imports existentes:
+from ui.components.tag_wrap_panel import TagWrapPanel
+```
+
+No método `_init_ui`, na seção do DETAIL PANEL, após `self.lbl_side_title`:
+
+```python
+        # [FASE 6.2] Painel de tags completas
+        self.pnl_tags = TagWrapPanel(self.pnl_side_info)
+
+        side_sizer.Add(self.btn_close_viewer, 0, wx.ALL | wx.EXPAND, 5)
+        side_sizer.Add(self.bmp_detail, 0, wx.ALL, 10)
+        side_sizer.Add(self.lbl_side_title, 0,
+                       wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.EXPAND, 10)
+        side_sizer.Add(self.pnl_tags, 0,                          # NOVO
+                       wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.EXPAND, 10)  # NOVO
+        self.pnl_side_info.SetSizer(side_sizer)
+```
+
+No método `_load_row_details`, adicionar parse e exibição de tags:
+
+```python
+    def _load_row_details(self, row):
+        """[QA3] Lógica centralizada de carregamento de detalhes."""
+        if row >= 0 and row < len(self.table.data):
+            self.last_selected_row = row
+            video_data = self.table.data[row]
+            vid_id = video_data.get('id')
+
+            # Atualiza título
+            self.lbl_side_title.SetLabel(video_data.get('title', 'Unknown'))
+            self.lbl_side_title.Wrap(320)
+
+            # ─── [FASE 6.2] Tags completas ───────────────────
+            raw_tags = video_data.get("tags", "[]")
+            tags = []
+            if isinstance(raw_tags, str):
+                try:
+                    tags = json.loads(raw_tags)
+                except (json.JSONDecodeError, TypeError):
+                    tags = []
+            elif isinstance(raw_tags, list):
+                tags = raw_tags
+            self.pnl_tags.set_tags(tags)
+
+            # Carrega Thumbnail (código existente, sem mudanças)
+            thumb_path = video_data.get('thumbnail_path')
+            # ... (resto do método existente permanece idêntico)
+```
+
+**Invariante:** A grid continua mostrando no máximo 2 chips via `ChipTagRenderer`. O viewer agora mostra todas.
+
+---
+
+#### T05 — Menu de Contexto "Resumir" na Sidebar
+
+**Arquivo:** `ui/sidebar.py`
+
+No método `on_right_click`, adicionar opções de resumo.
+
+**Para tipo `video`**, adicionar após os itens existentes:
+
+```python
+    def on_right_click(self, event):
+        item = event.GetItem()
+        if not item.IsOk() or item == self.root:
+            return
+
+        self._action_item = item
+        menu = wx.Menu()
+
+        data = self.tree.GetItemData(item)
+
+        if data and isinstance(data, dict):
+            dtype = data.get("type")
+            if dtype == "video":
+                menu.Append(1001, "Excluir Vídeo")
+                self.Bind(wx.EVT_MENU, self.on_delete_video, id=1001)
+
+                menu.AppendSeparator()
+                menu.Append(1010, "✨ Resumir Vídeo")           # NOVO
+                self.Bind(wx.EVT_MENU,                          # NOVO
+                          self.on_summarize_video, id=1010)     # NOVO
+
+                menu.AppendSeparator()
+                menu.Append(1003, "Exportar Markdown (Único)")
+                self.Bind(wx.EVT_MENU, lambda e:
+                    self.on_export_action(e, "markdown_single"), id=1003)
+
+            elif dtype == "playlist":
+                menu.Append(1002, "Excluir Playlist (Todos os vídeos)")
+                self.Bind(wx.EVT_MENU, self.on_delete_playlist, id=1002)
+
+                menu.AppendSeparator()
+                menu.Append(1011, "✨ Resumir Playlist")        # NOVO
+                self.Bind(wx.EVT_MENU,                          # NOVO
+                          self.on_summarize_playlist, id=1011)  # NOVO
+
+                menu.AppendSeparator()
+                menu.Append(1004, "Exportar ZIP (Todos)")
+                self.Bind(wx.EVT_MENU, lambda e:
+                    self.on_export_action(e, "zip"), id=1004)
+                menu.Append(1005, "Exportar Markdown (Único)")
+                self.Bind(wx.EVT_MENU, lambda e:
+                    self.on_export_action(e, "markdown_single"), id=1005)
+
+                menu.AppendSeparator()
+                menu.Append(1006, "Copiar Link da Playlist")
+                self.Bind(wx.EVT_MENU, self.on_copy_link, id=1006)
+
+            elif dtype == "folder" and data.get("id") == "orphans":
+                menu.Append(1007, "Excluir Tudo")
+                self.Bind(wx.EVT_MENU, self.on_delete_orphans, id=1007)
+
+                menu.AppendSeparator()
+                menu.Append(1008, "Exportar Tudo (ZIP)")
+                self.Bind(wx.EVT_MENU, lambda e:
+                    self.on_export_action(e, "zip"), id=1008)
+
+        if menu.GetMenuItemCount() > 0:
+            self.PopupMenu(menu)
+        menu.Destroy()
+```
+
+**Novos handlers:**
+
+```python
+    def on_summarize_video(self, event):
+        """[FASE 6.2] Resumir vídeo individual via sidebar."""
+        item = self._action_item
+        data = self.tree.GetItemData(item)
+        if not data or data.get("type") != "video":
+            return
+
+        vid = data["id"]
+        video = self.app_state.get_video(vid)
+        if not video:
+            return
+
+        # Validação de elegibilidade
+        if video.get("status") != "completed":
+            wx.MessageBox(
+                "Este vídeo ainda não possui transcrição concluída.\n"
+                "Baixe o vídeo primeiro antes de resumir.",
+                "Aviso", wx.OK | wx.ICON_WARNING)
+            return
+
+        ss = video.get("summary_status")
+        if ss == "summarizing":
+            wx.MessageBox("Este vídeo já está sendo resumido.",
+                          "Info", wx.OK | wx.ICON_INFORMATION)
+            return
+
+        if ss == "summarized":
+            if wx.MessageBox(
+                "Este vídeo já possui resumo. Deseja gerar novamente?",
+                "Confirmação", wx.YES_NO | wx.ICON_QUESTION
+            ) != wx.YES:
+                return
+            # Reseta status para permitir re-resumo
+            self.app_state.add_or_update_video({
+                "id": vid, "summary_status": None
+            })
+
+        self.app_state.request_summary(vid)
+
+    def on_summarize_playlist(self, event):
+        """[FASE 6.2] Resumir todos os vídeos elegíveis de uma playlist."""
+        item = self._action_item
+        data = self.tree.GetItemData(item)
+        if not data or data.get("type") != "playlist":
+            return
+
+        pid = data["id"]
+        videos = self.app_state.get_all_videos()
+
+        # Filtra vídeos elegíveis
+        eligible = []
+        already_done = 0
+        no_transcript = 0
+        in_progress = 0
+
+        for v in videos:
+            if v.get("playlist_id") != pid:
+                continue
+            ss = v.get("summary_status")
+            status = v.get("status", "")
+
+            if ss == "summarized":
+                already_done += 1
+                continue
+            if ss == "summarizing":
+                in_progress += 1
+                continue
+            if status != "completed":
+                no_transcript += 1
+                continue
+            eligible.append(v["id"])
+
+        if not eligible:
+            msg = "Nenhum vídeo elegível para resumo nesta playlist."
+            if already_done > 0:
+                msg += f"\n• {already_done} já resumido(s)"
+            if in_progress > 0:
+                msg += f"\n• {in_progress} em processamento"
+            if no_transcript > 0:
+                msg += f"\n• {no_transcript} sem transcrição"
+            wx.MessageBox(msg, "Info", wx.OK | wx.ICON_INFORMATION)
+            return
+
+        # Confirmação
+        msg = f"Resumir {len(eligible)} vídeo(s) da playlist?"
+        if already_done > 0:
+            msg += f"\n\n({already_done} já resumido(s) serão ignorados)"
+
+        if wx.MessageBox(msg, "Confirmar Resumo em Lote",
+                         wx.YES_NO | wx.ICON_QUESTION) != wx.YES:
+            return
+
+        self.app_state.request_batch_summary(eligible)
+```
+
+**Invariantes T05:**
+- A Sidebar NUNCA importa `services/ai_*` diretamente
+- Tudo passa por `AppState.request_summary()` e `request_batch_summary()`
+- Vídeos sem `status == completed` são filtrados automaticamente
+- Vídeos já em `summarizing` são ignorados
+
+---
+
+#### T06 — Coluna "Resumo" como Indicador Visual
+
+**Arquivo:** `ui/virtual_table.py`
+
+**Novo renderer** (adicionar antes da classe `VirtualVideoTable`):
+
+```python
+class SummaryStatusRenderer(wx.grid.GridCellRenderer):
+    """
+    [FASE 6.2] Indicador visual compacto de status de resumo.
+    Substitui texto longo ilegível por ícone + label curto.
+
+    Estados:
+    - Pendente  → ○ cinza + "—"
+    - Resumindo → ◔ azul + "IA"
+    - Concluído → ● verde + "OK"
+    - Erro      → ● vermelho + "!"
+    """
+
+    def Draw(self, grid, attr, dc, rect, row, col, isSelected):
+        # Limpa fundo
+        bg_color = (grid.GetDefaultCellBackgroundColour()
+                    if not isSelected else grid.GetSelectionBackground())
+        dc.SetBrush(wx.Brush(bg_color))
+        dc.SetPen(wx.TRANSPARENT_PEN)
+        dc.DrawRectangle(rect)
+
+        dc.SetClippingRegion(rect)
+
+        table = grid.GetTable()
+        if row >= len(table.data):
+            dc.DestroyClippingRegion()
+            return
+
+        theme = ThemeManager()
+        item = table.data[row]
+        ss = item.get("summary_status", "") or ""
+
+        # Determina ícone e cor
+        if ss == "summarized":
+            circle_color = theme.get_success_color()
+            label = "OK"
+        elif ss == "summarizing":
+            circle_color = theme.get_accent_color()
+            label = "IA"
+        elif ss == "summary_error":
+            circle_color = theme.get_error_color()
+            label = "!"
+        else:
+            circle_color = theme.get_muted_color()
+            label = "—"
+
+        # Desenha círculo
+        circle_x = rect.x + 16
+        circle_y = rect.y + rect.height // 2
+        dc.SetBrush(wx.Brush(circle_color))
+        dc.SetPen(wx.Pen(wx.WHITE, 1))
+        dc.DrawCircle(circle_x, circle_y, 5)
+
+        # Desenha texto
+        txt_color = (theme.get_fg_color()
+                     if not isSelected else wx.WHITE)
+        dc.SetTextForeground(txt_color)
+        dc.SetFont(wx.Font(8, wx.FONTFAMILY_DEFAULT,
+                           wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
+        dc.DrawText(label, circle_x + 10,
+                    rect.y + (rect.height // 2 - 7))
+
+        dc.DestroyClippingRegion()
+
+    def GetBestSize(self, grid, attr, dc, row, col):
+        return wx.Size(70, 45)
+
+    def Clone(self):
+        return SummaryStatusRenderer()
+```
+
+**Modificar `GetValue`** para coluna Resumo:
+
+```python
+        # No GetValue, substituir o bloco 'Resumo':
+        if label == 'Resumo':
+            ss = item.get('summary_status', '')
+            if ss == 'summarizing':
+                return "Processando"
+            elif ss == 'summary_error':
+                return "Erro"
+            elif ss == 'summarized':
+                return "Concluído"
+            return "Pendente"
+```
+
+**Modificar `GetAttr`** para coluna Resumo:
+
+```python
+        elif label == "Resumo" and is_ana_tab:
+            attr.SetRenderer(SummaryStatusRenderer())
+            attr.SetReadOnly(True)
+```
+
+**Arquivo:** `ui/tab_analysis.py`
+
+Ajustar largura da coluna Resumo:
+
+```python
+# ANTES:
+self.grid.SetColSize(13, 250)  # Resumo
+
+# DEPOIS:
+self.grid.SetColSize(13, 70)   # [FASE 6.2] Resumo → indicador visual
+```
+
+---
+
+### 3.3 BLOCO C — Persistência e Tema
+
+---
+
+#### T07 — Persistência de Largura de Colunas
+
+**Arquivo:** `ui/tab_analysis.py`
+
+Adicionar no `__init__`, após `self._init_ui()`:
+
+```python
+        self._col_save_timer = wx.Timer(self)
+        self.Bind(wx.EVT_TIMER, self._on_col_save_tick, self._col_save_timer)
+```
+
+Adicionar no `_bind_events`:
+
+```python
+        # [FASE 6.2] Persistência de colunas
+        self.grid.Bind(wx.grid.EVT_GRID_COL_SIZE, self._on_col_resized)
+```
+
+Adicionar após `_init_ui`, chamar restauração:
+
+```python
+        # [FASE 6.2] Restaurar larguras salvas
+        wx.CallAfter(self._restore_column_widths)
+```
+
+Novos métodos:
+
+```python
+    # ══════════════════════════════════════════════════════
+    # FASE 6.2 — PERSISTÊNCIA DE COLUNAS
+    # ══════════════════════════════════════════════════════
+
+    def _restore_column_widths(self):
+        """
+        Restaura larguras de colunas salvas no ConfigManager.
+        [FALHA GRACEFUL] Se não houver dados salvos, mantém defaults.
+        """
+        try:
+            all_widths = self.app_state.config.get("ui", "column_widths", {})
+            saved = all_widths.get("tab_analysis", {})
+            if not saved:
+                return
+
+            for idx, label in enumerate(self.col_labels):
+                width = saved.get(label)
+                if isinstance(width, int) and 20 <= width <= 2000:
+                    self.grid.SetColSize(idx, width)
+
+            self.grid.ForceRefresh()
+        except Exception as e:
+            import logging
+            logging.getLogger("contextflow.ui.analysis").warning(
+                f"Falha ao restaurar larguras de colunas: {e}")
+
+    def _on_col_resized(self, event):
+        """
+        Captura redimensionamento de coluna com debounce.
+        [PERFORMANCE] Não salva a cada pixel — agenda para 500ms.
+        """
+        # Reinicia timer de debounce
+        if self._col_save_timer.IsRunning():
+            self._col_save_timer.Stop()
+        self._col_save_timer.Start(500, oneShot=True)
+        event.Skip()
+
+    def _on_col_save_tick(self, event):
+        """Timer de debounce disparou — salvar larguras."""
+        self._save_column_widths()
+
+    def _save_column_widths(self):
+        """Persiste larguras atuais no ConfigManager."""
+        try:
+            widths = {}
+            for idx, label in enumerate(self.col_labels):
+                widths[label] = self.grid.GetColSize(idx)
+
+            all_widths = self.app_state.config.get("ui", "column_widths", {})
+            all_widths["tab_analysis"] = widths
+            self.app_state.config.set("ui", "column_widths", all_widths)
+        except Exception as e:
+            import logging
+            logging.getLogger("contextflow.ui.analysis").warning(
+                f"Falha ao salvar larguras de colunas: {e}")
+```
+
+**Arquivo:** `ui/tab_batch.py`
+
+Aplicar o mesmo padrão:
+
+Adicionar no `__init__`, após `self._init_ui()`:
+
+```python
+        self._col_save_timer = wx.Timer(self)
+        self.Bind(wx.EVT_TIMER, self._on_col_save_tick, self._col_save_timer)
+```
+
+No `_bind_events`:
+
+```python
+        # [FASE 6.2] Persistência de colunas
+        self.grid.Bind(wx.grid.EVT_GRID_COL_SIZE, self._on_col_resized)
+```
+
+Após `self._init_ui()`:
+
+```python
+        # [FASE 6.2] Restaurar larguras salvas
+        wx.CallAfter(self._restore_column_widths)
+```
+
+Métodos (idênticos em estrutura, muda apenas a key):
+
+```python
+    # ══════════════════════════════════════════════════════
+    # FASE 6.2 — PERSISTÊNCIA DE COLUNAS
+    # ══════════════════════════════════════════════════════
+
+    def _restore_column_widths(self):
+        """Restaura larguras salvas do ConfigManager."""
+        try:
+            all_widths = self.app_state.config.get("ui", "column_widths", {})
+            saved = all_widths.get("tab_batch", {})
+            if not saved:
+                return
+
+            for idx, label in enumerate(self.table.col_labels):
+                width = saved.get(label)
+                if isinstance(width, int) and 20 <= width <= 2000:
+                    self.grid.SetColSize(idx, width)
+
+            self.grid.ForceRefresh()
+        except Exception:
+            pass
+
+    def _on_col_resized(self, event):
+        """Debounce de 500ms antes de salvar."""
+        if self._col_save_timer.IsRunning():
+            self._col_save_timer.Stop()
+        self._col_save_timer.Start(500, oneShot=True)
+        event.Skip()
+
+    def _on_col_save_tick(self, event):
+        self._save_column_widths()
+
+    def _save_column_widths(self):
+        """Persiste larguras atuais."""
+        try:
+            widths = {}
+            for idx, label in enumerate(self.table.col_labels):
+                widths[label] = self.grid.GetColSize(idx)
+
+            all_widths = self.app_state.config.get("ui", "column_widths", {})
+            all_widths["tab_batch"] = widths
+            self.app_state.config.set("ui", "column_widths", all_widths)
+        except Exception:
+            pass
+```
+
+---
+
+#### T08 — ThemeManager Multi-Tema
+
+**Arquivo:** `core/managers/theme_manager.py`
+
+Substituição completa:
+
+```python
+# contextflow/core/managers/theme_manager.py
+"""
+[FASE 6.2] Gerenciador de temas com suporte a Light e Dark Mode.
+Singleton com paleta centralizada e API de consulta por token semântico.
+"""
+import wx
+import logging
+from core.config_manager import ConfigManager
+
+logger = logging.getLogger("contextflow.theme")
+
+
+class ThemeManager:
+    """
+    Singleton que gerencia paletas de cores para Light e Dark Mode.
+    Todas as cores da aplicação devem ser obtidas via este gerenciador.
+    """
+    _instance = None
+
+    # ═══════════════════════════════════════════════════════
+    # PALETAS DE CORES
+    # ═══════════════════════════════════════════════════════
+    THEMES = {
+        "light": {
+            "bg":             wx.Colour(255, 255, 255),
+            "fg":             wx.Colour(30, 30, 30),
+            "accent":         wx.Colour(0, 120, 215),
+            "highlight":      wx.Colour(240, 240, 240),
+            "border":         wx.Colour(220, 220, 220),
+            "panel":          wx.Colour(248, 249, 250),
+            "muted":          wx.Colour(130, 130, 130),
+            "success":        wx.Colour(40, 167, 69),
+            "warning":        wx.Colour(221, 107, 32),
+            "error":          wx.Colour(220, 53, 69),
+            "console_bg":     wx.Colour(255, 255, 255),
+            "console_fg":     wx.Colour(30, 30, 30),
+            "selection_bg":   wx.Colour(0, 120, 215),
+            "selection_fg":   wx.Colour(255, 255, 255),
+            "grid_line":      wx.Colour(220, 220, 220),
+            "placeholder_bg": wx.Colour(200, 200, 200),
+            "header_bg":      wx.Colour(248, 249, 250),
+            "button_danger":  wx.Colour(239, 68, 68),
+            "button_primary": wx.Colour(37, 99, 235),
+            "link":           wx.Colour(0, 120, 215),
+            "subtitle":       wx.Colour(100, 116, 139),
+        },
+        "dark": {
+            "bg":             wx.Colour(30, 30, 30),
+            "fg":             wx.Colour(220, 220, 220),
+            "accent":         wx.Colour(78, 148, 255),
+            "highlight":      wx.Colour(50, 50, 50),
+            "border":         wx.Colour(70, 70, 70),
+            "panel":          wx.Colour(37, 37, 38),
+            "muted":          wx.Colour(140, 140, 140),
+            "success":        wx.Colour(72, 187, 120),
+            "warning":        wx.Colour(245, 158, 11),
+            "error":          wx.Colour(248, 113, 113),
+            "console_bg":     wx.Colour(24, 24, 24),
+            "console_fg":     wx.Colour(200, 200, 200),
+            "selection_bg":   wx.Colour(51, 103, 214),
+            "selection_fg":   wx.Colour(255, 255, 255),
+            "grid_line":      wx.Colour(60, 60, 60),
+            "placeholder_bg": wx.Colour(50, 50, 50),
+            "header_bg":      wx.Colour(40, 40, 42),
+            "button_danger":  wx.Colour(220, 38, 38),
+            "button_primary": wx.Colour(59, 130, 246),
+            "link":           wx.Colour(96, 165, 250),
+            "subtitle":       wx.Colour(148, 163, 184),
+        }
+    }
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(ThemeManager, cls).__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+
+    def __init__(self):
+        if self._initialized:
+            return
+        self._initialized = True
+
+        config = ConfigManager()
+        self._theme_name = config.get("ui", "theme", "light")
+        if self._theme_name not in self.THEMES:
+            self._theme_name = "light"
+
+        self._palette = self.THEMES[self._theme_name]
+        logger.info(f"ThemeManager: Tema '{self._theme_name}' inicializado.")
+
+    # ═══════════════════════════════════════════════════════
+    # API PÚBLICA — Consulta de cores por token
+    # ═══════════════════════════════════════════════════════
+
+    def color(self, token: str) -> wx.Colour:
+        """
+        Retorna a cor associada ao token semântico.
+        Fallback para branco se o token não existir.
+        """
+        return self._palette.get(token, wx.Colour(255, 255, 255))
+
+    def get_theme_name(self) -> str:
+        return self._theme_name
+
+    def is_dark(self) -> bool:
+        return self._theme_name == "dark"
+
+    # Aliases retrocompatíveis (mantidos para não quebrar código existente)
+    def get_bg_color(self) -> wx.Colour:
+        return self.color("bg")
+
+    def get_fg_color(self) -> wx.Colour:
+        return self.color("fg")
+
+    def get_accent_color(self) -> wx.Colour:
+        return self.color("accent")
+
+    def get_border_color(self) -> wx.Colour:
+        return self.color("border")
+
+    def get_highlight_color(self) -> wx.Colour:
+        return self.color("highlight")
+
+    # Novos accessors semânticos (Fase 6.2)
+    def get_success_color(self) -> wx.Colour:
+        return self.color("success")
+
+    def get_warning_color(self) -> wx.Colour:
+        return self.color("warning")
+
+    def get_error_color(self) -> wx.Colour:
+        return self.color("error")
+
+    def get_muted_color(self) -> wx.Colour:
+        return self.color("muted")
+
+    def get_console_bg(self) -> wx.Colour:
+        return self.color("console_bg")
+
+    def get_console_fg(self) -> wx.Colour:
+        return self.color("console_fg")
+
+    def get_panel_color(self) -> wx.Colour:
+        return self.color("panel")
+
+    def get_grid_line_color(self) -> wx.Colour:
+        return self.color("grid_line")
+
+    # ═══════════════════════════════════════════════════════
+    # TROCA DE TEMA
+    # ═══════════════════════════════════════════════════════
+
+    def set_theme(self, theme_name: str):
+        """
+        Troca o tema ativo e persiste no ConfigManager.
+        NÃO aplica às janelas — o PubSub 'THEME_CHANGED' cuida disso.
+        """
+        if theme_name not in self.THEMES:
+            logger.warning(f"Tema '{theme_name}' não existe. Ignorando.")
+            return
+
+        self._theme_name = theme_name
+        self._palette = self.THEMES[theme_name]
+
+        config = ConfigManager()
+        config.set("ui", "theme", theme_name)
+
+        logger.info(f"ThemeManager: Tema alterado para '{theme_name}'.")
+
+    # ═══════════════════════════════════════════════════════
+    # APLICAÇÃO RECURSIVA
+    # ═══════════════════════════════════════════════════════
+
+    def apply_theme(self, window: wx.Window):
+        """
+        Aplica cores base recursivamente a um widget e seus filhos.
+        [NOTA] Componentes customizados (Grid, WebView) precisam
+        de tratamento individual via seus handlers de THEME_CHANGED.
+        """
+        try:
+            window.SetBackgroundColour(self.color("bg"))
+            window.SetForegroundColour(self.color("fg"))
+        except Exception:
+            pass
+
+        for child in window.GetChildren():
+            try:
+                self.apply_theme(child)
+            except Exception:
+                pass
+
+        try:
+            window.Refresh()
+        except Exception:
+            pass
+
+    # ═══════════════════════════════════════════════════════
+    # HELPERS PARA HTML/CSS
+    # ═══════════════════════════════════════════════════════
+
+    def css_color(self, token: str) -> str:
+        """Retorna cor como string CSS hex (ex: '#1e1e1e')."""
+        c = self.color(token)
+        return f"#{c.Red():02x}{c.Green():02x}{c.Blue():02x}"
+```
+
+---
+
+#### T09 — Toggle de Tema na AppWindow
+
+**Arquivo:** `ui/app_window.py`
+
+**Adicionar import no topo:**
+
+```python
+from core.pubsub import PubSub  # (já existe)
+```
+
+**No método `create_menubar`, na seção "Menu Exibir":**
+
+```python
+    def create_menubar(self):
+        menubar = wx.MenuBar()
+
+        # Menu Arquivo
+        file_menu = wx.Menu()
+        file_menu.Append(wx.ID_EXIT, "Sair", "Encerrar aplicação")
+        menubar.Append(file_menu, "&Arquivo")
+
+        # Menu Exibir
+        view_menu = wx.Menu()
+        self.item_view_sidebar = view_menu.AppendCheckItem(
+            2000, "Exibir Sidebar (Histórico)")
+        self.item_view_sidebar.Check(True)
+
+        self.item_view_logs = view_menu.AppendCheckItem(
+            2001, "Exibir Logs/Console")
+        self.item_view_logs.Check(True)
+
+        view_menu.AppendSeparator()
+        self.item_auto_open = view_menu.AppendCheckItem(
+            2002, "Abrir visualizador automaticamente")
+        auto_open = self.app_state.config.get("ui", "auto_open_viewer", True)
+        self.item_auto_open.Check(auto_open)
+
+        # [FASE 6.2] Toggle Dark Mode
+        view_menu.AppendSeparator()
+        self.item_dark_mode = view_menu.AppendCheckItem(
+            2003, "🌙 Tema Escuro")
+        is_dark = self.theme.get_theme_name() == "dark"
+        self.item_dark_mode.Check(is_dark)
+
+        menubar.Append(view_menu, "&Exibir")
+
+        # Menu Ferramentas (sem mudanças)
+        tools_menu = wx.Menu()
+        tools_menu.Append(3001, "Reprocessar Erros",
+                          "Tenta processar vídeos com status de erro")
+        tools_menu.AppendSeparator()
+        tools_menu.Append(3002, "Configurações...",
+                          "Abrir Console de Governança")
+        menubar.Append(tools_menu, "&Ferramentas")
+
+        self.SetMenuBar(menubar)
+
+        # Bindings (existentes + novo)
+        self.Bind(wx.EVT_MENU, self.on_toggle_sidebar, id=2000)
+        self.Bind(wx.EVT_MENU, self.on_toggle_logs, id=2001)
+        self.Bind(wx.EVT_MENU, self.on_toggle_auto_open, id=2002)
+        self.Bind(wx.EVT_MENU, self.on_toggle_theme, id=2003)    # NOVO
+        self.Bind(wx.EVT_MENU, self.on_reprocess_errors, id=3001)
+        self.Bind(wx.EVT_MENU, self.on_config, id=3002)
+```
+
+**Novo handler:**
+
+```python
+    def on_toggle_theme(self, event):
+        """[FASE 6.2] Alterna entre tema claro e escuro."""
+        theme_name = "dark" if self.item_dark_mode.IsChecked() else "light"
+        self.theme.set_theme(theme_name)
+
+        # Aplica tema base recursivamente
+        self.theme.apply_theme(self)
+
+        # Notifica todos os componentes via PubSub
+        PubSub.publish('THEME_CHANGED', theme=theme_name)
+
+        self.log_to_console(
+            f"Tema alterado para: {'Escuro' if theme_name == 'dark' else 'Claro'}",
+            "SYSTEM")
+```
+
+**No `_bind_events`, adicionar subscriber:**
+
+```python
+        PubSub.subscribe('THEME_CHANGED', self._on_theme_changed)
+```
+
+**Handler do evento:**
+
+```python
+    def _on_theme_changed(self, theme, **kwargs):
+        """Reaplica tema na AppWindow quando alterado."""
+        def _apply():
+            self.theme = ThemeManager()
+            self.SetBackgroundColour(self.theme.get_bg_color())
+            # Atualiza status bar
+            self.Refresh()
+            self.Update()
+        wx.CallAfter(_apply)
+```
+
+---
+
+#### T10 — Adaptação de Componentes ao Tema
+
+Esse é o bloco mais extenso. Vou especificar as mudanças críticas por arquivo.
+
+---
+
+**Arquivo:** `ui/tab_analysis.py`
+
+Adicionar no `_bind_events`:
+
+```python
+        PubSub.subscribe('THEME_CHANGED', self._on_theme_changed)
+```
+
+Novo handler:
+
+```python
+    def _on_theme_changed(self, theme, **kwargs):
+        """[FASE 6.2] Reaplica cores quando o tema muda."""
+        def _apply():
+            self.theme = ThemeManager()
+            self.SetBackgroundColour(self.theme.get_bg_color())
+            self.toolbar.SetBackgroundColour(self.theme.get_bg_color())
+            self.pnl_master.SetBackgroundColour(self.theme.get_bg_color())
+            self.pnl_detail.SetBackgroundColour(self.theme.get_bg_color())
+            self.splitter.SetBackgroundColour(self.theme.get_border_color())
+            self.txt_summary.SetBackgroundColour(self.theme.get_bg_color())
+            self.txt_summary.SetForegroundColour(self.theme.get_fg_color())
+            self.lbl_side_title.SetForegroundColour(self.theme.get_accent_color())
+            self.grid.SetGridLineColour(self.theme.get_grid_line_color())
+
+            # Botões
+            self.btn_summarize.SetBackgroundColour(self.theme.get_accent_color())
+            self.btn_close_viewer.SetBackgroundColour(self.theme.color("highlight"))
+
+            # Tags
+            if hasattr(self, 'pnl_tags'):
+                self.pnl_tags.apply_theme()
+
+            self.grid.ForceRefresh()
+            self.Refresh()
+            self.Update()
+        wx.CallAfter(_apply)
+```
+
+---
+
+**Arquivo:** `ui/tab_batch.py`
+
+Adicionar no `_bind_events`:
+
+```python
+        PubSub.subscribe('THEME_CHANGED', self._on_theme_changed)
+```
+
+Handler:
+
+```python
+    def _on_theme_changed(self, theme, **kwargs):
+        """[FASE 6.2] Reaplica cores quando o tema muda."""
+        def _apply():
+            self.theme = ThemeManager()
+            self.SetBackgroundColour(self.theme.get_bg_color())
+            self.grid.SetGridLineColour(self.theme.get_grid_line_color())
+            self.btn_process.SetBackgroundColour(self.theme.get_accent_color())
+            self.grid.ForceRefresh()
+            self.Refresh()
+            self.Update()
+        wx.CallAfter(_apply)
+```
+
+---
+
+**Arquivo:** `ui/sidebar.py`
+
+Adicionar no `_init_ui`, após `self.tree`:
+
+```python
+        PubSub.subscribe('THEME_CHANGED', self._on_theme_changed)
+```
+
+Handler:
+
+```python
+    def _on_theme_changed(self, theme, **kwargs):
+        """[FASE 6.2] Reaplica cores."""
+        def _apply():
+            self.theme = ThemeManager()
+            self.SetBackgroundColour(self.theme.get_bg_color())
+            self.btn_toggle.SetBackgroundColour(self.theme.get_border_color())
+            self.Refresh()
+            self.Update()
+        wx.CallAfter(_apply)
+```
+
+---
+
+**Arquivo:** `ui/panel_console.py`
+
+Adicionar import e subscriber:
+
+```python
+from core.pubsub import PubSub
+```
+
+No `__init__`:
+
+```python
+        PubSub.subscribe('THEME_CHANGED', self._on_theme_changed)
+```
+
+Handler:
+
+```python
+    def _on_theme_changed(self, theme, **kwargs):
+        """[FASE 6.2] Reaplica cores do console."""
+        def _apply():
+            self.theme = ThemeManager()
+            self.txt_log.SetBackgroundColour(self.theme.get_console_bg())
+            self.txt_log.SetForegroundColour(self.theme.get_console_fg())
+            self.Refresh()
+        wx.CallAfter(_apply)
+```
+
+---
+
+**Arquivo:** `ui/panel_detail.py`
+
+Adicionar import:
+
+```python
+from core.pubsub import PubSub
+```
+
+No `__init__`:
+
+```python
+        PubSub.subscribe('THEME_CHANGED', self._on_theme_changed)
+        self.current_video_id = None  # (se não existir)
+        self._current_transcript = ""
+        self._current_video_data = {}
+```
+
+Handler:
+
+```python
+    def _on_theme_changed(self, theme, **kwargs):
+        """[FASE 6.2] Reaplica cores e recarrega HTML."""
+        def _apply():
+            self.theme = ThemeManager()
+            self.SetBackgroundColour(self.theme.get_bg_color())
+            self.SetForegroundColour(self.theme.get_fg_color())
+
+            # Recarrega HTML com CSS atualizado se tiver conteúdo
+            if self._current_transcript and self.browser:
+                self._render_html(self._current_transcript)
+
+            self.Refresh()
+        wx.CallAfter(_apply)
+```
+
+Extrair renderização HTML para método dedicado (substituir inline no `load_video`):
+
+```python
+    def _render_html(self, transcript_text: str):
+        """Renderiza HTML com CSS do tema ativo."""
+        if not self.browser:
+            return
+
+        html_content = f"""
+        <html>
+        <head>
+        <style>
+            body {{
+                font-family: 'Segoe UI', sans-serif;
+                line-height: 1.6;
+                padding: 20px;
+                background-color: {self.theme.css_color('bg')};
+                color: {self.theme.css_color('fg')};
+                margin: 0;
+            }}
+            h3 {{
+                color: {self.theme.css_color('accent')};
+                border-bottom: 1px solid {self.theme.css_color('border')};
+                padding-bottom: 10px;
+            }}
+            p {{ white-space: pre-wrap; }}
+        </style>
+        </head>
+        <body>
+            <h3>Transcrição</h3>
+            <p>{transcript_text}</p>
+        </body>
+        </html>
+        """
+        self.browser.SetPage(html_content, "")
+```
+
+No `load_video`, substituir a seção de HTML:
+
+```python
+    def load_video(self, video_data: dict, transcript_text: str):
+        # ... (código existente de meta e thumbnail) ...
+
+        # Salvar referências para re-render em mudança de tema
+        self._current_transcript = transcript_text
+        self._current_video_data = video_data
+        self.current_video_id = video_data.get('id')
+
+        # Renderizar conteúdo
+        if self.browser:
+            self._render_html(transcript_text)
+        else:
+            self.txt_content.SetValue(transcript_text)
+
+        # Update Stats
+        t_count = video_data.get('token_count', 0)
+        self.lbl_stats.SetLabel(f"Tokens: {t_count} (Estimado)")
+```
+
+---
+
+**Arquivo:** `ui/virtual_table.py`
+
+Nos renderers existentes, substituir hardcodes de cor.
+
+**`ThumbnailRenderer._draw_placeholder`:**
+
+```python
+    def _draw_placeholder(self, dc, rect):
+        theme = ThemeManager()
+        dc.SetBrush(wx.Brush(theme.color("placeholder_bg")))
+        dc.SetPen(wx.Pen(theme.get_border_color(), 1))
+        dc.DrawRoundedRectangle(rect.x + 4, rect.y + 4, 80, 45, 4)
+```
+
+**`RichTitleRenderer.Draw`** — já usa ThemeManager, sem mudanças necessárias.
+
+**`ChipTagRenderer.Draw`** — texto no modo sem dynamic_grid:
+
+```python
+        # Onde aparece wx.BLACK:
+        dc.SetTextForeground(
+            theme.get_fg_color() if not isSelected else wx.WHITE)
+```
+
+**`BadgeStatusRenderer.Draw`** — já usa ThemeManager para accent, sem mudanças.
+
+**`LinkIconRenderer.Draw`:**
+
+```python
+        # ANTES:
+        icon_color = theme.get_accent_color() if not isSelected else wx.WHITE
+        # OK — já correto
+```
+
+**`SummaryStatusRenderer`** — já implementado com ThemeManager na T06.
+
+---
+
+**Arquivo:** `ui/dialog_config.py`
+
+Adicionar import:
+
+```python
+from core.pubsub import PubSub
+```
+
+No `__init__`, adicionar subscriber:
+
+```python
+        PubSub.subscribe('THEME_CHANGED', self._on_theme_changed)
+```
+
+Handler:
+
+```python
+    def _on_theme_changed(self, theme, **kwargs):
+        """[FASE 6.2] Reaplica tema ao dialog se estiver aberto."""
+        def _apply():
+            self.theme = ThemeManager()
+            self.SetBackgroundColour(self.theme.get_bg_color())
+            self.status_bar.SetBackgroundColour(self.theme.get_highlight_color())
+            self.Refresh()
+        wx.CallAfter(_apply)
+```
+
+Substituir hardcodes de `wx.Colour(100, 116, 139)` por:
+
+```python
+self.theme.color("subtitle")
+```
+
+Substituir hardcodes de botão save (`wx.Colour(37, 99, 235)`):
+
+```python
+self.theme.color("button_primary")
+```
+
+Substituir hardcodes de botão abort (`wx.Colour(239, 68, 68)`):
+
+```python
+self.theme.color("button_danger")
+```
+
+---
+
+## 4. CONTRATOS DE INTERFACE
+
+### 4.1 Novos PubSub Events
+
+| Evento | Publisher | Subscribers | Payload |
+|---|---|---|---|
+| `THEME_CHANGED` | `AppWindow.on_toggle_theme()` | Todos os painéis + renderers | `theme: str` ("light" \| "dark") |
+
+### 4.2 ConfigManager Keys Novas
+
+| Seção | Chave | Tipo | Default | Descrição |
+|---|---|---|---|---|
+| `ui` | `theme` | `str` | `"light"` | Tema ativo |
+| `ui` | `column_widths` | `dict` | `{}` | Larguras por aba |
+| `ui.column_widths` | `tab_analysis` | `dict` | `{}` | Labels→largura |
+| `ui.column_widths` | `tab_batch` | `dict` | `{}` | Labels→largura |
+
+### 4.3 ThemeManager API
+
+| Método | Retorno | Descrição |
+|---|---|---|
+| `color(token)` | `wx.Colour` | Consulta genérica por token |
+| `get_theme_name()` | `str` | Nome do tema ativo |
+| `is_dark()` | `bool` | Shortcut para verificação |
+| `set_theme(name)` | `None` | Troca tema + persiste |
+| `css_color(token)` | `str` | Cor em formato `#rrggbb` |
+| `apply_theme(window)` | `None` | Aplica recursivamente |
+| `get_*_color()` | `wx.Colour` | Aliases retrocompatíveis |
+
+### 4.4 Tokens de Cor Disponíveis
+
+```
+bg, fg, accent, highlight, border, panel, muted,
+success, warning, error,
+console_bg, console_fg,
+selection_bg, selection_fg,
+grid_line, placeholder_bg, header_bg,
+button_danger, button_primary, link, subtitle
+```
+
+---
+
+## 5. MIGRAÇÕES DE DB
+
+**Nenhuma migração necessária.** Esta fase não altera o schema do SQLite.
+
+---
+
+## 6. SCRIPT DE VERIFICAÇÃO
+
+**Arquivo NOVO:** `scripts/verification/verify_phase_6_2.py`
+
+```python
+# scripts/verification/verify_phase_6_2.py
+"""
+Script de verificação da Fase 6.2 — Refinamento, UX e Organização.
+Testa limpeza de arquivos, configurações, e infraestrutura de tema.
+"""
+import os
+import sys
+import json
+
+# Add project root to sys.path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+
+
+def verify():
+    results = []
+    total = 0
+    passed = 0
+
+    def check(name, condition, detail=""):
+        nonlocal total, passed
+        total += 1
+        status = "✅ PASS" if condition else "❌ FAIL"
+        if condition:
+            passed += 1
+        results.append(f"  {status}: {name}")
+        if detail and not condition:
+            results.append(f"         → {detail}")
+
+    print("=" * 60)
+    print("VERIFICAÇÃO FASE 6.2 — ContextFlow")
+    print("=" * 60)
+
+    # ─── T01: Limpeza de Scripts ───────────────────────────
+    print("\n📁 T01 — Limpeza de Scripts")
+    check("scripts/debug/ removido",
+          not os.path.exists("scripts/debug"),
+          "Diretório scripts/debug/ ainda existe")
+    check("scripts/verification/ existe",
+          os.path.isdir("scripts/verification"),
+          "Diretório scripts/verification/ não encontrado")
+    check("verify_brake.py presente",
+          os.path.isfile("scripts/verification/verify_brake.py"))
+    check("verify_integrity.py presente",
+          os.path.isfile("scripts/verification/verify_integrity.py"))
+
+    # ─── T02: DialogConfig ─────────────────────────────────
+    print("\n🔧 T02 — DialogConfig Saneado")
+    try:
+        with open("ui/dialog_config.py", "r", encoding="utf-8") as f:
+            dc_content = f.read()
+        check("OpenAI removido da UI",
+              '"OpenAI API Key:"' not in dc_content
+              or 'openai' not in dc_content.split("providers")[0] if "providers" in dc_content else True,
+              "Referência a OpenAI ainda visível no dialog")
+        check("Seletor de Inteligência Ativa removido",
+              "Seletor de Inteligência Ativa" not in dc_content,
+              "Bloco 'Seletor de Inteligência Ativa' ainda presente")
+        check("Tamanho >= 960x720",
+              "980" in dc_content or "960" in dc_content,
+              "Tamanho do dialog parece não ter sido ajustado")
+        check("SpinCtrl max=100",
+              "max=100" in dc_content,
+              "Limites de SpinCtrl não ajustados para 100")
+    except FileNotFoundError:
+        check("dialog_config.py encontrado", False, "Arquivo não existe")
+
+    # ─── T03: ConfigManager Defaults ───────────────────────
+    print("\n⚙️ T03 — ConfigManager Defaults")
+    try:
+        from core.config_manager import ConfigManager
+        cfg = ConfigManager()
+        defaults = cfg._get_default_config()
+
+        check("Default active_provider = ollama",
+              defaults["orchestration"]["active_provider"] == "ollama",
+              f"Encontrado: {defaults['orchestration']['active_provider']}")
+        check("Default ui.theme existe",
+              "theme" in defaults.get("ui", {}),
+              "Chave ui.theme não encontrada nos defaults")
+        check("Default ui.column_widths existe",
+              "column_widths" in defaults.get("ui", {}),
+              "Chave ui.column_widths não encontrada")
+    except Exception as e:
+        check("ConfigManager importável", False, str(e))
+
+    # ─── T04: TagWrapPanel ─────────────────────────────────
+    print("\n🏷️ T04 — TagWrapPanel")
+    check("ui/components/__init__.py existe",
+          os.path.isfile("ui/components/__init__.py"))
+    check("ui/components/tag_wrap_panel.py existe",
+          os.path.isfile("ui/components/tag_wrap_panel.py"))
+    try:
+        from ui.components.tag_wrap_panel import TagWrapPanel
+        check("TagWrapPanel importável", True)
+    except Exception as e:
+        check("TagWrapPanel importável", False, str(e))
+
+    # ─── T05: Sidebar Resumir ──────────────────────────────
+    print("\n📂 T05 — Sidebar Resumir")
+    try:
+        with open("ui/sidebar.py", "r", encoding="utf-8") as f:
+            sb_content = f.read()
+        check("on_summarize_video existe",
+              "on_summarize_video" in sb_content)
+        check("on_summarize_playlist existe",
+              "on_summarize_playlist" in sb_content)
+        check("Menu '✨ Resumir Vídeo' existe",
+              "Resumir Vídeo" in sb_content)
+        check("Menu '✨ Resumir Playlist' existe",
+              "Resumir Playlist" in sb_content)
+    except FileNotFoundError:
+        check("sidebar.py encontrado", False)
+
+    # ─── T06: SummaryStatusRenderer ────────────────────────
+    print("\n📊 T06 — Coluna Resumo Visual")
+    try:
+        with open("ui/virtual_table.py", "r", encoding="utf-8") as f:
+            vt_content = f.read()
+        check("SummaryStatusRenderer definido",
+              "class SummaryStatusRenderer" in vt_content)
+        check("SummaryStatusRenderer usado no GetAttr",
+              "SummaryStatusRenderer()" in vt_content)
+    except FileNotFoundError:
+        check("virtual_table.py encontrado", False)
+
+    # ─── T07: Persistência de Colunas ──────────────────────
+    print("\n📐 T07 — Persistência de Colunas")
+    try:
+        with open("ui/tab_analysis.py", "r", encoding="utf-8") as f:
+            ta_content = f.read()
+        check("_restore_column_widths presente",
+              "_restore_column_widths" in ta_content)
+        check("_save_column_widths presente",
+              "_save_column_widths" in ta_content)
+        check("EVT_GRID_COL_SIZE binding presente",
+              "EVT_GRID_COL_SIZE" in ta_content)
+    except FileNotFoundError:
+        check("tab_analysis.py encontrado", False)
+
+    try:
+        with open("ui/tab_batch.py", "r", encoding="utf-8") as f:
+            tb_content = f.read()
+        check("_restore_column_widths em tab_batch",
+              "_restore_column_widths" in tb_content)
+    except FileNotFoundError:
+        check("tab_batch.py encontrado", False)
+
+    # ─── T08: ThemeManager Multi-Tema ──────────────────────
+    print("\n🎨 T08 — ThemeManager")
+    try:
+        from core.managers.theme_manager import ThemeManager
+        tm = ThemeManager()
+
+        check("THEMES dict existe",
+              hasattr(ThemeManager, 'THEMES'))
+        check("Tema 'light' disponível",
+              "light" in ThemeManager.THEMES)
+        check("Tema 'dark' disponível",
+              "dark" in ThemeManager.THEMES)
+        check("Método color() existe",
+              hasattr(tm, 'color'))
+        check("Método css_color() existe",
+              hasattr(tm, 'css_color'))
+        check("Método set_theme() existe",
+              hasattr(tm, 'set_theme'))
+        check("Método is_dark() existe",
+              hasattr(tm, 'is_dark'))
+        check("Método get_success_color() existe",
+              hasattr(tm, 'get_success_color'))
+        check("Método get_muted_color() existe",
+              hasattr(tm, 'get_muted_color'))
+
+        # Testa que cores light e dark são diferentes
+        light_bg = ThemeManager.THEMES["light"]["bg"]
+        dark_bg = ThemeManager.THEMES["dark"]["bg"]
+        check("Cores light != dark",
+              light_bg != dark_bg,
+              "Paletas light e dark são idênticas")
+
+        # Testa tokens mínimos
+        required_tokens = [
+            "bg", "fg", "accent", "highlight", "border",
+            "success", "warning", "error", "muted",
+            "console_bg", "console_fg", "grid_line"
+        ]
+        for token in required_tokens:
+            check(f"Token '{token}' em light",
+                  token in ThemeManager.THEMES["light"])
+            check(f"Token '{token}' em dark",
+                  token in ThemeManager.THEMES["dark"])
+
+    except Exception as e:
+        check("ThemeManager importável", False, str(e))
+
+    # ─── T09: Toggle de Tema ──────────────────────────────
+    print("\n🌙 T09 — Toggle de Tema")
+    try:
+        with open("ui/app_window.py", "r", encoding="utf-8") as f:
+            aw_content = f.read()
+        check("on_toggle_theme handler existe",
+              "on_toggle_theme" in aw_content)
+        check("THEME_CHANGED publicado",
+              "THEME_CHANGED" in aw_content)
+        check("item_dark_mode no menu",
+              "item_dark_mode" in aw_content)
+    except FileNotFoundError:
+        check("app_window.py encontrado", False)
+
+    # ─── T10: Adaptação de Componentes ─────────────────────
+    print("\n🔄 T10 — Adaptação de Componentes")
+    files_to_check = [
+        ("ui/tab_analysis.py", "_on_theme_changed"),
+        ("ui/tab_batch.py", "_on_theme_changed"),
+        ("ui/sidebar.py", "_on_theme_changed"),
+        ("ui/panel_console.py", "_on_theme_changed"),
+        ("ui/panel_detail.py", "_on_theme_changed"),
+    ]
+    for filepath, method in files_to_check:
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                content = f.read()
+            check(f"{filepath} tem {method}",
+                  method in content)
+        except FileNotFoundError:
+            check(f"{filepath} encontrado", False)
+
+    # Verifica que panel_detail usa css_color
+    try:
+        with open("ui/panel_detail.py", "r", encoding="utf-8") as f:
+            pd_content = f.read()
+        check("panel_detail usa css_color para HTML",
+              "css_color" in pd_content,
+              "HTML ainda usa cores hardcoded")
+    except FileNotFoundError:
+        pass
+
+    # ─── RESULTADO FINAL ───────────────────────────────────
+    print("\n" + "=" * 60)
+    print(f"RESULTADO: {passed}/{total} verificações passaram")
+    print("=" * 60)
+
+    for r in results:
+        print(r)
+
+    if passed == total:
+        print(f"\n🎉 FASE 6.2 VERIFICADA COM SUCESSO!")
+    else:
+        print(f"\n⚠️ {total - passed} verificação(ões) falharam.")
+
+    return passed == total
+
+
+if __name__ == '__main__':
+    verify()
+```
+
+---
+
+## 7. CHECKLIST DE VALIDAÇÃO
+
+### 7.1 Pré-Implementação
+- [X] Backup do código atual (commit/tag)
+- [X] Confirmar que `python main.py` funciona sem erros
+- [X] Confirmar que Ollama está rodando (para testes de resumo)
+
+### 7.2 Durante Implementação — Bloco A
+- [X] `scripts/debug/` removido
+- [X] Blueprints 6.1 arquivados em `docs/history/`
+- [X] DialogConfig abre sem erros
+- [X] Apenas Google + Ollama visíveis
+- [X] Seletor de provedor ativo ausente
+- [X] SpinCtrl aceita valor 100
+- [X] Dialog fecha sem scroll excessivo
+- [X] `credentials.json` preserva chaves antigas não-visíveis
+- [X] Default `active_provider` é `"ollama"` em instalação limpa
+
+### 7.3 Durante Implementação — Bloco B
+- [X] Viewer mostra TODAS as tags (não apenas 2)
+- [X] Tags com wrap automático
+- [X] "Sem tags" quando vídeo não tem tags
+- [X] Sidebar: "✨ Resumir Vídeo" aparece para vídeos
+- [X] Sidebar: "✨ Resumir Playlist" aparece para playlists
+- [X] Resumir vídeo sem transcrição → aviso adequado
+- [X] Resumir playlist → filtra apenas elegíveis
+- [nao funcionou - coluna resumo mostra texto longo apos resmir video e botao de clique para resumir nao funciona nao esta clicavel] Coluna Resumo mostra ícone (não texto longo)
+- [X] Largura da coluna Resumo ≈ 70px
+- [X] Estados visuais: pendente, processando, ok, erro
+
+### 7.4 Durante Implementação — Bloco C
+- [X] Redimensionar colunas → fechar → reabrir → larguras restauradas
+- [X] Funciona em Aba 1 e Aba 2
+- [NAO SEI O QUE É ISSO NEM SEI COMO TESTAR] Debounce ativo (não salva a cada pixel)
+- [X] ThemeManager retorna cores para light e dark
+- [NAO SEI O QUE É ISSO NEM SEI COMO TESTAR] `set_theme("dark")` persiste em `credentials.json`
+- [X] Toggle no menu "Exibir" funciona
+- [/ CORES FICARAM FEIAS PARA O TEMA ESCURO, CONTRASTE ESTA RUIM, O SISTEMA NAO ESTA USANDO AS CORES CORRETAS EM TODAS AS COISAS, PRECISA MELHORAR MUIT, QUANDO RETORNA PARA O TEMA CLADO AS COISAS COLORIDAS FICAM PRETAS E ESTRANA. PRECISA REINICIAR O PROGRAMA PARA VOLTAR AO NORMAL EM MODO CLARO] Grid, sidebar, console, detail panel respeitam tema
+- [NAO SEI O QUE É ISSO NEM SEI COMO TESTAR] HTML do DetailPanel usa `css_color()` do tema
+- [NAO SEI O QUE É ISSO NEM SEI COMO TESTAR] ChipTagRenderer com contraste adequado em dark
+- [NAO SEI O QUE É ISSO NEM SEI COMO TESTAR] SummaryStatusRenderer com cores semânticas
+- [X] Tema persiste após reinício
+
+### 7.5 Pós-Implementação
+- [X] `python scripts/verification/verify_phase_6_2.py` → 100% pass
+- [X] `python main.py` → aplicação inicia sem erros
+- [X] Smoke test: baixar vídeo → resumir → ver tags → alternar tema
+- [X] `docs/CURRENT_STATE.md` atualizado
+- [X] `docs/DECISION_LOG.md` com entradas 6.2
+- [X] Arquivos todos < 700 linhas - tab_analysis.py ESTA COM  746 LINHAS = ACHO QUE PODEMOS IGNORAR ESSE POR ENQUANTO
+
+---
+
+## 8. SUGESTÃO DE COMMIT
+
+```
+FASE 6.2: REFINAMENTO UX, DARK MODE E PERSISTÊNCIA DE PREFERÊNCIAS
+```
+
+---
+
+## 9. ATUALIZAÇÃO DO DECISION_LOG.md
+
+```markdown
+### Fase 6.2 — Refinamento, UX/UI e Organização
+
+F6.2| DEL | Remover scripts/debug/ | Código temporário obsoleto | `scripts/debug/`
+F6.2| MOD | Saneamento DialogConfig | Remover providers legados, SSoT na toolbar | `ui/dialog_config.py`
+F6.2| CFG | Default active_provider=ollama | Alinhamento com uso real | `core/config_manager.py`
+F6.2| ADD | TagWrapPanel | Tags completas no viewer Aba 2 | `ui/components/tag_wrap_panel.py`
+F6.2| ADD | Menu Resumir na Sidebar | Resumir vídeo/playlist via contexto | `ui/sidebar.py`
+F6.2| ADD | SummaryStatusRenderer | Coluna Resumo como indicador visual | `ui/virtual_table.py`
+F6.2| ADD | Persistência de colunas | Larguras salvas no ConfigManager | `ui/tab_analysis.py`, `ui/tab_batch.py`
+F6.2| MOD | ThemeManager multi-tema | Suporte a Light/Dark com 21 tokens | `core/managers/theme_manager.py`
+F6.2| ADD | Toggle Dark Mode | Menu Exibir + PubSub THEME_CHANGED | `ui/app_window.py`
+F6.2| MOD | Adaptação de widgets | Todos os painéis respondem a THEME_CHANGED | `ui/*.py`
+```
+
+---
+
+## 10. ATUALIZAÇÃO DO CURRENT_STATE.md
+
+Adicionar à tabela de módulos:
+
+```markdown
+| TagWrapPanel | `ui/components/tag_wrap_panel.py` | `set_tags(list)`, `apply_theme()` | F6.2 |
+| SummaryStatusRenderer | `ui/virtual_table.py` | Renderer visual de status de resumo | F6.2 |
+```
+
+Atualizar ThemeManager:
+
+```markdown
+| ThemeManager | `core/managers/theme_manager.py` | `color(token)`, `set_theme(name)`, `css_color(token)`, `is_dark()`, `apply_theme(window)` | F6.2 |
+```
+
+Adicionar ao fluxo principal:
+
+```markdown
+7. **Personalização**: Usuário alterna tema → `ThemeManager.set_theme()` → PubSub `THEME_CHANGED` → Todos os painéis reaplicam cores.
+```
+
+Adicionar invariante:
+
+```markdown
+9. Toda cor de UI deve ser obtida via `ThemeManager.color(token)`. Hardcodes de `wx.Colour` são proibidos exceto em contextos semânticos isolados.
+```
+
+---
+
+**FIM DO BLUEPRINT — FASE 6.2**

@@ -7,6 +7,8 @@ from core.app_state import AppState
 from core.pubsub import PubSub
 from core.managers.theme_manager import ThemeManager
 from ui.virtual_table import VirtualVideoTable
+from ui.components.tag_wrap_panel import TagWrapPanel
+from ui.components.analysis_toolbar import AnalysisToolbar
 import json
 
 class TabAnalysis(wx.Panel):
@@ -43,84 +45,12 @@ class TabAnalysis(wx.Panel):
         
         # Garante refresh inicial
         wx.CallAfter(self._refresh_grid)
-        
-        # [FASE 6.1b] Popula seletor de modelos após init
-        wx.CallAfter(self._populate_model_selector)
 
     def _init_ui(self):
         main_sizer = wx.BoxSizer(wx.VERTICAL)
-        
-        # --- TOOLBAR ANALÍTICA (Fase 6.1b: com seletores de IA) ---
-        self.toolbar = wx.Panel(self)
-        self.toolbar.SetBackgroundColour(self.theme.get_bg_color())
-        self.toolbar.SetMinSize((-1, 40))
-        tb_sizer = wx.BoxSizer(wx.HORIZONTAL)
-
-        # Botão Batch Summarize (ATIVADO — não mais placeholder)
-        self.btn_summarize = wx.Button(self.toolbar, label="✨ Resumir Selecionados")
-        self.btn_summarize.SetBackgroundColour(self.theme.get_accent_color())
-        self.btn_summarize.SetForegroundColour(wx.WHITE)
-        self.btn_summarize.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT,
-                                           wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
-
-        # Separador visual
-        sep1 = wx.StaticLine(self.toolbar, style=wx.LI_VERTICAL)
-
-        # [FASE 6.1b] Seletor de Provedor
-        lbl_provider = wx.StaticText(self.toolbar, label="IA:")
-        lbl_provider.SetFont(wx.Font(8, wx.FONTFAMILY_DEFAULT,
-                                     wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
-        self.choice_provider = wx.Choice(self.toolbar, choices=["ollama", "google"],
-                                         size=(90, -1))
-        current_provider = self.app_state.config.get(
-            "orchestration", "active_provider", "ollama"
-        )
-        idx_p = self.choice_provider.FindString(current_provider)
-        self.choice_provider.SetSelection(idx_p if idx_p != wx.NOT_FOUND else 0)
-
-        # [FASE 6.1b] Seletor de Modelo
-        self.choice_model = wx.Choice(self.toolbar, choices=["Carregando..."],
-                                      size=(200, -1))
-        self.choice_model.SetSelection(0)
-        self.choice_model.Enable(False)  # Desabilitado até discovery completar
-
-        # Botão de refresh de modelos
-        self.btn_refresh_models = wx.Button(self.toolbar, label="🔄", size=(30, -1),
-                                            style=wx.BU_EXACTFIT)
-        self.btn_refresh_models.SetToolTip("Atualizar lista de modelos")
-
-        # Indicador de status do provider
-        self.lbl_ai_status = wx.StaticText(self.toolbar, label="")
-        self.lbl_ai_status.SetFont(wx.Font(8, wx.FONTFAMILY_DEFAULT,
-                                           wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
-
-        # Botões existentes (mantidos)
-        self.btn_export = wx.Button(self.toolbar, label="📁 Export ZIP/MD")
-        self.btn_export.SetBackgroundColour(wx.Colour(230, 230, 230))
-        self.btn_export.SetForegroundColour(self.theme.get_fg_color())
-
-        self.btn_cancel = wx.Button(self.toolbar, label="🛑 Cancelar")
-        self.btn_cancel.SetForegroundColour(wx.Colour(200, 50, 50))
-
-        self.search = wx.SearchCtrl(self.toolbar)
-        self.search.SetDescriptiveText("Filtro rápido...")
-        self.search.ShowCancelButton(True)
-
-        # Layout da toolbar
-        tb_sizer.Add(self.btn_summarize, 0, wx.CENTER | wx.LEFT, 10)
-        tb_sizer.Add(sep1, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
-        tb_sizer.Add(lbl_provider, 0, wx.CENTER | wx.LEFT, 5)
-        tb_sizer.Add(self.choice_provider, 0, wx.CENTER | wx.LEFT, 3)
-        tb_sizer.Add(self.choice_model, 0, wx.CENTER | wx.LEFT, 5)
-        tb_sizer.Add(self.btn_refresh_models, 0, wx.CENTER | wx.LEFT, 2)
-        tb_sizer.Add(self.lbl_ai_status, 0, wx.CENTER | wx.LEFT, 8)
-        tb_sizer.AddStretchSpacer()
-        tb_sizer.Add(self.btn_export, 0, wx.CENTER | wx.LEFT, 5)
-        tb_sizer.Add(self.btn_cancel, 0, wx.CENTER | wx.LEFT, 5)
-        tb_sizer.Add(self.search, 0, wx.CENTER | wx.RIGHT, 10)
-
-        self.toolbar.SetSizer(tb_sizer)
-        main_sizer.Add(self.toolbar, 0, wx.EXPAND | wx.BOTTOM, 1)
+        # --- TOOLBAR ANALÍTICA (Fase 6.2: Segregada) ---
+        self.toolbar_ctrl = AnalysisToolbar(self, self.app_state)
+        main_sizer.Add(self.toolbar_ctrl, 0, wx.EXPAND | wx.BOTTOM, 1)
         
         # --- SPLITTER WINDOW (Master-Detail) ---
         self.splitter = wx.SplitterWindow(self, style=wx.SP_3D | wx.SP_LIVE_UPDATE | wx.SP_NO_XP_THEME)
@@ -157,10 +87,13 @@ class TabAnalysis(wx.Panel):
         self.grid.SetColSize(10, 100) # Tags
         self.grid.SetColSize(11, 40)  # Link
         self.grid.SetColSize(12, 60)  # Status
-        self.grid.SetColSize(13, 250) # Resumo
+        self.grid.SetColSize(13, 70) # Resumo (Ajustado para ícones)
         
         # [QA2 REFINE] Trava de Layout: Desabilita redimensionamento manual de linhas
         self.grid.DisableDragRowSize()
+        
+        # [FASE 6.2] Carrega larguras persistidas
+        self._load_column_widths()
         
         master_sizer.Add(self.grid, 1, wx.EXPAND)
         self.pnl_master.SetSizer(master_sizer)
@@ -186,10 +119,14 @@ class TabAnalysis(wx.Panel):
         self.lbl_side_title.SetFont(wx.Font(11, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
         self.lbl_side_title.SetForegroundColour(self.theme.get_accent_color())
         self.lbl_side_title.Wrap(320)
-        
+
+        # [FASE 6.2] Painel de tags completas
+        self.pnl_tags = TagWrapPanel(self.pnl_side_info)
+
         side_sizer.Add(self.btn_close_viewer, 0, wx.ALL | wx.EXPAND, 5)
         side_sizer.Add(self.bmp_detail, 0, wx.ALL, 10)
         side_sizer.Add(self.lbl_side_title, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.EXPAND, 10)
+        side_sizer.Add(self.pnl_tags, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.EXPAND, 10)
         self.pnl_side_info.SetSizer(side_sizer)
         
         # Conteúdo Textual
@@ -214,14 +151,14 @@ class TabAnalysis(wx.Panel):
         self.grid.Bind(wx.grid.EVT_GRID_SELECT_CELL, self.on_select_video)
         self.grid.Bind(wx.grid.EVT_GRID_CELL_RIGHT_CLICK, self.on_right_click)
         self.btn_close_viewer.Bind(wx.EVT_BUTTON, self.on_close_viewer)
-        self.search.Bind(wx.EVT_TEXT, self.on_search)
+        self.toolbar_ctrl.search.Bind(wx.EVT_TEXT, self.on_search)
         
         # [QA2 REFINE] Atalhos de Teclado
         self.grid.Bind(wx.EVT_KEY_DOWN, self.on_key_down)
         
         # [FUNCIONALIDADE v5.9] Ativação do Botão Exportar
-        self.btn_export.Bind(wx.EVT_BUTTON, self.on_export_batch)
-        self.btn_cancel.Bind(wx.EVT_BUTTON, self.on_cancel_all)
+        self.toolbar_ctrl.btn_export.Bind(wx.EVT_BUTTON, self.on_export_batch)
+        self.toolbar_ctrl.btn_cancel.Bind(wx.EVT_BUTTON, self.on_cancel_all)
         
         self.grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_CLICK, self.on_label_click)
         self.Bind(wx.EVT_TIMER, self.on_debounce_tick, self.debounce_timer)
@@ -229,10 +166,8 @@ class TabAnalysis(wx.Panel):
         self.grid.Bind(wx.grid.EVT_GRID_CELL_LEFT_CLICK, self.on_grid_click)
         
         # [FASE 6.1b] Bindings de IA
-        self.btn_summarize.Bind(wx.EVT_BUTTON, self._on_batch_summarize)
-        self.choice_provider.Bind(wx.EVT_CHOICE, self._on_provider_changed)
-        self.choice_model.Bind(wx.EVT_CHOICE, self._on_model_changed)
-        self.btn_refresh_models.Bind(wx.EVT_BUTTON, self._on_refresh_models)
+        self.toolbar_ctrl.btn_summarize.Bind(wx.EVT_BUTTON, self._on_batch_summarize)
+        self.grid.Bind(wx.grid.EVT_GRID_COL_SIZE, self.on_col_size)
 
         # [FASE 6.1b] PubSub listeners de IA
         PubSub.subscribe('SUMMARY_STARTED', self._on_summary_started)
@@ -241,6 +176,31 @@ class TabAnalysis(wx.Panel):
         
         # [FASE 6.0] Expansão do Cockpit via Double Click
         self.grid.Bind(wx.grid.EVT_GRID_CELL_LEFT_DCLICK, self.on_grid_dclick)
+
+    def _load_column_widths(self):
+        """[FASE 6.2] Restaura larguras das colunas do ConfigManager."""
+        widths = self.app_state.config.get("ui", "column_widths", {}).get("tab_analysis", {})
+        if not widths:
+            return
+        for col_idx, width in widths.items():
+            try:
+                self.grid.SetColSize(int(col_idx), int(width))
+            except:
+                continue
+
+    def on_col_size(self, event):
+        """[FASE 6.2] Persiste largura da coluna ao redimensionar."""
+        col = event.GetRowOrCol()
+        width = self.grid.GetColSize(col)
+        
+        # Salva no ConfigManager
+        all_widths = self.app_state.config.get("ui", "column_widths", {})
+        if "tab_analysis" not in all_widths:
+            all_widths["tab_analysis"] = {}
+        
+        all_widths["tab_analysis"][str(col)] = width
+        self.app_state.config.set("ui", "column_widths", all_widths)
+        event.Skip()
 
     def on_state_mutation(self, event_type, data=None):
         if event_type in ['VIDEO_ADDED', 'VIDEO_UPDATED', 'TASK_COMPLETED', 'DATA_LOADED', 'VIDEOS_DELETED', 'VIDEO_PROMOTED']:
@@ -256,7 +216,7 @@ class TabAnalysis(wx.Panel):
         self._refresh_grid()
 
     def _refresh_grid(self):
-        query = self.search.GetValue().lower()
+        query = self.toolbar_ctrl.search.GetValue().lower()
         # [SSOT v5.9] Usa dados unificados para visibilidade total do pipeline
         all_videos = self.app_state.get_unified_data()
         
@@ -427,16 +387,59 @@ class TabAnalysis(wx.Panel):
         """Implementação de navegação direta via ícone [MANDATO v5.9]."""
         row, col = event.GetRow(), event.GetCol()
         label = self.col_labels[col].strip()
-        
+
         if label == "[x]":
             val = self.table.GetValue(row, col)
             self.table.SetValue(row, col, "0" if val == "1" else "1")
             self.grid.ForceRefresh()
             return
-            
+
         if label == "Link":
             url = self.table.data[row].get('url')
             if url: webbrowser.open(url)
+
+        # [FASE 6.2] Coluna Resumo clicável — dispara ação de resumir
+        if label == "Resumo":
+            if row < 0 or row >= len(self.table.data):
+                event.Skip()
+                return
+            video_data = self.table.data[row]
+            vid = video_data.get('id') or video_data.get('uuid')
+            if not vid:
+                event.Skip()
+                return
+            video = self.app_state.get_video(vid)
+            if not video:
+                event.Skip()
+                return
+            ss = video.get("summary_status", "")
+            if ss == "summarizing":
+                # Já em progresso, não faz nada
+                event.Skip()
+                return
+            if ss == "summarized":
+                # Já tem resumo — abre o viewer
+                self._load_row_details(row)
+                if not self.splitter.IsSplit():
+                    h = self.GetSize().height
+                    self.splitter.SplitHorizontally(
+                        self.pnl_master, self.pnl_detail, int(h * 0.3)
+                    )
+                event.Skip()
+                return
+            # Pendente ou erro — dispara resumo
+            if video.get("status") != "completed":
+                wx.MessageBox(
+                    "Este vídeo ainda não possui transcrição.\nBaixe o vídeo primeiro.",
+                    "Aviso", wx.OK | wx.ICON_WARNING)
+                event.Skip()
+                return
+            if ss == "summary_error":
+                self.app_state.add_or_update_video({"id": vid, "summary_status": None})
+            self.app_state.request_summary(vid)
+            event.Skip()
+            return
+
         event.Skip()
 
     def on_grid_dclick(self, event):
@@ -492,6 +495,18 @@ class TabAnalysis(wx.Panel):
             # Atualiza UI de Detalhe
             self.lbl_side_title.SetLabel(video_data.get('title', 'Unknown'))
             self.lbl_side_title.Wrap(320) # Re-wrap após mudar o texto
+
+            # ─── [FASE 6.2] Tags completas ───────────────────
+            raw_tags = video_data.get("tags", "[]")
+            tags = []
+            if isinstance(raw_tags, str):
+                try:
+                    tags = json.loads(raw_tags)
+                except (json.JSONDecodeError, TypeError):
+                    tags = []
+            elif isinstance(raw_tags, list):
+                tags = raw_tags
+            self.pnl_tags.set_tags(tags)
             
             # Carrega Thumbnail se existir
             thumb_path = video_data.get('thumbnail_path')
@@ -632,94 +647,9 @@ class TabAnalysis(wx.Panel):
     # FASE 6.1b — CONTROLES DE IA
     # ═══════════════════════════════════════════════════════════
 
-    def _populate_model_selector(self):
-        """
-        Popula o dropdown de modelos via AIDiscovery (background thread).
-        [THREAD SAFETY] O callback usa wx.CallAfter para atualizar a UI.
-        """
-        provider = self.choice_provider.GetStringSelection()
-        self.lbl_ai_status.SetLabel("🔍 Buscando modelos...")
-        self.choice_model.Enable(False)
 
-        def on_models_discovered(models):
-            """Callback chamado na thread do TaskManager."""
-            wx.CallAfter(self._update_model_selector, models)
-
-        self.app_state.discover_ai_models(
-            provider=provider,
-            callback=on_models_discovered
-        )
-
-    def _update_model_selector(self, models):
-        """
-        Atualiza o Choice de modelos na MainThread.
-        [THREAD SAFETY] Chamado APENAS via wx.CallAfter.
-        """
-        self._ai_models_cache = models
-
-        if not models:
-            self.choice_model.SetItems(["Nenhum modelo disponível"])
-            self.choice_model.SetSelection(0)
-            self.choice_model.Enable(False)
-            self.lbl_ai_status.SetLabel("⚠️ Provider indisponível")
-            self.lbl_ai_status.SetForegroundColour(wx.Colour(220, 53, 69))
-            return
-
-        model_names = [m["name"] for m in models]
-        self.choice_model.SetItems(model_names)
-        self.choice_model.Enable(True)
-
-        # Tenta selecionar o modelo configurado
-        configured_model = self.app_state.config.get("ollama", "model", "")
-        idx = self.choice_model.FindString(configured_model)
-        if idx != wx.NOT_FOUND:
-            self.choice_model.SetSelection(idx)
-        else:
-            self.choice_model.SetSelection(0)
-            # Atualiza config para o primeiro modelo disponível
-            self.app_state.config.set("ollama", "model", model_names[0])
-
-        # Atualiza status
-        provider = self.choice_provider.GetStringSelection()
-        local_count = sum(1 for m in models if not m.get("is_cloud"))
-        cloud_count = sum(1 for m in models if m.get("is_cloud"))
-        self.lbl_ai_status.SetLabel(f"✅ {len(models)} modelos ({local_count} local, {cloud_count} cloud)")
-        self.lbl_ai_status.SetForegroundColour(wx.Colour(22, 163, 74))
-
-    def _on_provider_changed(self, event):
-        """Troca de provedor → re-popula modelos."""
-        selected = self.choice_provider.GetStringSelection()
-        self.app_state.config.set("orchestration", "active_provider", selected)
-        self._populate_model_selector()
-
-    def _on_model_changed(self, event):
-        """Troca de modelo → persiste no ConfigManager."""
-        selected = self.choice_model.GetStringSelection()
-        if selected and selected != "Nenhum modelo disponível" and selected != "Carregando...":
-            provider = self.choice_provider.GetStringSelection()
-            if provider == "ollama":
-                self.app_state.config.set("ollama", "model", selected)
-
-            # Mostra info do modelo selecionado
-            for m in self._ai_models_cache:
-                if m["name"] == selected:
-                    ctx = m.get("context_length", 0)
-                    thinking = "🧠" if m.get("has_thinking") else ""
-                    cloud = "☁️" if m.get("is_cloud") else "💻"
-                    self.lbl_ai_status.SetLabel(
-                        f"{cloud} {thinking} {selected} (ctx: {ctx:,})"
-                    )
-                    break
-
-    def _on_refresh_models(self, event):
-        """Força re-discovery de modelos."""
-        self._populate_model_selector()
 
     def _on_batch_summarize(self, event):
-        """
-        Aciona resumo em lote para vídeos selecionados.
-        [VALIDAÇÃO] Só permite vídeos com status 'completed' e sem resumo.
-        """
         ids = list(self.table.selected_ids)
         if not ids:
             wx.MessageBox(
@@ -729,7 +659,6 @@ class TabAnalysis(wx.Panel):
             )
             return
 
-        # Filtra apenas vídeos elegíveis
         eligible = []
         already_done = 0
         no_transcript = 0
@@ -738,19 +667,16 @@ class TabAnalysis(wx.Panel):
             video = self.app_state.get_video(vid)
             if not video:
                 continue
-
             ss = video.get("summary_status")
             status = video.get("status", "")
-
             if ss == "summarized":
                 already_done += 1
                 continue
             if ss == "summarizing":
-                continue  # Já em processamento
+                continue
             if status != "completed":
                 no_transcript += 1
                 continue
-
             eligible.append(vid)
 
         if not eligible:
@@ -762,15 +688,15 @@ class TabAnalysis(wx.Panel):
             wx.MessageBox(msg, "Aviso", wx.OK | wx.ICON_INFORMATION)
             return
 
-        # Confirmação
-        model = self.choice_model.GetStringSelection()
+        # Usa toolbar_ctrl para pegar modelo e provedor
+        model = self.toolbar_ctrl.choice_model.GetStringSelection()
+        provider = self.toolbar_ctrl.choice_provider.GetStringSelection()
         msg = (
             f"Resumir {len(eligible)} vídeo(s) usando:\n\n"
             f"  Modelo: {model}\n"
-            f"  Provedor: {self.choice_provider.GetStringSelection()}\n\n"
+            f"  Provedor: {provider}\n\n"
             f"Deseja continuar?"
         )
-
         if already_done > 0:
             msg += f"\n\n({already_done} vídeo(s) já resumido(s) serão ignorados)"
 
@@ -778,7 +704,6 @@ class TabAnalysis(wx.Panel):
                          wx.YES_NO | wx.ICON_QUESTION) != wx.YES:
             return
 
-        # Enfileira todos
         self.app_state.request_batch_summary(eligible)
 
     # ═══════════════════════════════════════════════════════════
@@ -794,6 +719,38 @@ class TabAnalysis(wx.Panel):
             self._summary_in_progress.add(video_id)
             self._refresh_grid()
         wx.CallAfter(_update)
+
+    def apply_theme(self):
+        """[FASE 6.2] Atualiza cores e refresca a grade analítica."""
+        self.theme = ThemeManager()
+        self.SetBackgroundColour(self.theme.get_bg_color())
+
+        # Toolbar
+        if hasattr(self, 'toolbar_ctrl'):
+            self.toolbar_ctrl.apply_theme()
+
+        # Grid — tratamento especial
+        if hasattr(self, 'grid'):
+            self.theme._apply_grid_theme(self.grid)
+
+        # Painéis de detalhe
+        if hasattr(self, 'pnl_master'):
+            self.pnl_master.SetBackgroundColour(self.theme.get_bg_color())
+        if hasattr(self, 'pnl_detail'):
+            self.pnl_detail.SetBackgroundColour(self.theme.get_bg_color())
+        if hasattr(self, 'pnl_side_info'):
+            self.pnl_side_info.SetBackgroundColour(self.theme.get_bg_color())
+        if hasattr(self, 'lbl_side_title'):
+            self.lbl_side_title.SetForegroundColour(self.theme.get_accent_color())
+        if hasattr(self, 'pnl_tags'):
+            self.pnl_tags.apply_theme()
+        if hasattr(self, 'txt_summary'):
+            self.txt_summary.SetBackgroundColour(self.theme.get_bg_color())
+            self.txt_summary.SetForegroundColour(self.theme.get_fg_color())
+        if hasattr(self, 'splitter'):
+            self.splitter.SetBackgroundColour(self.theme.get_border_color())
+
+        self.Refresh()
 
     def _on_summary_completed(self, video_id, summary_preview="", tags=None, **kwargs):
         """

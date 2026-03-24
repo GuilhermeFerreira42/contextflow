@@ -51,3 +51,14 @@ F6.1b| MOD | ChipTagRenderer com dados reais | Parse de JSON string do campo vid
 F6.1b| MOD | Coluna Resumo dinâmica | 4 estados visuais baseados em summary_status | `ui/virtual_table.py`
 F6.1b| RULE | Import Barrier reforçada | UI não importa services/ai_*. Tudo via AppState | Todos os arquivos UI
 F6.1b| RULE | wx.CallAfter obrigatório | Todo PubSub handler que toca UI | `ui/tab_analysis.py`, `ui/app_window.py`
+
+### Fase 6.2 — UI Polish e Organização
+F6.2 | MOD | `DialogConfig` Saneado | Tamanho 980x720, IA tab simplificada (Gemini/Ollama) | `ui/dialog_config.py`
+F6.2 | ADD | `TagWrapPanel` | Visualização moderna de tags com wrap | `ui/components/tag_wrap_panel.py`
+F6.2 | ADD | `SummaryStatusRenderer` | Feedback visual semântico na Grid (Summarizing, Error, CTA) | `ui/virtual_table.py`
+F6.2 | MOD | `ThemeManager` Multi-Theme | Suporte a Light e SaaS Dark via PubSub | `core/managers/theme_manager.py`
+F6.2 | ADD | Persistência de Layout | Column Widths e Theme salvos via `ConfigManager` | `ui/tab_analysis.py`, `ui/tab_batch.py`
+F6.2 | RULE | CSS Dinâmico no Viewer | WebView injeta cores do `ThemeManager` via JS/CSS | `ui/panel_detail.py`
+F6.2 | RULE | HeidiSQL density | Light Mode/SaaS Dark mantêm alta densidade técnica | Global
+F6.2 | BUGFIX | Correção do Dark Mode | Adaptação robusta via `theme.get_grid_bg()` e `ConsolePanel` | `ui/virtual_table.py`, `ui/panel_console.py`
+F6.2 | BUGFIX | Coluna Resumo Interativa | Disparo do resume via clique na célula sem texto extenso | `ui/tab_analysis.py`, `ui/virtual_table.py`

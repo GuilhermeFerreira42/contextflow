@@ -98,6 +98,9 @@ class TabBatch(wx.Panel):
         # [QA2 REFINE] Trava de Layout: Desabilita redimensionamento manual de linhas
         self.grid.DisableDragRowSize()
         
+        # [FASE 6.2] Carrega larguras persistidas
+        self._load_column_widths()
+        
         grid_sizer.Add(self.grid, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 10)
         main_sizer.Add(grid_sizer, 1, wx.EXPAND)
 
@@ -135,9 +138,35 @@ class TabBatch(wx.Panel):
         self.grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_CLICK, self.on_label_click)
         self.grid.Bind(wx.grid.EVT_GRID_CELL_RIGHT_CLICK, self.on_right_click)
         self.grid.GetGridWindow().Bind(wx.EVT_MOTION, self.on_grid_motion)
+        self.grid.Bind(wx.grid.EVT_GRID_COL_SIZE, self.on_col_size)
         
         # [QA2 REFINE] Atalhos de Teclado
         self.grid.Bind(wx.EVT_KEY_DOWN, self.on_key_down)
+
+    def _load_column_widths(self):
+        """[FASE 6.2] Restaura larguras das colunas do ConfigManager."""
+        widths = self.app_state.config.get("ui", "column_widths", {}).get("tab_batch", {})
+        if not widths:
+            return
+        for col_idx, width in widths.items():
+            try:
+                self.grid.SetColSize(int(col_idx), int(width))
+            except:
+                continue
+
+    def on_col_size(self, event):
+        """[FASE 6.2] Persiste largura da coluna ao redimensionar."""
+        col = event.GetRowOrCol()
+        width = self.grid.GetColSize(col)
+        
+        # Salva no ConfigManager
+        all_widths = self.app_state.config.get("ui", "column_widths", {})
+        if "tab_batch" not in all_widths:
+            all_widths["tab_batch"] = {}
+        
+        all_widths["tab_batch"][str(col)] = width
+        self.app_state.config.set("ui", "column_widths", all_widths)
+        event.Skip()
         
         # [QA4] Escuta progresso global
         PubSub.subscribe('METADATA_FETCHED', self.on_progress_signal)
@@ -532,3 +561,18 @@ class TabBatch(wx.Panel):
         if wx.MessageBox("Deseja cancelar todas as tarefas pendentes?", "Confirmação", wx.YES_NO | wx.ICON_QUESTION) == wx.YES:
             PubSub.publish('REQUEST_CANCEL_ALL')
             wx.MessageBox("Comando de cancelamento enviado.", "Info", wx.OK)
+
+    def apply_theme(self):
+        """[FASE 6.2] Atualiza cores e refresca a grade de processamento."""
+        self.theme = ThemeManager()
+        self.SetBackgroundColour(self.theme.get_bg_color())
+
+        # Grid — tratamento especial
+        if hasattr(self, 'grid'):
+            self.theme._apply_grid_theme(self.grid)
+
+        # Botão de processo
+        self.btn_process.SetBackgroundColour(self.theme.get_accent_color())
+        self.btn_process.SetForegroundColour(wx.WHITE)
+
+        self.Refresh()

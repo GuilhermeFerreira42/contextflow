@@ -103,7 +103,12 @@ class DetailPanel(wx.Panel):
             self.set_default_image()
 
         # Update Content
-        # Formatando texto para HTML simples para leitura agradável (Light Mode)
+        # Formatando texto para HTML simples para leitura agradável (Multi-Theme)
+        bg_hex = self.theme.get_bg_color().GetAsString(wx.C2S_HTML_SYNTAX)
+        fg_hex = self.theme.get_fg_color().GetAsString(wx.C2S_HTML_SYNTAX)
+        accent_hex = self.theme.get_accent_color().GetAsString(wx.C2S_HTML_SYNTAX)
+        border_hex = self.theme.get_border_color().GetAsString(wx.C2S_HTML_SYNTAX)
+
         if self.browser:
             html_content = f"""
             <html>
@@ -113,11 +118,11 @@ class DetailPanel(wx.Panel):
                         font-family: 'Segoe UI', sans-serif;
                         line-height: 1.6;
                         padding: 20px;
-                        background-color: white;
-                        color: #282828;
+                        background-color: {bg_hex};
+                        color: {fg_hex};
                         margin: 0;
                     }}
-                    h3 {{ color: #0078d7; border-bottom: 1px solid #eee; padding-bottom: 10px; }}
+                    h3 {{ color: {accent_hex}; border-bottom: 1px solid {border_hex}; padding-bottom: 10px; }}
                     p {{ white-space: pre-wrap; }}
                 </style>
             </head>
@@ -134,3 +139,24 @@ class DetailPanel(wx.Panel):
         # Update Stats
         t_count = video_data.get('token_count', 0)
         self.lbl_stats.SetLabel(f"Tokens: {t_count} (Estimado)")
+
+    def apply_theme(self):
+        """[FASE 6.2] Atualiza cores do DetailPanel e WebView."""
+        self.theme = ThemeManager()
+        bg = self.theme.get_bg_color()
+        fg = self.theme.get_fg_color()
+        
+        self.SetBackgroundColour(bg)
+        self.SetForegroundColour(fg)
+        
+        # Se houver conteúdo no browser, precisamos recarregar com novo CSS
+        if self.browser:
+            # Injeta CSS de troca de tema via JS se o browser suportar
+            js = f"document.body.style.backgroundColor='{bg.GetAsString(wx.C2S_HTML_SYNTAX)}';"
+            js += f"document.body.style.color='{fg.GetAsString(wx.C2S_HTML_SYNTAX)}';"
+            self.browser.RunScript(js)
+        elif hasattr(self, "txt_content"):
+            self.txt_content.SetBackgroundColour(bg)
+            self.txt_content.SetForegroundColour(fg)
+        
+        self.Refresh()

@@ -93,21 +93,29 @@ class Sidebar(wx.Panel):
             if dtype == "video":
                 menu.Append(1001, "Excluir Vídeo")
                 self.Bind(wx.EVT_MENU, self.on_delete_video, id=1001)
-                
+
+                menu.AppendSeparator()
+                menu.Append(1010, "✨ Resumir Vídeo")
+                self.Bind(wx.EVT_MENU, self.on_summarize_video, id=1010)
+
                 menu.AppendSeparator()
                 menu.Append(1003, "Exportar Markdown (Único)")
                 self.Bind(wx.EVT_MENU, lambda e: self.on_export_action(e, "markdown_single"), id=1003)
-                
+
             elif dtype == "playlist":
                 menu.Append(1002, "Excluir Playlist (Todos os vídeos)")
                 self.Bind(wx.EVT_MENU, self.on_delete_playlist, id=1002)
-                
+
+                menu.AppendSeparator()
+                menu.Append(1011, "✨ Resumir Playlist")
+                self.Bind(wx.EVT_MENU, self.on_summarize_playlist, id=1011)
+
                 menu.AppendSeparator()
                 menu.Append(1004, "Exportar ZIP (Todos)")
                 self.Bind(wx.EVT_MENU, lambda e: self.on_export_action(e, "zip"), id=1004)
                 menu.Append(1005, "Exportar Markdown (Único)")
                 self.Bind(wx.EVT_MENU, lambda e: self.on_export_action(e, "markdown_single"), id=1005)
-                
+
                 menu.AppendSeparator()
                 menu.Append(1006, "Copiar Link da Playlist")
                 self.Bind(wx.EVT_MENU, self.on_copy_link, id=1006)
@@ -165,6 +173,100 @@ class Sidebar(wx.Panel):
                 wx.MessageBox(f"Link copiado para a área de transferência:\n{url}", "Sucesso")
             else:
                  wx.MessageBox("Não foi possível acessar a área de transferência.", "Erro")
+
+    def on_summarize_video(self, event):
+        """[FASE 6.2] Resumir vídeo individual via sidebar."""
+        item = self._action_item
+        data = self.tree.GetItemData(item)
+        if not data or data.get("type") != "video":
+            return
+
+        vid = data["id"]
+        video = self.app_state.get_video(vid)
+        if not video:
+            return
+
+        # Validação de elegibilidade
+        if video.get("status") != "completed":
+            wx.MessageBox(
+                "Este vídeo ainda não possui transcrição concluída.\n"
+                "Baixe o vídeo primeiro antes de resumir.",
+                "Aviso", wx.OK | wx.ICON_WARNING)
+            return
+
+        ss = video.get("summary_status")
+        if ss == "summarizing":
+            wx.MessageBox("Este vídeo já está sendo resumido.",
+                          "Info", wx.OK | wx.ICON_INFORMATION)
+            return
+
+        if ss == "summarized":
+            if wx.MessageBox(
+                "Este vídeo já possui resumo. Deseja gerar novamente?",
+                "Confirmação", wx.YES_NO | wx.ICON_QUESTION
+            ) != wx.YES:
+                return
+            # Reseta status para permitir re-resumo
+            self.app_state.add_or_update_video({
+                "id": vid, "summary_status": None
+            })
+
+        self.app_state.request_summary(vid)
+
+    def on_summarize_playlist(self, event):
+        """[FASE 6.2] Resumir todos os vídeos elegíveis de uma playlist."""
+        item = self._action_item
+        data = self.tree.GetItemData(item)
+        if not data or data.get("type") != "playlist":
+            return
+
+        pid = data["id"]
+        videos = self.app_state.get_all_videos()
+
+        # Filtra vídeos elegíveis
+        eligible = []
+        already_done = 0
+        no_transcript = 0
+        in_progress = 0
+
+        for v in videos:
+            if v.get("playlist_id") != pid:
+                continue
+            ss = v.get("summary_status")
+            status = v.get("status", "")
+
+            if ss == "summarized":
+                already_done += 1
+                continue
+            if ss == "summarizing":
+                in_progress += 1
+                continue
+            if status != "completed":
+                no_transcript += 1
+                continue
+            eligible.append(v["id"])
+
+        if not eligible:
+            msg = "Nenhum vídeo elegível para resumo nesta playlist."
+            if already_done > 0:
+                msg += f"\n• {already_done} já resumido(s)"
+            if in_progress > 0:
+                msg += f"\n• {in_progress} em processamento"
+            if no_transcript > 0:
+                msg += f"\n• {no_transcript} sem transcrição"
+            wx.MessageBox(msg, "Info", wx.OK | wx.ICON_INFORMATION)
+            return
+
+        # Confirmação
+        msg = f"Resumir {len(eligible)} vídeo(s) da playlist?"
+        if already_done > 0:
+            msg += f"\n\n({already_done} já resumido(s) serão ignorados)"
+
+        if wx.MessageBox(msg, "Confirmar Resumo em Lote",
+                         wx.YES_NO | wx.ICON_QUESTION) != wx.YES:
+            return
+
+        self.app_state.request_batch_summary(eligible)
 
 
     def on_toggle_click(self, event):
@@ -306,6 +408,14 @@ class Sidebar(wx.Panel):
 
         data = self.tree.GetItemData(item)
         
-        # Só notifica seleção se for vídeo
         if data and isinstance(data, dict) and data.get("type") == "video":
             self.on_selection(data["id"])
+
+    def apply_theme(self):
+        """[FASE 6.2] Atualiza cores internas da Sidebar."""
+        self.theme = ThemeManager()
+        self.SetBackgroundColour(self.theme.get_bg_color())
+        self.tree.SetBackgroundColour(self.theme.get_bg_color())
+        self.tree.SetForegroundColour(self.theme.get_fg_color())
+        # Atualiza a árvore para aplicar novas cores nos itens se necessário
+        self.load_history(self.search_ctrl.GetValue())

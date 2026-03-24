@@ -1,7 +1,7 @@
-
 # contextflow/ui/panel_console.py
 import wx
 import datetime
+import logging
 from core.managers.theme_manager import ThemeManager
 
 class ConsolePanel(wx.Panel):
@@ -13,21 +13,26 @@ class ConsolePanel(wx.Panel):
     def _init_ui(self):
         sizer = wx.BoxSizer(wx.VERTICAL)
         
-        # Log Text Area
-        # TE_READONLY = User cannot edit
-        # TE_RICH2 = Allows some formatting (colors) if needed
         self.txt_log = wx.TextCtrl(self, style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_RICH2)
-        
-        # Styling: Monospace font, dark background optional
         font = wx.Font(9, wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL)
         self.txt_log.SetFont(font)
         
-        # Configurar cores básicas para parecer terminal (opcional, pode ser padrão do sistema)
-        # self.txt_log.SetBackgroundColour("#1e1e1e")
-        # self.txt_log.SetForegroundColour("#d4d4d4")
+        # Console sempre estilo terminal
+        self.txt_log.SetBackgroundColour(self.theme.get_console_bg())
+        self.txt_log.SetForegroundColour(self.theme.get_console_fg())
         
         sizer.Add(self.txt_log, 1, wx.EXPAND | wx.ALL, 0)
         self.SetSizer(sizer)
+
+    def apply_theme(self):
+        """[FASE 6.2] Atualiza cores do console (Terminal Style)."""
+        self.theme = ThemeManager()
+        # Console SEMPRE usa estilo terminal (fundo escuro)
+        self.SetBackgroundColour(self.theme.get_console_bg())
+        self.txt_log.SetBackgroundColour(self.theme.get_console_bg())
+        self.txt_log.SetForegroundColour(self.theme.get_console_fg())
+        self.txt_log.SetDefaultStyle(wx.TextAttr(self.theme.get_console_fg()))
+        self.Refresh()
 
     def log(self, message: str, level: str = "INFO"):
         """
@@ -52,9 +57,9 @@ class ConsolePanel(wx.Panel):
         self.txt_log.SetDefaultStyle(wx.TextAttr(color))
         self.txt_log.AppendText(formatted_msg)
         # Reseta estilo para não vazar
-        self.txt_log.SetDefaultStyle(wx.TextAttr(self.theme.get_fg_color()))
+        self.txt_log.SetDefaultStyle(wx.TextAttr(self.theme.get_console_fg()))
 
-import logging
+
 class WxLogHandler(logging.Handler):
     """
     Handler customizado do logging que escreve no TextCtrl da GUI.
@@ -75,13 +80,6 @@ class WxLogHandler(logging.Handler):
     def _write(self, msg, level):
         try:
             if self.text_ctrl:
-                # [QA4] Usa a lógica de cor do painel
-                # Como o handler recebe o TextCtrl direto, vamos tentar achar o objeto ConsolePanel se possível
-                # ou apenas aplicar o estilo aqui.
-                # Mas ConsolePanel.log faz mais sentido. 
-                # O handler foi inicializado com self.txt_log (TextCtrl).
-                
-                # Vamos injetar o painel no handler ou usar uma lógica de cores aqui
                 color = wx.Colour(49, 130, 206)
                 if level == "ERROR" or level == "CRITICAL":
                     color = wx.Colour(229, 62, 62) # Red
@@ -91,6 +89,6 @@ class WxLogHandler(logging.Handler):
                 self.text_ctrl.SetDefaultStyle(wx.TextAttr(color))
                 self.text_ctrl.AppendText(msg)
                 theme = ThemeManager()
-                self.text_ctrl.SetDefaultStyle(wx.TextAttr(theme.get_fg_color()))
+                self.text_ctrl.SetDefaultStyle(wx.TextAttr(theme.get_console_fg()))
         except:
             pass

@@ -105,6 +105,13 @@ class AppWindow(wx.Frame):
         tsb = self.toolbar.AddTool(2000, "Sidebar", wx.ArtProvider.GetBitmap(wx.ART_LIST_VIEW, wx.ART_TOOLBAR))
         tlog = self.toolbar.AddTool(2001, "Logs", wx.ArtProvider.GetBitmap(wx.ART_REPORT_VIEW, wx.ART_TOOLBAR))
         
+        # [FASE 6.2] Botão de Tema (🌞/🌙)
+        current_theme = self.theme.get_theme_name()
+        theme_label = "Modo Claro" if current_theme == "dark" else "Modo Escuro"
+        self.toolbar.AddSeparator()
+        self.btn_theme = self.toolbar.AddTool(2005, theme_label, 
+                                              wx.ArtProvider.GetBitmap(wx.ART_TIP, wx.ART_TOOLBAR))
+        
         self.toolbar.Realize()
 
     def _bind_events(self):
@@ -121,10 +128,14 @@ class AppWindow(wx.Frame):
         # [QA4] Sinais de Deleção e Sincronia [PHASE_5_11]
         PubSub.subscribe('VIDEOS_DELETED', self.on_videos_deleted)
 
+        # [FASE 6.2] Sinais de Tema
+        PubSub.subscribe('THEME_CHANGED', self._on_theme_changed)
+
         # Toolbar Events [QA2]
         self.Bind(wx.EVT_TOOL, self.on_sidebar_toggle_signal, id=2000)
         self.Bind(wx.EVT_TOOL, self.on_toggle_logs_toolbar, id=2001)
         self.Bind(wx.EVT_TOOL, self.on_toggle_auto_open, id=2002)
+        self.Bind(wx.EVT_TOOL, self.on_toggle_theme, id=2005)
 
     def create_menubar(self):
         menubar = wx.MenuBar()
@@ -148,7 +159,20 @@ class AppWindow(wx.Frame):
         self.item_auto_open.Check(auto_open)
         
         menubar.Append(view_menu, "&Exibir")
+
+        # [FASE 6.2] Menu de Temas
+        theme_menu = wx.Menu()
+        theme_menu.Append(2006, "Modo Claro", kind=wx.ITEM_RADIO)
+        theme_menu.Append(2007, "Modo SaaS Dark", kind=wx.ITEM_RADIO)
         
+        current_theme = self.theme.get_theme_name()
+        if current_theme == "dark":
+            theme_menu.Check(2007, True)
+        else:
+            theme_menu.Check(2006, True)
+            
+        menubar.Append(theme_menu, "&Tema")
+
         # Menu Ferramentas
         tools_menu = wx.Menu()
         tools_menu.Append(3001, "Reprocessar Erros", "Tenta processar vídeos com status de erro")
@@ -162,6 +186,10 @@ class AppWindow(wx.Frame):
         self.Bind(wx.EVT_MENU, self.on_toggle_auto_open, id=2002)
         self.Bind(wx.EVT_MENU, self.on_reprocess_errors, id=3001)
         self.Bind(wx.EVT_MENU, self.on_config, id=3002)
+        
+        # [FASE 6.2] Theme Menus
+        self.Bind(wx.EVT_MENU, lambda e: self.theme.set_theme("light"), id=2006)
+        self.Bind(wx.EVT_MENU, lambda e: self.theme.set_theme("dark"), id=2007)
 
     def on_global_progress(self, video_id, status_msg):
         """Atualiza o indicador de status persistente em todas as abas [3]."""
@@ -269,3 +297,44 @@ class AppWindow(wx.Frame):
                 auto_open = self.app_state.config.get("ui", "auto_open_viewer", True)
                 if hasattr(self, 'item_auto_open'):
                     self.item_auto_open.Check(auto_open)
+
+    def on_toggle_theme(self, event):
+        """[FASE 6.2] Alterna entre temas via toolbar."""
+        self.theme.toggle_theme()
+
+    def _on_theme_changed(self, theme, **kwargs):
+        """[FASE 6.2] Handler global de troca de tema."""
+        def _apply():
+            # Atualiza Toolbar label
+            theme_label = "Modo Claro" if theme == "dark" else "Modo Escuro"
+            self.toolbar.SetToolShortHelp(2005, theme_label)
+            self.toolbar.Realize()
+
+            # Atualiza menu de tema
+            if theme == "dark":
+                self.GetMenuBar().Check(2007, True)
+            else:
+                self.GetMenuBar().Check(2006, True)
+
+            # Aplica cores na janela principal
+            self.SetBackgroundColour(self.theme.get_bg_color())
+            self.nb_container.SetBackgroundColour(self.theme.get_bg_color())
+
+            # Aplica nos componentes que têm apply_theme próprio
+            components = [
+                self.sidebar, self.tab_batch, self.tab_analysis,
+                self.panel_detail, self.panel_console
+            ]
+            for comp in components:
+                if hasattr(comp, 'apply_theme'):
+                    try:
+                        comp.apply_theme()
+                    except Exception as e:
+                        import logging
+                        logging.getLogger("contextflow").debug(f"Theme apply skip: {e}")
+
+            self.Refresh()
+            self.Update()
+            self.log_to_console(f"Tema visual alterado para: {theme.upper()}", "SYSTEM")
+
+        wx.CallAfter(_apply)

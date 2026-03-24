@@ -49,7 +49,7 @@ class ConfigManager:
                 "model": "llama3"
             },
             "orchestration": {
-                "active_provider": "openai",
+                "active_provider": "ollama",      # [FASE 6.2] Era "openai"
                 "max_cloud_tasks": 2,
                 "max_local_tasks": 1,
                 "auto_export": False,
@@ -76,7 +76,12 @@ class ConfigManager:
                 "color_tags": True,
                 "dynamic_tags": True,
                 "dynamic_grid": True,
-                "auto_open_viewer": True
+                "auto_open_viewer": True,
+                "theme": "light",                  # [FASE 6.2] NOVO
+                "column_widths": {                 # [FASE 6.2] NOVO
+                    "tab_analysis": {},
+                    "tab_batch": {}
+                }
             }
         }
 

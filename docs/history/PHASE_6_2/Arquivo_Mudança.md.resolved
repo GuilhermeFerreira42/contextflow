@@ -1,0 +1,928 @@
+# Diagnóstico e Correção do Dark Mode — Fase 6.2
+
+Vou analisar os problemas reportados e fornecer correções cirúrgicas.
+
+## Problemas Identificados
+
+1. **Cores feias no tema escuro** — contraste ruim, sistema não usa cores corretas em todos os componentes
+2. **Ao voltar para tema claro** — coisas coloridas ficam pretas/estranhas
+3. **Precisa reiniciar** para voltar ao normal em modo claro
+4. **Coluna Resumo** — mostra texto longo e botão de clique não funciona (não é clicável)
+
+## Causa Raiz
+
+O problema principal é que `apply_theme()` do `ThemeManager` faz `SetBackgroundColour`/`SetForegroundColour` recursivamente, mas:
+
+1. **wx.grid.Grid** não responde bem a `SetBackgroundColour` recursivo — precisa de `SetDefaultCellBackgroundColour` e `SetDefaultCellTextColour`
+2. **Renderers customizados** usam `grid.GetDefaultCellBackgroundColour()` que não é atualizado
+3. **Widgets nativos** (botões, StaticBox, etc.) não resetam corretamente quando voltam para light
+4. A **coluna Resumo** retorna texto "✨ Clique para resumir" mas o clique na célula não dispara a ação de resumir
+
+---
+
+## CORREÇÃO 1: `theme_manager.py` — Melhorar paleta e apply_theme
+
+```python
+# contextflow/core/managers/theme_manager.py
+import wx
+import logging
+
+logger = logging.getLogger("contextflow.theme")
+
+
+class ThemeManager:
+    """
+    SINGLETON de Governança Estética.
+    [FASE 6.2] Evoluído de "Light Mode Absoluto" para "Multi-Theme" (Light/Dark).
+    """
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(ThemeManager, cls).__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+
+    def __init__(self):
+        if self._initialized:
+            return
+
+        from core.config_manager import ConfigManager
+        self.config = ConfigManager()
+        self._current_theme = self.config.get("ui", "theme", "light")
+
+        # Paletas de Cores
+        self.PALETTES = {
+            "light": {
+                "bg": wx.Colour(255, 255, 255),
+                "fg": wx.Colour(30, 30, 30),
+                "accent": wx.Colour(0, 120, 215),
+                "highlight": wx.Colour(240, 240, 240),
+                "border": wx.Colour(220, 220, 220),
+                "muted": wx.Colour(120, 120, 120),
+                "grid_bg": wx.Colour(255, 255, 255),
+                "grid_fg": wx.Colour(30, 30, 30),
+                "grid_line": wx.Colour(220, 220, 220),
+                "grid_label_bg": wx.Colour(245, 245, 245),
+                "grid_label_fg": wx.Colour(30, 30, 30),
+                "grid_selection_bg": wx.Colour(0, 120, 215),
+                "grid_selection_fg": wx.Colour(255, 255, 255),
+                "input_bg": wx.Colour(255, 255, 255),
+                "input_fg": wx.Colour(30, 30, 30),
+                "button_bg": wx.Colour(240, 240, 240),
+                "button_fg": wx.Colour(30, 30, 30),
+                "console_bg": wx.Colour(30, 30, 30),
+                "console_fg": wx.Colour(212, 212, 212),
+                "tag_text_dark": wx.Colour(40, 40, 40),
+                "tag_text_light": wx.Colour(245, 245, 245),
+            },
+            "dark": {
+                "bg": wx.Colour(30, 30, 30),
+                "fg": wx.Colour(220, 220, 220),
+                "accent": wx.Colour(56, 142, 255),
+                "highlight": wx.Colour(45, 45, 45),
+                "border": wx.Colour(60, 60, 60),
+                "muted": wx.Colour(140, 140, 140),
+                "grid_bg": wx.Colour(35, 35, 35),
+                "grid_fg": wx.Colour(220, 220, 220),
+                "grid_line": wx.Colour(55, 55, 55),
+                "grid_label_bg": wx.Colour(45, 45, 45),
+                "grid_label_fg": wx.Colour(200, 200, 200),
+                "grid_selection_bg": wx.Colour(56, 142, 255),
+                "grid_selection_fg": wx.Colour(255, 255, 255),
+                "input_bg": wx.Colour(45, 45, 45),
+                "input_fg": wx.Colour(220, 220, 220),
+                "button_bg": wx.Colour(55, 55, 55),
+                "button_fg": wx.Colour(220, 220, 220),
+                "console_bg": wx.Colour(20, 20, 20),
+                "console_fg": wx.Colour(200, 200, 200),
+                "tag_text_dark": wx.Colour(40, 40, 40),
+                "tag_text_light": wx.Colour(245, 245, 245),
+            }
+        }
+
+        self._initialized = True
+        logger.info(f"ThemeManager inicializado (Tema Atual: {self._current_theme})")
+
+    def get_theme_name(self) -> str:
+        return self._current_theme
+
+    def is_dark(self) -> bool:
+        return self._current_theme == "dark"
+
+    def toggle_theme(self):
+        new_theme = "dark" if self._current_theme == "light" else "light"
+        self.set_theme(new_theme)
+
+    def set_theme(self, name: str):
+        if name not in self.PALETTES:
+            return
+        self._current_theme = name
+        self.config.set("ui", "theme", name)
+
+        from core.pubsub import PubSub
+        PubSub.publish("THEME_CHANGED", theme=name)
+        logger.info(f"Tema alterado para: {name}")
+
+    def _get_color(self, key: str) -> wx.Colour:
+        return self.PALETTES[self._current_theme].get(key, wx.BLACK)
+
+    def get_bg_color(self) -> wx.Colour: return self._get_color("bg")
+    def get_fg_color(self) -> wx.Colour: return self._get_color("fg")
+    def get_accent_color(self) -> wx.Colour: return self._get_color("accent")
+    def get_border_color(self) -> wx.Colour: return self._get_color("border")
+    def get_highlight_color(self) -> wx.Colour: return self._get_color("highlight")
+    def get_muted_color(self) -> wx.Colour: return self._get_color("muted")
+    def get_grid_bg(self) -> wx.Colour: return self._get_color("grid_bg")
+    def get_grid_fg(self) -> wx.Colour: return self._get_color("grid_fg")
+    def get_grid_line(self) -> wx.Colour: return self._get_color("grid_line")
+    def get_grid_label_bg(self) -> wx.Colour: return self._get_color("grid_label_bg")
+    def get_grid_label_fg(self) -> wx.Colour: return self._get_color("grid_label_fg")
+    def get_grid_selection_bg(self) -> wx.Colour: return self._get_color("grid_selection_bg")
+    def get_grid_selection_fg(self) -> wx.Colour: return self._get_color("grid_selection_fg")
+    def get_input_bg(self) -> wx.Colour: return self._get_color("input_bg")
+    def get_input_fg(self) -> wx.Colour: return self._get_color("input_fg")
+    def get_console_bg(self) -> wx.Colour: return self._get_color("console_bg")
+    def get_console_fg(self) -> wx.Colour: return self._get_color("console_fg")
+
+    def css_color(self, key: str) -> str:
+        """Retorna cor como string CSS hex."""
+        c = self._get_color(key)
+        return c.GetAsString(wx.C2S_HTML_SYNTAX)
+
+    def apply_theme(self, window: wx.Window):
+        """Aplica recursivamente o tema a um widget e seus filhos."""
+        try:
+            # Skip widgets que têm tratamento especial
+            if isinstance(window, wx.grid.Grid):
+                self._apply_grid_theme(window)
+                return
+
+            window.SetBackgroundColour(self.get_bg_color())
+            window.SetForegroundColour(self.get_fg_color())
+
+            # Chamada específica para widgets que têm apply_theme próprio
+            if hasattr(window, "apply_theme") and window != self:
+                window.apply_theme()
+            else:
+                # Trata tipos específicos
+                if isinstance(window, wx.TextCtrl):
+                    window.SetBackgroundColour(self.get_input_bg())
+                    window.SetForegroundColour(self.get_input_fg())
+                elif isinstance(window, wx.SearchCtrl):
+                    pass  # SearchCtrl não aceita SetBackgroundColour bem em todos os OS
+                elif isinstance(window, wx.TreeCtrl):
+                    window.SetBackgroundColour(self.get_bg_color())
+                    window.SetForegroundColour(self.get_fg_color())
+
+            for child in window.GetChildren():
+                self.apply_theme(child)
+
+            window.Refresh()
+        except Exception as e:
+            logger.debug(f"apply_theme skip: {e}")
+
+    def _apply_grid_theme(self, grid: wx.grid.Grid):
+        """Aplica tema especificamente para wx.grid.Grid."""
+        try:
+            grid.SetDefaultCellBackgroundColour(self.get_grid_bg())
+            grid.SetDefaultCellTextColour(self.get_grid_fg())
+            grid.SetGridLineColour(self.get_grid_line())
+            grid.SetLabelBackgroundColour(self.get_grid_label_bg())
+            grid.SetLabelTextColour(self.get_grid_label_fg())
+            grid.SetSelectionBackground(self.get_grid_selection_bg())
+            grid.SetSelectionForeground(self.get_grid_selection_fg())
+
+            # Fundo da janela da grid
+            grid_window = grid.GetGridWindow()
+            if grid_window:
+                grid_window.SetBackgroundColour(self.get_grid_bg())
+
+            grid.ForceRefresh()
+        except Exception as e:
+            logger.debug(f"_apply_grid_theme error: {e}")
+```
+
+---
+
+## CORREÇÃO 2: `virtual_table.py` — Corrigir renderers e coluna Resumo clicável
+
+Precisa atualizar o `GetAttr` e os renderers para usar as novas cores do tema, e tornar a coluna Resumo clicável.
+
+Substitua no `virtual_table.py` os seguintes métodos/classes:
+
+### 2a. Atualizar `GetAttr` no `VirtualVideoTable`
+
+```python
+    def GetAttr(self, row, col, kind):
+        attr = wx.grid.GridCellAttr()
+        label = self.col_labels[col].strip()
+        theme = ThemeManager()
+
+        # Cores baseadas no tema
+        attr.SetBackgroundColour(theme.get_grid_bg())
+        attr.SetTextColour(theme.get_grid_fg())
+
+        # ALINHAMENTO CENTRAL (Exceto Título)
+        if label != "Título":
+            attr.SetAlignment(wx.ALIGN_CENTER, wx.ALIGN_CENTER)
+        else:
+            attr.SetAlignment(wx.ALIGN_LEFT, wx.ALIGN_CENTER)
+
+        # Heurística de Identificação Analítica
+        is_ana_tab = ("Preview" in self.col_labels)
+
+        if label == "[x]":
+            attr.SetRenderer(wx.grid.GridCellBoolRenderer())
+            attr.SetEditor(wx.grid.GridCellBoolEditor())
+            attr.SetReadOnly(False)
+        elif label == "Preview" and is_ana_tab:
+            attr.SetRenderer(ThumbnailRenderer())
+            attr.SetReadOnly(True)
+        elif label == "Título":
+            if is_ana_tab:
+                attr.SetRenderer(RichTitleRenderer())
+            else:
+                attr.SetRenderer(SafeTextRenderer())
+            attr.SetReadOnly(True)
+        elif label == "Tags":
+            attr.SetRenderer(ChipTagRenderer())
+            attr.SetReadOnly(True)
+        elif label == "Link":
+            attr.SetRenderer(LinkIconRenderer())
+            attr.SetReadOnly(True)
+        elif label == "Status":
+            attr.SetRenderer(BadgeStatusRenderer())
+            attr.SetReadOnly(True)
+        elif label == "Resumo" and is_ana_tab:
+            attr.SetRenderer(SummaryStatusRenderer())
+            attr.SetReadOnly(True)
+        else:
+            attr.SetRenderer(SafeTextRenderer())
+            attr.SetReadOnly(True)
+
+        attr.IncRef()
+        return attr
+```
+
+### 2b. Atualizar `ThumbnailRenderer` — placeholder respeitando tema
+
+```python
+class ThumbnailRenderer(wx.grid.GridCellRenderer):
+    def __init__(self):
+        super().__init__()
+        self._loading_paths = set()
+
+    def Draw(self, grid, attr, dc, rect, row, col, isSelected):
+        theme = ThemeManager()
+        bg_color = theme.get_grid_selection_bg() if isSelected else theme.get_grid_bg()
+        dc.SetBrush(wx.Brush(bg_color))
+        dc.SetPen(wx.TRANSPARENT_PEN)
+        dc.DrawRectangle(rect)
+
+        table = grid.GetTable()
+        if row >= len(table.data): return
+
+        if not table.config.get("ui", "dynamic_grid", True):
+            dc.SetTextForeground(theme.get_grid_selection_fg() if isSelected else theme.get_muted_color())
+            dc.DrawText("[IMG]", rect.x + 10, rect.y + (rect.height // 2 - 7))
+            return
+
+        item = table.data[row]
+        img_path = item.get('thumbnail_path')
+
+        if not img_path or not os.path.exists(img_path):
+            self._draw_placeholder(dc, rect, theme)
+            return
+
+        bmp = BitmapCache.get(img_path)
+        if bmp:
+            self._draw_bitmap_rich(dc, rect, bmp)
+        else:
+            self._draw_placeholder(dc, rect, theme)
+            if img_path not in self._loading_paths:
+                self._loading_paths.add(img_path)
+                threading.Thread(target=self._async_load, args=(grid, img_path, row, col)).start()
+
+    def _draw_placeholder(self, dc, rect, theme=None):
+        if theme is None:
+            theme = ThemeManager()
+        dc.SetBrush(wx.Brush(theme.get_highlight_color()))
+        dc.SetPen(wx.Pen(theme.get_border_color(), 1))
+        dc.DrawRoundedRectangle(rect.x + 4, rect.y + 4, 80, 45, 4)
+
+    def _draw_bitmap_rich(self, dc, rect, bmp):
+        dc.SetClippingRegion(rect)
+        gc = wx.GraphicsContext.Create(dc)
+        if gc:
+            gc.Clip(rect.x + 4, rect.y + 4, 80, 45)
+            gc.DrawBitmap(bmp, rect.x + 4, rect.y + 4, 80, 45)
+        dc.DestroyClippingRegion()
+
+    def _async_load(self, grid, path, row, col):
+        try:
+            log = wx.LogNull()
+            img = wx.Image(path, wx.BITMAP_TYPE_ANY)
+            if img.IsOk():
+                img = img.Scale(80, 45, wx.IMAGE_QUALITY_HIGH)
+                bmp = wx.Bitmap(img)
+                BitmapCache.set(path, bmp)
+                wx.CallAfter(grid.ForceRefresh)
+        except:
+            pass
+        finally:
+            if path in self._loading_paths:
+                self._loading_paths.remove(path)
+
+    def GetBestSize(self, grid, attr, dc, row, col): return wx.Size(90, 55)
+    def Clone(self): return ThumbnailRenderer()
+```
+
+### 2c. Atualizar `RichTitleRenderer`
+
+```python
+class RichTitleRenderer(wx.grid.GridCellRenderer):
+    def Draw(self, grid, attr, dc, rect, row, col, isSelected):
+        table = grid.GetTable()
+        if row >= len(table.data): return
+
+        item = table.data[row]
+        title = item.get('title', '-')
+
+        theme = ThemeManager()
+        bg_color = theme.get_grid_selection_bg() if isSelected else theme.get_grid_bg()
+        txt_color = theme.get_grid_selection_fg() if isSelected else theme.get_grid_fg()
+
+        dc.SetBrush(wx.Brush(bg_color))
+        dc.SetPen(wx.TRANSPARENT_PEN)
+        dc.DrawRectangle(rect)
+        dc.SetClippingRegion(rect)
+
+        dc.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
+        dc.SetTextForeground(txt_color)
+
+        tw, th = dc.GetTextExtent(title)
+        y_pos = rect.y + (rect.height - th) // 2
+        dc.DrawText(title, rect.x + 5, y_pos)
+
+        dc.DestroyClippingRegion()
+
+    def GetBestSize(self, grid, attr, dc, row, col): return wx.Size(200, 45)
+    def Clone(self): return RichTitleRenderer()
+```
+
+### 2d. Atualizar `ChipTagRenderer`
+
+```python
+class ChipTagRenderer(wx.grid.GridCellRenderer):
+    def _get_tag_color(self, name: str):
+        import hashlib, colorsys
+        h = int(hashlib.md5(name.encode()).hexdigest(), 16) % 360
+        theme = ThemeManager()
+        if theme.is_dark():
+            # Tom mais escuro para dark mode (l=0.35, s=0.5)
+            r, g, b = colorsys.hls_to_rgb(h/360.0, 0.35, 0.5)
+        else:
+            # Tom pastel para light mode (l=0.85, s=0.45)
+            r, g, b = colorsys.hls_to_rgb(h/360.0, 0.85, 0.45)
+        return wx.Colour(int(r*255), int(g*255), int(b*255))
+
+    def _contrast_text(self, bg: wx.Colour) -> wx.Colour:
+        luminance = (0.299 * bg.Red() + 0.587 * bg.Green() + 0.114 * bg.Blue())
+        return wx.Colour(40, 40, 40) if luminance > 140 else wx.Colour(245, 245, 245)
+
+    def Draw(self, grid, attr, dc, rect, row, col, isSelected):
+        theme = ThemeManager()
+        bg_color = theme.get_grid_selection_bg() if isSelected else theme.get_grid_bg()
+        dc.SetBrush(wx.Brush(bg_color))
+        dc.SetPen(wx.TRANSPARENT_PEN)
+        dc.DrawRectangle(rect)
+
+        table = grid.GetTable()
+        if row >= len(table.data): return
+
+        if not table.config.get("ui", "dynamic_grid", True):
+            raw_tags = table.data[row].get('tags', '[]')
+            if isinstance(raw_tags, str):
+                try:
+                    import json
+                    tags = json.loads(raw_tags)
+                except (json.JSONDecodeError, TypeError):
+                    tags = []
+            elif isinstance(raw_tags, list):
+                tags = raw_tags
+            else:
+                tags = []
+
+            dc.SetTextForeground(theme.get_grid_selection_fg() if isSelected else theme.get_grid_fg())
+            dc.DrawText(", ".join(tags[:2]), rect.x + 5, rect.y + (rect.height // 2 - 7))
+            return
+
+        raw_tags = table.data[row].get('tags', '[]')
+        if isinstance(raw_tags, str):
+            try:
+                import json
+                tags = json.loads(raw_tags)
+            except (json.JSONDecodeError, TypeError):
+                tags = []
+        elif isinstance(raw_tags, list):
+            tags = raw_tags
+        else:
+            tags = []
+
+        if not tags:
+            dc.SetTextForeground(theme.get_muted_color())
+            dc.DrawText("-", rect.x + 5, rect.y + (rect.height//2 - 7))
+            return
+
+        gc = wx.GraphicsContext.Create(dc)
+        if gc:
+            dc.SetClippingRegion(rect)
+            gc.Clip(rect.x, rect.y, rect.width, rect.height)
+
+            x_offset = rect.x + 5
+            y_pos = rect.y + (rect.height // 2 - 10)
+
+            for tag in tags[:2]:
+                bg_chip = self._get_tag_color(tag)
+                txt_color = self._contrast_text(bg_chip)
+
+                txt_w, txt_h = dc.GetTextExtent(tag)
+                chip_w = txt_w + 12
+
+                gc.SetBrush(wx.Brush(bg_chip))
+                border_color = wx.Colour(
+                    max(0, bg_chip.Red() - 30),
+                    max(0, bg_chip.Green() - 30),
+                    max(0, bg_chip.Blue() - 30)
+                )
+                gc.SetPen(wx.Pen(border_color, 1))
+                gc.DrawRoundedRectangle(x_offset, y_pos, chip_w, 20, 10)
+
+                gc.SetFont(wx.Font(8, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL), txt_color)
+                gc.DrawText(tag, x_offset + 6, y_pos + 4)
+                x_offset += chip_w + 4
+
+            if len(tags) > 2:
+                gc.SetFont(wx.Font(8, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL),
+                           theme.get_grid_selection_fg() if isSelected else theme.get_muted_color())
+                gc.DrawText(f"+{len(tags)-2}", x_offset, y_pos + 4)
+
+            dc.DestroyClippingRegion()
+
+    def GetBestSize(self, grid, attr, dc, row, col): return wx.Size(100, 45)
+    def Clone(self): return ChipTagRenderer()
+```
+
+### 2e. Atualizar `BadgeStatusRenderer`
+
+```python
+class BadgeStatusRenderer(wx.grid.GridCellRenderer):
+    def Draw(self, grid, attr, dc, rect, row, col, isSelected):
+        theme = ThemeManager()
+        bg_color = theme.get_grid_selection_bg() if isSelected else theme.get_grid_bg()
+        dc.SetBrush(wx.Brush(bg_color))
+        dc.SetPen(wx.TRANSPARENT_PEN)
+        dc.DrawRectangle(rect)
+        dc.SetClippingRegion(rect)
+
+        table = grid.GetTable()
+        if row >= len(table.data):
+            dc.DestroyClippingRegion()
+            return
+
+        status = str(table.data[row].get('status', '')).upper()
+
+        color = theme.get_muted_color()
+        if status in ['COMPLETED', 'SUCCESS', 'DONE']: color = wx.Colour(40, 167, 69)
+        elif status == 'ERROR': color = wx.Colour(220, 53, 69)
+        elif status in ['PROCESSING', 'DOWNLOADING', 'QUEUED']: color = theme.get_accent_color()
+
+        dc.SetBrush(wx.Brush(color))
+        dc.SetPen(wx.Pen(theme.get_grid_bg(), 1))
+
+        circle_x = rect.x + 10
+        circle_y = rect.y + rect.height // 2
+        dc.DrawCircle(circle_x, circle_y, 4)
+
+        text = table.GetValue(row, col)
+        txt_color = theme.get_grid_selection_fg() if isSelected else theme.get_grid_fg()
+        dc.SetTextForeground(txt_color)
+        dc.SetFont(wx.Font(8, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
+
+        if "🏗" in text:
+            dc.SetTextForeground(theme.get_accent_color() if not isSelected else theme.get_grid_selection_fg())
+
+        dc.DrawText(text, circle_x + 10, rect.y + (rect.height // 2 - 7))
+        dc.DestroyClippingRegion()
+
+    def GetBestSize(self, grid, attr, dc, row, col): return wx.Size(40, 45)
+    def Clone(self): return BadgeStatusRenderer()
+```
+
+### 2f. Atualizar `SummaryStatusRenderer`
+
+```python
+class SummaryStatusRenderer(wx.grid.GridCellRenderer):
+    """Renderiza o status do resumo com ícones e cores SaaS."""
+    def Draw(self, grid, attr, dc, rect, row, col, isSelected):
+        theme = ThemeManager()
+        bg_color = theme.get_grid_selection_bg() if isSelected else theme.get_grid_bg()
+        dc.SetBrush(wx.Brush(bg_color))
+        dc.SetPen(wx.TRANSPARENT_PEN)
+        dc.DrawRectangle(rect)
+        dc.SetClippingRegion(rect)
+
+        table = grid.GetTable()
+        if row >= len(table.data):
+            dc.DestroyClippingRegion()
+            return
+
+        item = table.data[row]
+        ss = item.get('summary_status', '')
+
+        # Ícone centralizado baseado no status
+        if ss == 'summarizing':
+            icon = "⏳"
+            color = theme.get_accent_color() if not isSelected else theme.get_grid_selection_fg()
+        elif ss == 'summary_error':
+            icon = "❌"
+            color = wx.Colour(220, 53, 69) if not isSelected else theme.get_grid_selection_fg()
+        elif ss == 'summarized':
+            icon = "✅"
+            color = wx.Colour(40, 167, 69) if not isSelected else theme.get_grid_selection_fg()
+        else:
+            # Pendente / CTA
+            icon = "—"
+            color = theme.get_muted_color() if not isSelected else theme.get_grid_selection_fg()
+
+        dc.SetTextForeground(color)
+        dc.SetFont(wx.Font(11, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
+
+        tw, th = dc.GetTextExtent(icon)
+        x = rect.x + (rect.width - tw) // 2
+        y = rect.y + (rect.height - th) // 2
+        dc.DrawText(icon, x, y)
+
+        dc.DestroyClippingRegion()
+
+    def GetBestSize(self, grid, attr, dc, row, col): return wx.Size(70, 45)
+    def Clone(self): return SummaryStatusRenderer()
+```
+
+### 2g. Atualizar `LinkIconRenderer`
+
+```python
+class LinkIconRenderer(wx.grid.GridCellRenderer):
+    def Draw(self, grid, attr, dc, rect, row, col, isSelected):
+        theme = ThemeManager()
+        bg_color = theme.get_grid_selection_bg() if isSelected else theme.get_grid_bg()
+        dc.SetBrush(wx.Brush(bg_color))
+        dc.SetPen(wx.TRANSPARENT_PEN)
+        dc.DrawRectangle(rect)
+        dc.SetClippingRegion(rect)
+
+        icon_color = theme.get_accent_color() if not isSelected else theme.get_grid_selection_fg()
+        dc.SetTextForeground(icon_color)
+        dc.SetFont(wx.Font(10, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
+
+        txt = "🔗"
+        tw, th = dc.GetTextExtent(txt)
+        dc.DrawText(txt, rect.x + (rect.width - tw)//2, rect.y + (rect.height - th)//2)
+
+        dc.DestroyClippingRegion()
+
+    def GetBestSize(self, grid, attr, dc, row, col): return wx.Size(40, 45)
+    def Clone(self): return LinkIconRenderer()
+```
+
+### 2h. Atualizar `GetValue` para coluna Resumo (apenas ícones, sem texto longo)
+
+Na classe `VirtualVideoTable`, no método `GetValue`, substitua o bloco do `Resumo`:
+
+```python
+                if label == 'Resumo':
+                    ss = item.get('summary_status', '')
+                    if ss == 'summarizing':
+                        return "⏳"
+                    elif ss == 'summary_error':
+                        return "❌"
+                    elif ss == 'summarized':
+                        return "✅"
+                    else:
+                        return "—"
+                return "-"
+```
+
+E o segundo bloco de Resumo (mais abaixo no GetValue):
+
+```python
+            if label == 'Resumo':
+                ss = item.get('summary_status', '')
+                if ss == 'summarizing':
+                    return "⏳"
+                elif ss == 'summary_error':
+                    return "❌"
+                elif ss == 'summarized':
+                    return "✅"
+                return "—"
+```
+
+---
+
+## CORREÇÃO 3: `tab_analysis.py` — Tornar coluna Resumo clicável
+
+No método `on_grid_click`, adicione handler para a coluna Resumo:
+
+```python
+    def on_grid_click(self, event):
+        """Implementação de navegação direta via ícone [MANDATO v5.9]."""
+        row, col = event.GetRow(), event.GetCol()
+        label = self.col_labels[col].strip()
+
+        if label == "[x]":
+            val = self.table.GetValue(row, col)
+            self.table.SetValue(row, col, "0" if val == "1" else "1")
+            self.grid.ForceRefresh()
+            return
+
+        if label == "Link":
+            url = self.table.data[row].get('url')
+            if url: webbrowser.open(url)
+
+        # [FASE 6.2] Coluna Resumo clicável — dispara ação de resumir
+        if label == "Resumo":
+            if row < 0 or row >= len(self.table.data):
+                event.Skip()
+                return
+            video_data = self.table.data[row]
+            vid = video_data.get('id') or video_data.get('uuid')
+            if not vid:
+                event.Skip()
+                return
+            video = self.app_state.get_video(vid)
+            if not video:
+                event.Skip()
+                return
+            ss = video.get("summary_status", "")
+            if ss == "summarizing":
+                # Já em progresso, não faz nada
+                event.Skip()
+                return
+            if ss == "summarized":
+                # Já tem resumo — abre o viewer
+                self._load_row_details(row)
+                if not self.splitter.IsSplit():
+                    h = self.GetSize().height
+                    self.splitter.SplitHorizontally(
+                        self.pnl_master, self.pnl_detail, int(h * 0.3)
+                    )
+                event.Skip()
+                return
+            # Pendente ou erro — dispara resumo
+            if video.get("status") != "completed":
+                wx.MessageBox(
+                    "Este vídeo ainda não possui transcrição.\nBaixe o vídeo primeiro.",
+                    "Aviso", wx.OK | wx.ICON_WARNING)
+                event.Skip()
+                return
+            if ss == "summary_error":
+                self.app_state.add_or_update_video({"id": vid, "summary_status": None})
+            self.app_state.request_summary(vid)
+            event.Skip()
+            return
+
+        event.Skip()
+```
+
+---
+
+## CORREÇÃO 4: `tab_analysis.py` — Corrigir `_on_batch_summarize` 
+
+O método `_on_batch_summarize` referencia `self.choice_model` e `self.choice_provider` que agora vivem dentro de `self.toolbar_ctrl`. Corrija:
+
+```python
+    def _on_batch_summarize(self, event):
+        ids = list(self.table.selected_ids)
+        if not ids:
+            wx.MessageBox(
+                "Nenhum vídeo selecionado.\n\n"
+                "Selecione vídeos via checkbox antes de resumir.",
+                "Aviso", wx.OK | wx.ICON_WARNING
+            )
+            return
+
+        eligible = []
+        already_done = 0
+        no_transcript = 0
+
+        for vid in ids:
+            video = self.app_state.get_video(vid)
+            if not video:
+                continue
+            ss = video.get("summary_status")
+            status = video.get("status", "")
+            if ss == "summarized":
+                already_done += 1
+                continue
+            if ss == "summarizing":
+                continue
+            if status != "completed":
+                no_transcript += 1
+                continue
+            eligible.append(vid)
+
+        if not eligible:
+            msg = "Nenhum vídeo elegível para resumo."
+            if already_done > 0:
+                msg += f"\n• {already_done} já resumido(s)"
+            if no_transcript > 0:
+                msg += f"\n• {no_transcript} sem transcrição (baixe primeiro)"
+            wx.MessageBox(msg, "Aviso", wx.OK | wx.ICON_INFORMATION)
+            return
+
+        # Usa toolbar_ctrl para pegar modelo e provedor
+        model = self.toolbar_ctrl.choice_model.GetStringSelection()
+        provider = self.toolbar_ctrl.choice_provider.GetStringSelection()
+        msg = (
+            f"Resumir {len(eligible)} vídeo(s) usando:\n\n"
+            f"  Modelo: {model}\n"
+            f"  Provedor: {provider}\n\n"
+            f"Deseja continuar?"
+        )
+        if already_done > 0:
+            msg += f"\n\n({already_done} vídeo(s) já resumido(s) serão ignorados)"
+
+        if wx.MessageBox(msg, "Confirmar Resumo em Lote",
+                         wx.YES_NO | wx.ICON_QUESTION) != wx.YES:
+            return
+
+        self.app_state.request_batch_summary(eligible)
+```
+
+---
+
+## CORREÇÃO 5: `tab_analysis.py` — `apply_theme` mais robusto
+
+```python
+    def apply_theme(self):
+        """[FASE 6.2] Atualiza cores e refresca a grade analítica."""
+        self.theme = ThemeManager()
+        self.SetBackgroundColour(self.theme.get_bg_color())
+
+        # Toolbar
+        if hasattr(self, 'toolbar_ctrl'):
+            self.toolbar_ctrl.apply_theme()
+
+        # Grid — tratamento especial
+        if hasattr(self, 'grid'):
+            self.theme._apply_grid_theme(self.grid)
+
+        # Painéis de detalhe
+        if hasattr(self, 'pnl_master'):
+            self.pnl_master.SetBackgroundColour(self.theme.get_bg_color())
+        if hasattr(self, 'pnl_detail'):
+            self.pnl_detail.SetBackgroundColour(self.theme.get_bg_color())
+        if hasattr(self, 'pnl_side_info'):
+            self.pnl_side_info.SetBackgroundColour(self.theme.get_bg_color())
+        if hasattr(self, 'lbl_side_title'):
+            self.lbl_side_title.SetForegroundColour(self.theme.get_accent_color())
+        if hasattr(self, 'pnl_tags'):
+            self.pnl_tags.apply_theme()
+        if hasattr(self, 'txt_summary'):
+            self.txt_summary.SetBackgroundColour(self.theme.get_bg_color())
+            self.txt_summary.SetForegroundColour(self.theme.get_fg_color())
+        if hasattr(self, 'splitter'):
+            self.splitter.SetBackgroundColour(self.theme.get_border_color())
+
+        self.Refresh()
+```
+
+---
+
+## CORREÇÃO 6: `tab_batch.py` — `apply_theme` mais robusto
+
+```python
+    def apply_theme(self):
+        """[FASE 6.2] Atualiza cores e refresca a grade de processamento."""
+        self.theme = ThemeManager()
+        self.SetBackgroundColour(self.theme.get_bg_color())
+
+        # Grid — tratamento especial
+        if hasattr(self, 'grid'):
+            self.theme._apply_grid_theme(self.grid)
+
+        # Botão de processo
+        self.btn_process.SetBackgroundColour(self.theme.get_accent_color())
+        self.btn_process.SetForegroundColour(wx.WHITE)
+
+        self.Refresh()
+```
+
+---
+
+## CORREÇÃO 7: `panel_console.py` — `apply_theme` com cores de terminal
+
+```python
+    def apply_theme(self):
+        """[FASE 6.2] Atualiza cores do console (Terminal Style)."""
+        self.theme = ThemeManager()
+        # Console SEMPRE usa estilo terminal (fundo escuro)
+        self.SetBackgroundColour(self.theme.get_console_bg())
+        self.txt_log.SetBackgroundColour(self.theme.get_console_bg())
+        self.txt_log.SetForegroundColour(self.theme.get_console_fg())
+        self.txt_log.SetDefaultStyle(wx.TextAttr(self.theme.get_console_fg()))
+        self.Refresh()
+```
+
+E no `_init_ui`, configure o console para sempre parecer um terminal:
+
+```python
+    def _init_ui(self):
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        self.txt_log = wx.TextCtrl(self, style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_RICH2)
+        font = wx.Font(9, wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL)
+        self.txt_log.SetFont(font)
+
+        # Console sempre estilo terminal
+        self.txt_log.SetBackgroundColour(self.theme.get_console_bg())
+        self.txt_log.SetForegroundColour(self.theme.get_console_fg())
+
+        sizer.Add(self.txt_log, 1, wx.EXPAND | wx.ALL, 0)
+        self.SetSizer(sizer)
+```
+
+---
+
+## CORREÇÃO 8: `app_window.py` — `_on_theme_changed` melhorado
+
+```python
+    def _on_theme_changed(self, theme, **kwargs):
+        """[FASE 6.2] Handler global de troca de tema."""
+        def _apply():
+            # Atualiza Toolbar label
+            theme_label = "Modo Claro" if theme == "dark" else "Modo Escuro"
+            self.toolbar.SetToolShortHelp(2005, theme_label)
+            self.toolbar.Realize()
+
+            # Atualiza menu de tema
+            if theme == "dark":
+                self.GetMenuBar().Check(2007, True)
+            else:
+                self.GetMenuBar().Check(2006, True)
+
+            # Aplica cores na janela principal
+            self.SetBackgroundColour(self.theme.get_bg_color())
+            self.nb_container.SetBackgroundColour(self.theme.get_bg_color())
+
+            # Aplica nos componentes que têm apply_theme próprio
+            components = [
+                self.sidebar, self.tab_batch, self.tab_analysis,
+                self.panel_detail, self.panel_console
+            ]
+            for comp in components:
+                if hasattr(comp, 'apply_theme'):
+                    try:
+                        comp.apply_theme()
+                    except Exception as e:
+                        import logging
+                        logging.getLogger("contextflow").debug(f"Theme apply skip: {e}")
+
+            self.Refresh()
+            self.Update()
+            self.log_to_console(f"Tema visual alterado para: {theme.upper()}", "SYSTEM")
+
+        wx.CallAfter(_apply)
+```
+
+---
+
+## CORREÇÃO 9: `tag_wrap_panel.py` — Cores dark mode
+
+```python
+    def _get_tag_color(self, name: str) -> wx.Colour:
+        """Gera uma cor pastel estável baseada no hash do nome."""
+        h = int(hashlib.md5(name.encode()).hexdigest(), 16) % 360
+        if self.theme.is_dark():
+            r, g, b = colorsys.hls_to_rgb(h / 360.0, 0.35, 0.5)
+        else:
+            r, g, b = colorsys.hls_to_rgb(h / 360.0, 0.85, 0.45)
+        return wx.Colour(int(r * 255), int(g * 255), int(b * 255))
+```
+
+---
+
+## Resumo das Mudanças
+
+| Arquivo | Mudança |
+|---|---|
+| `core/managers/theme_manager.py` | Paleta expandida (grid_bg, grid_fg, console_bg, etc.), `_apply_grid_theme()`, `css_color()`, `is_dark()` |
+| `ui/virtual_table.py` | Todos renderers usam `theme.get_grid_*()`, coluna Resumo mostra apenas ícones (✅⏳❌—) |
+| `ui/tab_analysis.py` | Coluna Resumo clicável, `_on_batch_summarize` usa `toolbar_ctrl`, `apply_theme` robusto |
+| `ui/tab_batch.py` | `apply_theme` usa `_apply_grid_theme` |
+| `ui/panel_console.py` | Console sempre estilo terminal |
+| `ui/panel_detail.py` | Sem mudança necessária (já usa `css_color` via JS) |
+| `ui/app_window.py` | `_on_theme_changed` aplica tema em cada componente separadamente |
+| `ui/components/tag_wrap_panel.py` | Cores de chip adaptadas para dark mode |
+
+Aplique essas mudanças cirurgicamente. O tema escuro deve funcionar imediatamente sem reiniciar, e voltar para claro também sem reiniciar.
