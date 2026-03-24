@@ -124,6 +124,7 @@ class AppWindow(wx.Frame):
         # Toolbar Events [QA2]
         self.Bind(wx.EVT_TOOL, self.on_sidebar_toggle_signal, id=2000)
         self.Bind(wx.EVT_TOOL, self.on_toggle_logs_toolbar, id=2001)
+        self.Bind(wx.EVT_TOOL, self.on_toggle_auto_open, id=2002)
 
     def create_menubar(self):
         menubar = wx.MenuBar()
@@ -140,6 +141,12 @@ class AppWindow(wx.Frame):
         
         self.item_view_logs = view_menu.AppendCheckItem(2001, "Exibir Logs/Console")
         self.item_view_logs.Check(True)
+        
+        view_menu.AppendSeparator()
+        self.item_auto_open = view_menu.AppendCheckItem(2002, "Abrir visualizador automaticamente")
+        auto_open = self.app_state.config.get("ui", "auto_open_viewer", True)
+        self.item_auto_open.Check(auto_open)
+        
         menubar.Append(view_menu, "&Exibir")
         
         # Menu Ferramentas
@@ -152,6 +159,7 @@ class AppWindow(wx.Frame):
         self.SetMenuBar(menubar)
         self.Bind(wx.EVT_MENU, self.on_toggle_sidebar, id=2000)
         self.Bind(wx.EVT_MENU, self.on_toggle_logs, id=2001)
+        self.Bind(wx.EVT_MENU, self.on_toggle_auto_open, id=2002)
         self.Bind(wx.EVT_MENU, self.on_reprocess_errors, id=3001)
         self.Bind(wx.EVT_MENU, self.on_config, id=3002)
 
@@ -246,10 +254,18 @@ class AppWindow(wx.Frame):
             self.panel_detail.Clear()
             self.log_to_console("Aba Detalhes limpa: vídeo excluído.", "SYSTEM")
 
+    def on_toggle_auto_open(self, event):
+        """Alterna a configuração de auto-abertura do visualizador."""
+        is_checked = self.item_auto_open.IsChecked()
+        self.app_state.config.set("ui", "auto_open_viewer", is_checked)
+        self.log_to_console(f"Auto-abertura do visualizador: {'Ativado' if is_checked else 'Desativado'}", "SYSTEM")
+
     def on_config(self, event):
         """Abre o Console de Governança."""
         with DialogConfig(self) as dlg:
             if dlg.ShowModal() == wx.ID_OK:
                 self.log_to_console("Configurações atualizadas.", "SYSTEM")
-                # Opcional: Notificar componentes que podem precisar de hot-reload
-                # Ex: Processor pode precisar ajustar max_workers
+                # Atualiza o menu View se a config mudou no diálogo
+                auto_open = self.app_state.config.get("ui", "auto_open_viewer", True)
+                if hasattr(self, 'item_auto_open'):
+                    self.item_auto_open.Check(auto_open)

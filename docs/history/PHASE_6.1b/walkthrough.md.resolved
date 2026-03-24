@@ -1,0 +1,38 @@
+# Walkthrough — Fase 6.1b: Integração de Interface de Usuário com IA
+
+Concluímos a integração da infraestrutura de IA (Fase 6.1a) com a interface gráfica do ContextFlow. Esta fase desbloqueia a orquestração de resumos diretamente pelo "Cockpit Analítico" e fornece feedback em tempo real sobre o status do processamento.
+
+## Alterações Principais
+
+### 1. Cockpit Analítico (Aba 2) — Toolbar de IA
+A toolbar da [TabAnalysis](file:///c:/Users/Usuario/Desktop/contextflow/ui/tab_analysis.py#12-836) foi atualizada de placeholders funcionais para controles reais de orquestração:
+- **Seletor de Provedor**: Permite alternar entre Ollama e Google AI.
+- **Seletor de Modelo Dinâmico**: Realiza a descoberta automática de modelos disponíveis no provedor selecionado em segundo plano.
+- **Status do Modelo**: Exibe informações sobre o modelo selecionado (tamanho do contexto, se é local/cloud, suporte a 'thinking').
+- **Botão ✨ Resumir Selecionados**: Aciona o processamento em lote para todos os vídeos marcados na grade.
+
+### 2. Grade de Dados Inteligente
+O [VirtualVideoTable](file:///c:/Users/Usuario/Desktop/contextflow/ui/virtual_table.py#350-581) foi aprimorado para refletir o estado da IA:
+- **Coluna Resumo**: Exibe ⏳ durante o processamento, ❌ em caso de erro, ou uma breve prévia do resumo concluído. Inclui um CTA azul "✨ Clique para resumir" para vídeos sem resumo.
+- **Coluna Tags**: Agora realiza o parsing real das tags JSON armazenadas no banco de dados, renderizando-as como "pílulas" coloridas (chips).
+
+### 3. Automação e Experiência do Usuário (UX)
+- **Visualizador Condicional**: O painel inferior de detalhes agora pode ser configurado para abrir automaticamente assim que um resumo é concluído (se o vídeo estiver selecionado).
+- **Controle de Menu**: Adicionada a opção "Exibir → Abrir visualizador automaticamente" no menu principal e no Console de Governança.
+- **Thread Safety**: Todas as atualizações de UI disparadas por eventos de IA (PubSub) são protegidas por `wx.CallAfter`, garantindo estabilidade durante processamentos intensivos.
+
+## O que foi Testado
+
+### Verificação de Fluxo (Estática & Unitária)
+- [x] **Delegação de AppState**: Validado via teste unitário que o [AppState](file:///c:/Users/Usuario/Desktop/contextflow/core/app_state.py#16-244) delega corretamente as chamadas de descoberta de modelos para o `AIExecutor`.
+- [x] **ConfigSync**: Verificado que a alteração do modelo/provedor na UI persiste no [ConfigManager](file:///c:/Users/Usuario/Desktop/contextflow/core/config_manager.py#9-174).
+- [x] **PubSub Alignment**: Revisada a lógica de escuta dos sinais `SUMMARY_STARTED`, `COMPLETED` e `ERROR` na [TabAnalysis](file:///c:/Users/Usuario/Desktop/contextflow/ui/tab_analysis.py#12-836).
+
+### Validação de Componentes
+1. [core/app_state.py](file:///c:/Users/Usuario/Desktop/contextflow/core/app_state.py): Implementados proxies para [discover_ai_models](file:///c:/Users/Usuario/Desktop/contextflow/core/app_state.py#203-225) e status checks.
+2. [ui/tab_analysis.py](file:///c:/Users/Usuario/Desktop/contextflow/ui/tab_analysis.py): Implementada toolbar reativa e listeners de evento.
+3. [ui/virtual_table.py](file:///c:/Users/Usuario/Desktop/contextflow/ui/virtual_table.py): Atualizados renderizadores de Tags e Resumo.
+4. [ui/app_window.py](file:///c:/Users/Usuario/Desktop/contextflow/ui/app_window.py): Sincronização do menu de visualização automática.
+
+## Conclusão
+O sistema agora está pronto para a orquestração real de IA. O usuário pode selecionar vídeos, escolher o modelo e acompanhar o progresso visualmente na grade.

@@ -265,7 +265,31 @@ class TabBatch(wx.Panel):
         self.Bind(wx.EVT_MENU, lambda e: self._copy_to_clipboard(video_data.get('url')), m_copy)
         self.Bind(wx.EVT_MENU, lambda e: self._direct_export_md(video_data), m_md)
         self.Bind(wx.EVT_MENU, lambda e: PubSub.publish('REQUEST_VIEW_VIDEO', video_id=vid), m_read)
-        self.Bind(wx.EVT_MENU, lambda e: wx.MessageBox("Funcionalidade da Fase 6 (Placeholder).", "AI Summary"), m_sum)
+        def on_summarize(e):
+            if not vid:
+                return
+            video = self.app_state.get_video(vid)
+            if not video:
+                return
+            ss = video.get("summary_status")
+            if ss == "summarizing":
+                wx.MessageBox("Este vídeo já está sendo resumido.", "Info",
+                               wx.OK | wx.ICON_INFORMATION)
+                return
+            if ss == "summarized":
+                if wx.MessageBox(
+                    "Este vídeo já possui resumo. Deseja gerar novamente?",
+                    "Confirmação", wx.YES_NO | wx.ICON_QUESTION
+                ) != wx.YES:
+                    return
+                # Reseta status para permitir re-resumo
+                self.app_state.add_or_update_video({
+                    "id": vid, "summary_status": None
+                })
+
+            self.app_state.request_summary(vid)
+
+        self.Bind(wx.EVT_MENU, on_summarize, m_sum)
         
         self.PopupMenu(menu)
         menu.Destroy()

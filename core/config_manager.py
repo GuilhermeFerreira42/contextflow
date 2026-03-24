@@ -75,7 +75,8 @@ class ConfigManager:
             "ui": {
                 "color_tags": True,
                 "dynamic_tags": True,
-                "dynamic_grid": True
+                "dynamic_grid": True,
+                "auto_open_viewer": True
             }
         }
 

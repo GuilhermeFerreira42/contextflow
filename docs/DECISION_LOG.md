@@ -41,3 +41,13 @@ F6.1a| ADD | Migração DB (tags, summary_status) | JSON string + 4 estados de s
 F6.1a| ADD | PubSub Events de IA | SUMMARY_STARTED, COMPLETED, ERROR | `services/ai_executor.py`
 F6.1a| RULE | HTTP Direto Obrigatório | Sem subprocess, sem biblioteca ollama | `services/ai_providers/`
 F6.1a| RULE | Zero UI na Fase 6.1a | Separação total infra/view | Todos os novos arquivos
+
+### Fase 6.1b — Integração UI de IA
+F6.1b| ADD | Seletor IA na Toolbar Aba 2 | Provedor + Modelo dinâmico via Discovery HTTP | `ui/tab_analysis.py`
+F6.1b| ADD | Batch Summarize funcional | Seleção + confirmação + enfileiramento no TaskManager | `ui/tab_analysis.py`
+F6.1b| ADD | Menu contexto "Resumir" | Ativado em Aba 1 e Aba 2 (antes era placeholder) | `ui/tab_analysis.py`, `ui/tab_batch.py`
+F6.1b| MOD | Viewer condicional | Painel só abre com resumo. Config auto_open_viewer | `ui/tab_analysis.py`, `ui/app_window.py`
+F6.1b| MOD | ChipTagRenderer com dados reais | Parse de JSON string do campo videos.tags | `ui/virtual_table.py`
+F6.1b| MOD | Coluna Resumo dinâmica | 4 estados visuais baseados em summary_status | `ui/virtual_table.py`
+F6.1b| RULE | Import Barrier reforçada | UI não importa services/ai_*. Tudo via AppState | Todos os arquivos UI
+F6.1b| RULE | wx.CallAfter obrigatório | Todo PubSub handler que toca UI | `ui/tab_analysis.py`, `ui/app_window.py`

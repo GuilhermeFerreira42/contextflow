@@ -1,5 +1,5 @@
 # CURRENT_STATE — ContextFlow
-> Última atualização: Fase 6.1a | 2026-03-23
+> Última atualização: Fase 6.1b | 2026-03-23
 
 ## Arquitetura Ativa
 - **Padrão**: Fachada Singleton (`AppState`) com delegação para **Gerentes Especializados** (`core/managers/`).
@@ -28,11 +28,12 @@
 | VirtualTable | `ui/virtual_table.py` | `VirtualVideoTable(parent)`, `SetItemCount(count)`, `RefreshRows()` | F5.5 |
 
 ## Fluxo Principal
-1. **Ingestão**: URLs inseridas na `TabBatch` -> `VideoManager` gera UUIDs permanentes.
-2. **Extração**: `TaskManager` orquestra `YTManager` -> Metadados salvos no DB -> Notificação via PubSub.
-3. **Análise**: `VirtualTable` em `TabAnalysis` exibe dados -> Clique em "Sumarizar" -> `AIExecutor` acionado.
-4. **Inteligência**: `AIExecutor` processa via Ollama/Google -> `FinanceManager` registra métricas de tokens.
-5. **Insights**: Resumo persistido -> `DetailPanel` renderiza via Markdown reativamente.
+1. **Ingestão**: URLs inseridas na `TabBatch` → `VideoManager` gera UUIDs permanentes.
+2. **Extração**: `TaskManager` orquestra `YTManager` → Metadados salvos no DB → Notificação via PubSub.
+3. **Análise**: `VirtualTable` em `TabAnalysis` exibe dados → Seletor de modelo na toolbar.
+4. **Inteligência**: Usuário seleciona vídeos → "✨ Resumir" → `AIExecutor` processa via Ollama/Google.
+5. **Feedback**: PubSub notifica UI → Grid atualiza tags/resumo em tempo real → Viewer condicional.
+6. **Insights**: Resumo persistido → `DetailPanel` renderiza via texto reativamente.
 
 ## Invariantes Globais (nunca violar)
 1. UUIDs são imutáveis após a primeira ingestão do vídeo.

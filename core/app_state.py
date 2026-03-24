@@ -199,3 +199,45 @@ class AppState:
         """
         for vid in video_ids:
             self.request_summary(vid)
+
+    def discover_ai_models(self, provider: str = None, callback=None):
+        """
+        Descobre modelos de IA disponíveis em background.
+        [THREAD SAFETY] O discovery roda no generic_executor.
+        O callback recebe a lista de modelos e DEVE usar wx.CallAfter.
+
+        Args:
+            provider: Nome do provedor (None = active_provider)
+            callback: Callable[[List[Dict]], None] chamado com resultado
+        """
+        def _discover():
+            from services.ai_discovery import AIDiscovery
+            discovery = AIDiscovery()
+            models = discovery.discover_models(provider)
+            if callback:
+                callback(models)
+
+        self.task_manager.submit_task(
+            "ai_discovery",
+            _discover,
+            provider="generic"
+        )
+
+    def get_ai_model_context(self, model_name: str, provider: str = "ollama") -> int:
+        """Retorna context_length do modelo."""
+        from services.ai_discovery import AIDiscovery
+        return AIDiscovery().get_model_context_limit(model_name, provider)
+
+    def is_ai_provider_available(self, provider: str = None) -> bool:
+        """Verifica se o provedor de IA está acessível."""
+        if provider is None:
+            provider = self.config.get("orchestration", "active_provider", "ollama")
+        if provider == "ollama":
+            import requests
+            endpoint = self.config.get("ollama", "endpoint", "http://localhost:11434")
+            try:
+                r = requests.get(f"{endpoint}/", timeout=3)
+                return r.status_code == 200
+            except Exception:
+                return False
+        return False

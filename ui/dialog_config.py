@@ -82,10 +82,14 @@ class DialogConfig(wx.Dialog):
         self.lbl_status_cookies = wx.StaticText(self.status_bar, label="Cookies: Ausentes")
         self.lbl_status_cookies.SetFont(wx.Font(8, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
         
+        self.lbl_status_ai = wx.StaticText(self.status_bar, label="IA: Verificando...")
+        self.lbl_status_ai.SetFont(wx.Font(8, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
+        
         status_sizer.Add(self.lbl_status_shield, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 10)
         status_sizer.AddStretchSpacer()
         status_sizer.Add(self.lbl_status_proxies, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 10)
         status_sizer.Add(self.lbl_status_cookies, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 10)
+        status_sizer.Add(self.lbl_status_ai, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 10)
         
         self.status_bar.SetSizer(status_sizer)
         main_sizer.Add(self.status_bar, 0, wx.EXPAND)
@@ -294,6 +298,10 @@ class DialogConfig(wx.Dialog):
         self.chk_dynamic_grid.SetValue(self.config.get("ui", "dynamic_grid", True))
         ui_sizer.Add(self.chk_dynamic_grid, 0, wx.ALL, 10)
         
+        self.chk_auto_open = wx.CheckBox(panel, label="Abrir visualizador automaticamente ao concluir resumo")
+        self.chk_auto_open.SetValue(self.config.get("ui", "auto_open_viewer", True))
+        ui_sizer.Add(self.chk_auto_open, 0, wx.ALL, 10)
+        
         sizer.Add(ui_sizer, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 15)
 
         # BLOCO: Persistência
@@ -464,6 +472,19 @@ class DialogConfig(wx.Dialog):
         self.lbl_status_cookies.SetLabel(f"🍪 Cookies: {'OK' if has_cookies else 'Vazio'}")
         self.lbl_status_cookies.SetForegroundColour(wx.Colour(37, 99, 235) if has_cookies else wx.Colour(100, 116, 139))
 
+        # IA Status
+        from core.app_state import AppState
+        app_state = AppState()
+        provider = self.config.get("orchestration", "active_provider", "ollama")
+        is_up = app_state.is_ai_provider_available(provider)
+        
+        if is_up:
+            self.lbl_status_ai.SetLabel(f"✨ IA ({provider.capitalize()}): Online")
+            self.lbl_status_ai.SetForegroundColour(wx.Colour(22, 163, 74)) # Green 600
+        else:
+            self.lbl_status_ai.SetLabel(f"⚠️ IA ({provider.capitalize()}): Offline")
+            self.lbl_status_ai.SetForegroundColour(wx.Colour(220, 38, 38)) # Red 600
+
     def on_move_up(self, event):
         idx = self.list_langs.GetSelection()
         if idx > 0:
@@ -519,6 +540,7 @@ class DialogConfig(wx.Dialog):
         self.config.set("orchestration", "max_cloud_tasks", self.spin_cloud.GetValue())
         self.config.set("orchestration", "max_local_tasks", self.spin_local.GetValue())
         self.config.set("ui", "dynamic_grid", self.chk_dynamic_grid.GetValue())
+        self.config.set("ui", "auto_open_viewer", self.chk_auto_open.GetValue())
         self.config.set("orchestration", "resume_tasks", self.chk_resume.GetValue())
         
         # Sincronização Atômica

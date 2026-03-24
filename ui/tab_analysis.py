@@ -7,6 +7,7 @@ from core.app_state import AppState
 from core.pubsub import PubSub
 from core.managers.theme_manager import ThemeManager
 from ui.virtual_table import VirtualVideoTable
+import json
 
 class TabAnalysis(wx.Panel):
     """
@@ -30,6 +31,10 @@ class TabAnalysis(wx.Panel):
         self.debounce_timer = wx.Timer(self)
         self.last_selected_row = -1
         
+        # [FASE 6.1b] Estado de IA
+        self._ai_models_cache = []      # Cache local de modelos descobertos
+        self._summary_in_progress = set()  # video_ids sendo resumidos
+        
         self._init_ui()
         self._bind_events()
         
@@ -38,42 +43,82 @@ class TabAnalysis(wx.Panel):
         
         # Garante refresh inicial
         wx.CallAfter(self._refresh_grid)
+        
+        # [FASE 6.1b] Popula seletor de modelos após init
+        wx.CallAfter(self._populate_model_selector)
 
     def _init_ui(self):
         main_sizer = wx.BoxSizer(wx.VERTICAL)
         
-        # --- TOOLBAR ANALÍTICA (Modern Style) ---
+        # --- TOOLBAR ANALÍTICA (Fase 6.1b: com seletores de IA) ---
         self.toolbar = wx.Panel(self)
         self.toolbar.SetBackgroundColour(self.theme.get_bg_color())
         self.toolbar.SetMinSize((-1, 40))
         tb_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        
-        # Botões Placeholder (Esterilização Funcional Fase 6.0)
-        btn_summarize = wx.Button(self.toolbar, label="✨ Batch Summarize")
-        btn_summarize.SetBackgroundColour(self.theme.get_accent_color())
-        btn_summarize.SetForegroundColour(wx.WHITE)
-        btn_summarize.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
-        btn_summarize.Bind(wx.EVT_BUTTON, lambda e: wx.MessageBox(
-            "Módulo de IA em fase de homologação estrutural.\nNenhuma chamada de API permitida na Fase 6.0.", 
-            "AI ContextFlow", wx.OK | wx.ICON_INFORMATION))
-        
+
+        # Botão Batch Summarize (ATIVADO — não mais placeholder)
+        self.btn_summarize = wx.Button(self.toolbar, label="✨ Resumir Selecionados")
+        self.btn_summarize.SetBackgroundColour(self.theme.get_accent_color())
+        self.btn_summarize.SetForegroundColour(wx.WHITE)
+        self.btn_summarize.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT,
+                                           wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
+
+        # Separador visual
+        sep1 = wx.StaticLine(self.toolbar, style=wx.LI_VERTICAL)
+
+        # [FASE 6.1b] Seletor de Provedor
+        lbl_provider = wx.StaticText(self.toolbar, label="IA:")
+        lbl_provider.SetFont(wx.Font(8, wx.FONTFAMILY_DEFAULT,
+                                     wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
+        self.choice_provider = wx.Choice(self.toolbar, choices=["ollama", "google"],
+                                         size=(90, -1))
+        current_provider = self.app_state.config.get(
+            "orchestration", "active_provider", "ollama"
+        )
+        idx_p = self.choice_provider.FindString(current_provider)
+        self.choice_provider.SetSelection(idx_p if idx_p != wx.NOT_FOUND else 0)
+
+        # [FASE 6.1b] Seletor de Modelo
+        self.choice_model = wx.Choice(self.toolbar, choices=["Carregando..."],
+                                      size=(200, -1))
+        self.choice_model.SetSelection(0)
+        self.choice_model.Enable(False)  # Desabilitado até discovery completar
+
+        # Botão de refresh de modelos
+        self.btn_refresh_models = wx.Button(self.toolbar, label="🔄", size=(30, -1),
+                                            style=wx.BU_EXACTFIT)
+        self.btn_refresh_models.SetToolTip("Atualizar lista de modelos")
+
+        # Indicador de status do provider
+        self.lbl_ai_status = wx.StaticText(self.toolbar, label="")
+        self.lbl_ai_status.SetFont(wx.Font(8, wx.FONTFAMILY_DEFAULT,
+                                           wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
+
+        # Botões existentes (mantidos)
         self.btn_export = wx.Button(self.toolbar, label="📁 Export ZIP/MD")
         self.btn_export.SetBackgroundColour(wx.Colour(230, 230, 230))
         self.btn_export.SetForegroundColour(self.theme.get_fg_color())
-        
+
         self.btn_cancel = wx.Button(self.toolbar, label="🛑 Cancelar")
         self.btn_cancel.SetForegroundColour(wx.Colour(200, 50, 50))
-        
+
         self.search = wx.SearchCtrl(self.toolbar)
         self.search.SetDescriptiveText("Filtro rápido...")
         self.search.ShowCancelButton(True)
-        
-        tb_sizer.Add(btn_summarize, 0, wx.CENTER | wx.LEFT, 10)
+
+        # Layout da toolbar
+        tb_sizer.Add(self.btn_summarize, 0, wx.CENTER | wx.LEFT, 10)
+        tb_sizer.Add(sep1, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
+        tb_sizer.Add(lbl_provider, 0, wx.CENTER | wx.LEFT, 5)
+        tb_sizer.Add(self.choice_provider, 0, wx.CENTER | wx.LEFT, 3)
+        tb_sizer.Add(self.choice_model, 0, wx.CENTER | wx.LEFT, 5)
+        tb_sizer.Add(self.btn_refresh_models, 0, wx.CENTER | wx.LEFT, 2)
+        tb_sizer.Add(self.lbl_ai_status, 0, wx.CENTER | wx.LEFT, 8)
+        tb_sizer.AddStretchSpacer()
         tb_sizer.Add(self.btn_export, 0, wx.CENTER | wx.LEFT, 5)
         tb_sizer.Add(self.btn_cancel, 0, wx.CENTER | wx.LEFT, 5)
-        tb_sizer.AddStretchSpacer()
         tb_sizer.Add(self.search, 0, wx.CENTER | wx.RIGHT, 10)
-        
+
         self.toolbar.SetSizer(tb_sizer)
         main_sizer.Add(self.toolbar, 0, wx.EXPAND | wx.BOTTOM, 1)
         
@@ -182,6 +227,17 @@ class TabAnalysis(wx.Panel):
         self.Bind(wx.EVT_TIMER, self.on_debounce_tick, self.debounce_timer)
         self.grid.GetGridWindow().Bind(wx.EVT_MOTION, self.on_grid_motion)
         self.grid.Bind(wx.grid.EVT_GRID_CELL_LEFT_CLICK, self.on_grid_click)
+        
+        # [FASE 6.1b] Bindings de IA
+        self.btn_summarize.Bind(wx.EVT_BUTTON, self._on_batch_summarize)
+        self.choice_provider.Bind(wx.EVT_CHOICE, self._on_provider_changed)
+        self.choice_model.Bind(wx.EVT_CHOICE, self._on_model_changed)
+        self.btn_refresh_models.Bind(wx.EVT_BUTTON, self._on_refresh_models)
+
+        # [FASE 6.1b] PubSub listeners de IA
+        PubSub.subscribe('SUMMARY_STARTED', self._on_summary_started)
+        PubSub.subscribe('SUMMARY_COMPLETED', self._on_summary_completed)
+        PubSub.subscribe('SUMMARY_ERROR', self._on_summary_error)
         
         # [FASE 6.0] Expansão do Cockpit via Double Click
         self.grid.Bind(wx.grid.EVT_GRID_CELL_LEFT_DCLICK, self.on_grid_dclick)
@@ -315,7 +371,31 @@ class TabAnalysis(wx.Panel):
         self.Bind(wx.EVT_MENU, lambda e: self._copy_to_clipboard(video_data.get('url')), m_copy)
         self.Bind(wx.EVT_MENU, lambda e: self._direct_export_md(video_data), m_md)
         self.Bind(wx.EVT_MENU, lambda e: PubSub.publish('REQUEST_VIEW_VIDEO', video_id=vid), m_read)
-        self.Bind(wx.EVT_MENU, lambda e: wx.MessageBox("Funcionalidade da Fase 6 (Placeholder).", "AI Summary"), m_sum)
+        def on_summarize(e):
+            if not vid:
+                return
+            video = self.app_state.get_video(vid)
+            if not video:
+                return
+            ss = video.get("summary_status")
+            if ss == "summarizing":
+                wx.MessageBox("Este vídeo já está sendo resumido.", "Info",
+                               wx.OK | wx.ICON_INFORMATION)
+                return
+            if ss == "summarized":
+                if wx.MessageBox(
+                    "Este vídeo já possui resumo. Deseja gerar novamente?",
+                    "Confirmação", wx.YES_NO | wx.ICON_QUESTION
+                ) != wx.YES:
+                    return
+                # Reseta status para permitir re-resumo
+                self.app_state.add_or_update_video({
+                    "id": vid, "summary_status": None
+                })
+
+            self.app_state.request_summary(vid)
+
+        self.Bind(wx.EVT_MENU, on_summarize, m_sum)
         
         self.PopupMenu(menu)
         menu.Destroy()
@@ -360,18 +440,45 @@ class TabAnalysis(wx.Panel):
         event.Skip()
 
     def on_grid_dclick(self, event):
-        """[FASE 6.0] Expansão instantânea do cockpit analítico."""
-        if not self.splitter.IsSplit():
-            # Expande para 70% da tela (Cockpit Expandido)
-            h = self.GetSize().height
-            self.splitter.SplitHorizontally(self.pnl_master, self.pnl_detail, int(h * 0.3))
-        else:
+        """
+        [FASE 6.1b] Duplo clique:
+        - Se auto_open_viewer desativado: toggle do painel
+        - Se auto_open_viewer ativado: já abre por seleção, dclick fecha
+        """
+        row = event.GetRow()
+        if row < 0 or row >= len(self.table.data):
+            event.Skip()
+            return
+
+        if self.splitter.IsSplit():
+            # Fecha o painel
             self.splitter.Unsplit(self.pnl_detail)
+        else:
+            # Abre o painel e carrega detalhes
+            self._load_row_details(row)
+            if not self.splitter.IsSplit():
+                h = self.GetSize().height
+                self.splitter.SplitHorizontally(
+                    self.pnl_master, self.pnl_detail, int(h * 0.3)
+                )
+
         event.Skip()
 
     def on_select_video(self, event):
+        """
+        [FASE 6.1b] Seleção simples:
+        - Se auto_open_viewer ativo: carrega detalhes e abre painel (se tem resumo)
+        - Se desativado: apenas atualiza seleção interna (duplo clique para abrir)
+        """
         row = event.GetRow()
-        self._load_row_details(row)
+        auto_open = self.app_state.config.get("ui", "auto_open_viewer", True)
+
+        if auto_open:
+            self._load_row_details(row)
+        else:
+            # Só registra a seleção, sem abrir painel
+            self.last_selected_row = row
+
         event.Skip()
 
     def _load_row_details(self, row):
@@ -400,23 +507,46 @@ class TabAnalysis(wx.Panel):
             else:
                 self.bmp_detail.SetBitmap(wx.NullBitmap)
 
-            # [LAZY LOADING] Resumo
+            # [FASE 6.1b] Carregamento condicional de conteúdo
+            summary_status = video_data.get("summary_status", "")
             t_data = self.app_state.db_handler.get_transcript(vid_id)
-            has_content = False
-            if t_data:
-                full_text = t_data.get('full_text', '')
-                if full_text:
-                    self.txt_summary.SetValue(full_text)
-                    has_content = True
-            
-            if not has_content:
-                self.txt_summary.SetValue("Nenhuma transcrição ou resumo disponível para este vídeo.")
+            has_summary = False
 
-            # [SMART SHOW] Expansão Inteligente
-            # Se o vídeo tem resumo ou transcrição, mostramos o painel inferior
-            if has_content or video_data.get('has_summary'):
-                if not self.splitter.IsSplit():
-                    self.splitter.SplitHorizontally(self.pnl_master, self.pnl_detail, -300)
+            if summary_status == "summarized" and t_data:
+                summary_text = t_data.get("summary", "")
+                if summary_text:
+                    self.txt_summary.SetValue(summary_text)
+                    has_summary = True
+
+            if summary_status == "summarizing":
+                self.txt_summary.SetValue("⏳ Resumo em processamento...\n\n"
+                                          "Aguarde a conclusão da análise por IA.")
+                has_summary = True  # Mostra o painel para feedback
+
+            if summary_status == "summary_error":
+                self.txt_summary.SetValue("❌ Ocorreu um erro ao gerar o resumo.\n\n"
+                                          "Tente novamente pelo menu de contexto → Resumir.")
+
+            if not has_summary and not summary_status:
+                tr_text = t_data.get('full_text', '') if t_data else ''
+                if tr_text:
+                    self.txt_summary.SetValue(tr_text)
+                else:
+                    self.txt_summary.SetValue(
+                        "Este vídeo ainda não foi resumido.\n\n"
+                        "Para gerar o resumo:\n"
+                        "  • Clique direito → ✨ Resumir\n"
+                        "  • Ou selecione e clique '✨ Resumir Selecionados' na toolbar"
+                    )
+
+            # [FASE 6.1b] Visualizador condicional
+            # Painel inferior SÓ abre automaticamente se há resumo concluído ou em progresso
+            if has_summary or summary_status == "summarizing":
+                auto_open = self.app_state.config.get("ui", "auto_open_viewer", True)
+                if auto_open and not self.splitter.IsSplit():
+                    self.splitter.SplitHorizontally(
+                        self.pnl_master, self.pnl_detail, -300
+                    )
 
     def on_close_viewer(self, event):
         """[QA3] Fecha o visualizador e reseta seleção lógica."""
@@ -497,3 +627,209 @@ class TabAnalysis(wx.Panel):
         if wx.MessageBox("Deseja cancelar todas as tarefas pendentes?", "Confirmação", wx.YES_NO | wx.ICON_QUESTION) == wx.YES:
             PubSub.publish('REQUEST_CANCEL_ALL')
             wx.MessageBox("Comando de cancelamento enviado.", "Info", wx.OK)
+
+    # ═══════════════════════════════════════════════════════════
+    # FASE 6.1b — CONTROLES DE IA
+    # ═══════════════════════════════════════════════════════════
+
+    def _populate_model_selector(self):
+        """
+        Popula o dropdown de modelos via AIDiscovery (background thread).
+        [THREAD SAFETY] O callback usa wx.CallAfter para atualizar a UI.
+        """
+        provider = self.choice_provider.GetStringSelection()
+        self.lbl_ai_status.SetLabel("🔍 Buscando modelos...")
+        self.choice_model.Enable(False)
+
+        def on_models_discovered(models):
+            """Callback chamado na thread do TaskManager."""
+            wx.CallAfter(self._update_model_selector, models)
+
+        self.app_state.discover_ai_models(
+            provider=provider,
+            callback=on_models_discovered
+        )
+
+    def _update_model_selector(self, models):
+        """
+        Atualiza o Choice de modelos na MainThread.
+        [THREAD SAFETY] Chamado APENAS via wx.CallAfter.
+        """
+        self._ai_models_cache = models
+
+        if not models:
+            self.choice_model.SetItems(["Nenhum modelo disponível"])
+            self.choice_model.SetSelection(0)
+            self.choice_model.Enable(False)
+            self.lbl_ai_status.SetLabel("⚠️ Provider indisponível")
+            self.lbl_ai_status.SetForegroundColour(wx.Colour(220, 53, 69))
+            return
+
+        model_names = [m["name"] for m in models]
+        self.choice_model.SetItems(model_names)
+        self.choice_model.Enable(True)
+
+        # Tenta selecionar o modelo configurado
+        configured_model = self.app_state.config.get("ollama", "model", "")
+        idx = self.choice_model.FindString(configured_model)
+        if idx != wx.NOT_FOUND:
+            self.choice_model.SetSelection(idx)
+        else:
+            self.choice_model.SetSelection(0)
+            # Atualiza config para o primeiro modelo disponível
+            self.app_state.config.set("ollama", "model", model_names[0])
+
+        # Atualiza status
+        provider = self.choice_provider.GetStringSelection()
+        local_count = sum(1 for m in models if not m.get("is_cloud"))
+        cloud_count = sum(1 for m in models if m.get("is_cloud"))
+        self.lbl_ai_status.SetLabel(f"✅ {len(models)} modelos ({local_count} local, {cloud_count} cloud)")
+        self.lbl_ai_status.SetForegroundColour(wx.Colour(22, 163, 74))
+
+    def _on_provider_changed(self, event):
+        """Troca de provedor → re-popula modelos."""
+        selected = self.choice_provider.GetStringSelection()
+        self.app_state.config.set("orchestration", "active_provider", selected)
+        self._populate_model_selector()
+
+    def _on_model_changed(self, event):
+        """Troca de modelo → persiste no ConfigManager."""
+        selected = self.choice_model.GetStringSelection()
+        if selected and selected != "Nenhum modelo disponível" and selected != "Carregando...":
+            provider = self.choice_provider.GetStringSelection()
+            if provider == "ollama":
+                self.app_state.config.set("ollama", "model", selected)
+
+            # Mostra info do modelo selecionado
+            for m in self._ai_models_cache:
+                if m["name"] == selected:
+                    ctx = m.get("context_length", 0)
+                    thinking = "🧠" if m.get("has_thinking") else ""
+                    cloud = "☁️" if m.get("is_cloud") else "💻"
+                    self.lbl_ai_status.SetLabel(
+                        f"{cloud} {thinking} {selected} (ctx: {ctx:,})"
+                    )
+                    break
+
+    def _on_refresh_models(self, event):
+        """Força re-discovery de modelos."""
+        self._populate_model_selector()
+
+    def _on_batch_summarize(self, event):
+        """
+        Aciona resumo em lote para vídeos selecionados.
+        [VALIDAÇÃO] Só permite vídeos com status 'completed' e sem resumo.
+        """
+        ids = list(self.table.selected_ids)
+        if not ids:
+            wx.MessageBox(
+                "Nenhum vídeo selecionado.\n\n"
+                "Selecione vídeos via checkbox antes de resumir.",
+                "Aviso", wx.OK | wx.ICON_WARNING
+            )
+            return
+
+        # Filtra apenas vídeos elegíveis
+        eligible = []
+        already_done = 0
+        no_transcript = 0
+
+        for vid in ids:
+            video = self.app_state.get_video(vid)
+            if not video:
+                continue
+
+            ss = video.get("summary_status")
+            status = video.get("status", "")
+
+            if ss == "summarized":
+                already_done += 1
+                continue
+            if ss == "summarizing":
+                continue  # Já em processamento
+            if status != "completed":
+                no_transcript += 1
+                continue
+
+            eligible.append(vid)
+
+        if not eligible:
+            msg = "Nenhum vídeo elegível para resumo."
+            if already_done > 0:
+                msg += f"\n• {already_done} já resumido(s)"
+            if no_transcript > 0:
+                msg += f"\n• {no_transcript} sem transcrição (baixe primeiro)"
+            wx.MessageBox(msg, "Aviso", wx.OK | wx.ICON_INFORMATION)
+            return
+
+        # Confirmação
+        model = self.choice_model.GetStringSelection()
+        msg = (
+            f"Resumir {len(eligible)} vídeo(s) usando:\n\n"
+            f"  Modelo: {model}\n"
+            f"  Provedor: {self.choice_provider.GetStringSelection()}\n\n"
+            f"Deseja continuar?"
+        )
+
+        if already_done > 0:
+            msg += f"\n\n({already_done} vídeo(s) já resumido(s) serão ignorados)"
+
+        if wx.MessageBox(msg, "Confirmar Resumo em Lote",
+                         wx.YES_NO | wx.ICON_QUESTION) != wx.YES:
+            return
+
+        # Enfileira todos
+        self.app_state.request_batch_summary(eligible)
+
+    # ═══════════════════════════════════════════════════════════
+    # FASE 6.1b — PUBSUB HANDLERS (IA)
+    # ═══════════════════════════════════════════════════════════
+
+    def _on_summary_started(self, video_id, **kwargs):
+        """
+        Handler para SUMMARY_STARTED.
+        [THREAD SAFETY] Chamado da thread do AIExecutor → wx.CallAfter obrigatório.
+        """
+        def _update():
+            self._summary_in_progress.add(video_id)
+            self._refresh_grid()
+        wx.CallAfter(_update)
+
+    def _on_summary_completed(self, video_id, summary_preview="", tags=None, **kwargs):
+        """
+        Handler para SUMMARY_COMPLETED.
+        [THREAD SAFETY] Chamado da thread do AIExecutor → wx.CallAfter obrigatório.
+        """
+        def _update():
+            self._summary_in_progress.discard(video_id)
+            self._refresh_grid()
+            self._maybe_open_viewer(video_id)
+        wx.CallAfter(_update)
+
+    def _on_summary_error(self, video_id, error_msg="", **kwargs):
+        """
+        Handler para SUMMARY_ERROR.
+        [THREAD SAFETY] Chamado da thread do AIExecutor → wx.CallAfter obrigatório.
+        """
+        def _update():
+            self._summary_in_progress.discard(video_id)
+            self._refresh_grid()
+        wx.CallAfter(_update)
+
+    def _maybe_open_viewer(self, video_id):
+        """
+        Abre o painel de detalhe SE:
+        1. A opção 'auto_open_viewer' está ativa no ConfigManager
+        2. O vídeo tem resumo (summary_status == 'summarized')
+        3. O vídeo é o atualmente selecionado na grid
+        """
+        auto_open = self.app_state.config.get("ui", "auto_open_viewer", True)
+        if not auto_open:
+            return
+
+        # Verifica se o vídeo completado está selecionado
+        if self.last_selected_row >= 0 and self.last_selected_row < len(self.table.data):
+            current_data = self.table.data[self.last_selected_row]
+            current_id = current_data.get("id")
+            if current_id == video_id:
+                self._load_row_details(self.last_selected_row)

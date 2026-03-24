@@ -195,12 +195,35 @@ class ChipTagRenderer(wx.grid.GridCellRenderer):
         
         # [PERFORMANCE 5.12] Grade Dinâmica: Ignora chips se desativado (renderiza texto)
         if not table.config.get("ui", "dynamic_grid", True):
-            tags = table.data[row].get('tags', [])
+            # [FASE 6.1b] Tags agora vêm como JSON string do banco
+            raw_tags = table.data[row].get('tags', '[]')
+            if isinstance(raw_tags, str):
+                try:
+                    import json
+                    tags = json.loads(raw_tags)
+                except (json.JSONDecodeError, TypeError):
+                    tags = []
+            elif isinstance(raw_tags, list):
+                tags = raw_tags
+            else:
+                tags = []
+            
             dc.SetTextForeground(wx.BLACK if not isSelected else wx.WHITE)
             dc.DrawText(", ".join(tags[:2]), rect.x + 5, rect.y + (rect.height // 2 - 7))
             return
 
-        tags = table.data[row].get('tags', [])
+        # [FASE 6.1b] Tags agora vêm como JSON string do banco
+        raw_tags = table.data[row].get('tags', '[]')
+        if isinstance(raw_tags, str):
+            try:
+                import json
+                tags = json.loads(raw_tags)
+            except (json.JSONDecodeError, TypeError):
+                tags = []
+        elif isinstance(raw_tags, list):
+            tags = raw_tags
+        else:
+            tags = []
         if not tags: 
             # Placeholder se não houver tags
             dc.SetTextForeground(wx.Colour(80, 80, 80))
@@ -412,8 +435,15 @@ class VirtualVideoTable(wx.grid.GridTableBase):
                 
                 # [QA2 REFINE] Estabilidade de Células: Retorna '-' se vazio
                 if val is None or str(val).strip() == "":
-                    # Exceção para Resumo que tem CTA próprio
-                    if label == 'Resumo': return "Clique para Resumir..."
+                    # [FASE 6.1b] CTA de resumir ou status
+                    if label == 'Resumo':
+                        ss = item.get('summary_status', '')
+                        if ss == 'summarizing':
+                            return "⏳ Resumindo..."
+                        elif ss == 'summary_error':
+                            return "❌ Erro ao resumir"
+                        else:
+                            return "✨ Clique para resumir"
                     return "-"
                 
                 # [QA4] Formatação de Milhares para Tokens
@@ -423,11 +453,16 @@ class VirtualVideoTable(wx.grid.GridTableBase):
                         return f"{num:,}".replace(",", ".")
                     except:
                         return str(val)
-                    if label == 'Resumo': return "✨ Clique aqui para resumir"
-                    return "-"
 
                 if label == 'Resumo': 
-                    return str(val)[:100]
+                    ss = item.get('summary_status', '')
+                    if ss == 'summarizing':
+                        return "⏳ Resumindo..."
+                    elif ss == 'summary_error':
+                        return "❌ Erro ao resumir"
+                    elif ss == 'summarized':
+                        return str(val)[:100]
+                    return "✨ Clique para resumir"
                 
                 # [QA2 REFINE] Formatação de Data: YYYYMMDD -> DD/MM/AAAA
                 if label == 'Publicado':
@@ -442,6 +477,19 @@ class VirtualVideoTable(wx.grid.GridTableBase):
                         prog = item.get('progress_msg')
                         return f"⏳ {prog}" if prog else "⏳ Baixando..."
                     return status_val
+                
+                if label == 'Tags' or label == 'Tags (Raw)':
+                    raw_tags = item.get('tags', '[]')
+                    if isinstance(raw_tags, str):
+                        try:
+                            import json
+                            tags = json.loads(raw_tags)
+                            return ", ".join(tags)
+                        except:
+                            return raw_tags
+                    elif isinstance(raw_tags, list):
+                        return ", ".join(raw_tags)
+                    return str(raw_tags)
 
                 return str(val)
             
@@ -507,8 +555,22 @@ class VirtualVideoTable(wx.grid.GridTableBase):
             attr.SetReadOnly(True)
         elif label == "Resumo" and is_ana_tab:
             item = self.data[row] if row < len(self.data) else {}
-            if not item.get('transcript_snippet'):
-                attr.SetTextColour(theme.get_accent_color()) # Azul para o CTA de resumir
+            ss = item.get('summary_status', '')
+
+            if ss == 'summarizing':
+                # Azul pulsante para indicar processamento
+                attr.SetTextColour(theme.get_accent_color())
+                attr.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT,
+                                     wx.FONTSTYLE_ITALIC, wx.FONTWEIGHT_NORMAL))
+            elif ss == 'summary_error':
+                attr.SetTextColour(wx.Colour(220, 53, 69))  # Vermelho
+            elif ss == 'summarized':
+                attr.SetTextColour(theme.get_fg_color())
+                attr.SetRenderer(SafeTextRenderer())
+            else:
+                # Não resumido — CTA azul
+                attr.SetTextColour(theme.get_accent_color())
+
             attr.SetReadOnly(True)
         else:
             attr.SetRenderer(SafeTextRenderer())
