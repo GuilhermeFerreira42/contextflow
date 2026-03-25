@@ -117,6 +117,10 @@ class AppWindow(wx.Frame):
         self.btn_theme = self.toolbar.AddTool(2005, theme_label, 
                                               wx.ArtProvider.GetBitmap(wx.ART_TIP, wx.ART_TOOLBAR))
         
+        # [7.1.3] Botão de Configurações
+        self.btn_settings = self.toolbar.AddTool(2010, "Configurações", 
+                                                 wx.ArtProvider.GetBitmap(wx.ART_EXECUTABLE_FILE, wx.ART_TOOLBAR))
+        
         self.toolbar.Realize()
 
     def _bind_events(self):
@@ -141,6 +145,7 @@ class AppWindow(wx.Frame):
         self.Bind(wx.EVT_TOOL, self.on_toggle_logs_toolbar, id=2001)
         self.Bind(wx.EVT_TOOL, self.on_toggle_auto_open, id=2002)
         self.Bind(wx.EVT_TOOL, self.on_toggle_theme, id=2005)
+        self.Bind(wx.EVT_TOOL, self.on_config, id=2010)
 
     def create_menubar(self):
         menubar = wx.MenuBar()

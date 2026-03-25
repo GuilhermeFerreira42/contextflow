@@ -3,6 +3,7 @@
 import wx
 import wx.html2
 import os
+from core.app_state import AppState
 from constants import THUMBNAILS_DIR
 from core.managers.theme_manager import ThemeManager
 
@@ -22,6 +23,8 @@ class DetailPanel(wx.Panel):
         
         # Thumbnail Image
         self.img_thumb = wx.StaticBitmap(self, size=(160, 90)) # 16:9 ratio approx
+        self.img_thumb.SetCursor(wx.Cursor(wx.CURSOR_HAND))
+        self.img_thumb.Bind(wx.EVT_LEFT_UP, self._on_thumbnail_click)
         self.set_default_image()
         header_sizer.Add(self.img_thumb, 0, wx.ALL, 5)
         
@@ -71,6 +74,8 @@ class DetailPanel(wx.Panel):
         self.img_thumb.SetBitmap(wx.Bitmap(img))
 
     def load_video(self, video_data: dict, transcript_text: str):
+        self._current_video_id = video_data.get('id')
+        self._current_transcript = transcript_text
         # Update Meta
         self.lbl_title.SetLabel(video_data.get('title', 'Unknown'))
         
@@ -81,6 +86,7 @@ class DetailPanel(wx.Panel):
         
         # Update Image
         thumb_path = video_data.get('thumbnail_path')
+        self._current_thumbnail_path = thumb_path # [7.1.2]
         if thumb_path and os.path.exists(thumb_path):
             try:
                 # Tenta carregar ignorando erros de log do wx que poluem o console
@@ -165,7 +171,11 @@ class DetailPanel(wx.Panel):
         if hasattr(self, 'img_thumb'):
             self.img_thumb.SetBackgroundColour(bg)
 
-        # WebView — injeta CSS via JavaScript
+        # [7.1.1] Recarregar o WebView com o tema atualizado
+        if hasattr(self, '_current_video_id') and self._current_video_id:
+            self._reload_webview_content()
+
+        # WebView — injeta CSS via JavaScript (Legado/Fallback)
         # [6.2d] Só executa JS se houver página carregada (evita erro de init)
         if self.browser:
             current_url = ""
@@ -187,3 +197,56 @@ class DetailPanel(wx.Panel):
             self.txt_content.SetForegroundColour(fg)
 
         self.Refresh()
+
+    def _reload_webview_content(self):
+        """[7.1.1] Recarrega o conteúdo HTML do WebView com as cores do tema atual."""
+        if hasattr(self, '_current_video_id') and self._current_video_id:
+            # Reutiliza o vídeo e transcrição atuais para regerar o HTML com novas cores
+            video_data = AppState().get_video(self._current_video_id)
+            if video_data and hasattr(self, '_current_transcript'):
+                self.load_video(video_data, self._current_transcript)
+
+    def _on_thumbnail_click(self, event):
+        """[7.1.2] Abre a thumbnail em tamanho ampliado em um dialog modal."""
+        if not hasattr(self, '_current_thumbnail_path') or not self._current_thumbnail_path:
+            return
+
+        if not os.path.exists(self._current_thumbnail_path):
+            return
+
+        # Carregar imagem original
+        img = wx.Image(self._current_thumbnail_path, wx.BITMAP_TYPE_ANY)
+        if not img.IsOk():
+            return
+
+        # Calcular tamanho que cabe na tela (max 80% do display)
+        display_w, display_h = wx.GetDisplaySize()
+        max_w = int(display_w * 0.8)
+        max_h = int(display_h * 0.8)
+
+        img_w, img_h = img.GetWidth(), img.GetHeight()
+        scale = min(max_w / img_w, max_h / img_h, 1.0)
+        new_w = int(img_w * scale)
+        new_h = int(img_h * scale)
+
+        img = img.Scale(new_w, new_h, wx.IMAGE_QUALITY_HIGH)
+
+        # Criar dialog
+        dlg = wx.Dialog(self, title="Visualização da Thumbnail", style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
+        dlg.SetBackgroundColour(wx.BLACK)
+
+        bmp_btn = wx.BitmapButton(dlg, wx.ID_ANY, wx.Bitmap(img), style=wx.BORDER_NONE)
+        bmp_btn.SetBackgroundColour(wx.BLACK)
+        
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer.Add(bmp_btn, 1, wx.ALL | wx.CENTER, 0)
+        dlg.SetSizer(sizer)
+        dlg.Fit()
+        dlg.CenterOnParent()
+
+        # Fechar ao clicar na imagem ou pressionar ESC
+        bmp_btn.Bind(wx.EVT_BUTTON, lambda e: dlg.Close())
+        dlg.Bind(wx.EVT_CHAR_HOOK, lambda e: dlg.Close() if e.GetKeyCode() == wx.WXK_ESCAPE else e.Skip())
+
+        dlg.ShowModal()
+        dlg.Destroy()

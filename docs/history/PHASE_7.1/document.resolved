@@ -83,10 +83,10 @@ def _load_video_detail(self, video_id):
 ```
 
 ### Critérios de Validação
-- [ ] Trocar tema claro → escuro com um vídeo aberto na aba 3: o HTML deve atualizar imediatamente
-- [ ] Trocar tema escuro → claro: idem
+- [x] Trocar tema claro → escuro com um vídeo aberto na aba 3: o HTML deve atualizar imediatamente
+- [x] Trocar tema escuro → claro: idem
 - [ ] Trocar tema sem vídeo selecionado: não deve dar erro
-- [ ] Selecionar novo vídeo após trocar tema: deve funcionar normalmente
+- [x] Selecionar novo vídeo após trocar tema: deve funcionar normalmente
 
 ### Riscos
 - **Nenhum identificado.** O método de reload já existe e é chamado ao selecionar vídeos. Estamos apenas chamando-o em mais um cenário.
@@ -172,12 +172,12 @@ def _load_video_detail(self, video_id):
 ```
 
 ### Critérios de Validação
-- [ ] Clicar na thumbnail: abre dialog com imagem ampliada
-- [ ] Cursor muda para mãozinha ao passar sobre a thumbnail
-- [ ] Clicar na imagem ampliada: fecha o dialog
-- [ ] Pressionar ESC: fecha o dialog
-- [ ] Sem vídeo selecionado: clique não faz nada (sem erro)
-- [ ] Imagem maior que a tela: é reduzida para caber em 80% do display
+- [x] Clicar na thumbnail: abre dialog com imagem ampliada
+- [x] Cursor muda para mãozinha ao passar sobre a thumbnail
+- [x] Clicar na imagem ampliada: fecha o dialog
+- [x] Pressionar ESC: fecha o dialog
+- [x] Sem vídeo selecionado: clique não faz nada (sem erro)
+- [x] Imagem maior que a tela: é reduzida para caber em 80% do display
 
 ### Riscos
 - **Nenhum identificado.** Adição de funcionalidade sem alterar fluxo existente.
@@ -249,12 +249,12 @@ self.btn_settings.SetFont(wx.Font(16, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL
 ```
 
 ### Critérios de Validação
-- [ ] Botão visível na toolbar ao lado do toggle de tema
-- [ ] Cursor mãozinha ao hover
-- [ ] Clique abre o ConfigDialog
-- [ ] Tooltip "Configurações" aparece ao hover
-- [ ] Botão se adapta ao tema claro/escuro
-- [ ] Dialog funciona normalmente (salvar, cancelar)
+- [x] Botão visível na toolbar ao lado do toggle de tema
+- [x] Cursor mãozinha ao hover
+- [x] Clique abre o ConfigDialog
+- [x] Tooltip "Configurações" aparece ao hover
+- [x] Botão se adapta ao tema claro/escuro
+- [x] Dialog funciona normalmente (salvar, cancelar)
 
 ### Riscos
 - **Baixo.** Único risco é o posicionamento visual — pode precisar de ajuste de margens dependendo do layout atual da toolbar.
@@ -352,12 +352,12 @@ def apply_theme(self):
 ```
 
 ### Critérios de Validação
-- [ ] Botões visíveis acima da árvore na sidebar
-- [ ] "Expandir" expande todos os nós da árvore
-- [ ] "Recolher" colapsa todos os nós
-- [ ] Botões se adaptam ao tema claro/escuro
-- [ ] Cursor mãozinha ao hover
-- [ ] Com árvore vazia: botões não causam erro
+- [x] Botões visíveis acima da árvore na sidebar
+- [x] "Expandir" expande todos os nós da árvore
+- [x] "Recolher" colapsa todos os nós
+- [x] Botões se adaptam ao tema claro/escuro
+- [x] Cursor mãozinha ao hover
+- [x] Com árvore vazia: botões não causam erro
 
 ### Riscos
 - **Nenhum.** `ExpandAll()` e `CollapseAll()` são métodos nativos do `wx.TreeCtrl`.

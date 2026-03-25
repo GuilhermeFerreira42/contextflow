@@ -53,6 +53,10 @@ class Sidebar(wx.Panel):
         self.search_ctrl.Bind(wx.EVT_SEARCHCTRL_CANCEL_BTN, self.on_search_cancel)
         sizer.Add(self.search_ctrl, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 5)
         
+        # Tree Controls [7.1.4]
+        tree_ctrls = self._create_tree_controls()
+        sizer.Add(tree_ctrls, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 5)
+
         # Tree
         self.tree = wx.TreeCtrl(self, style=wx.TR_DEFAULT_STYLE | wx.TR_HIDE_ROOT)
         self.root = self.tree.AddRoot("Root")
@@ -284,6 +288,42 @@ class Sidebar(wx.Panel):
         self.search_ctrl.SetValue("")
         self.load_history()
 
+    def _create_tree_controls(self):
+        """[7.1.4] Cria botões de controle acima da árvore de histórico."""
+        ctrl_panel = wx.Panel(self)
+        ctrl_sizer = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.btn_expand_all = wx.Button(ctrl_panel, wx.ID_ANY, "▼ Expandir", style=wx.BORDER_NONE)
+        self.btn_collapse_all = wx.Button(ctrl_panel, wx.ID_ANY, "▶ Recolher", style=wx.BORDER_NONE)
+
+        self.btn_expand_all.SetCursor(wx.Cursor(wx.CURSOR_HAND))
+        self.btn_collapse_all.SetCursor(wx.Cursor(wx.CURSOR_HAND))
+
+        # Estilo compacto
+        font = wx.Font(8, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL)
+        self.btn_expand_all.SetFont(font)
+        self.btn_collapse_all.SetFont(font)
+
+        ctrl_sizer.Add(self.btn_expand_all, 0, wx.RIGHT, 4)
+        ctrl_sizer.Add(self.btn_collapse_all, 0)
+
+        ctrl_panel.SetSizer(ctrl_sizer)
+
+        # Binds
+        self.btn_expand_all.Bind(wx.EVT_BUTTON, self._on_expand_all)
+        self.btn_collapse_all.Bind(wx.EVT_BUTTON, self._on_collapse_all)
+
+        return ctrl_panel
+
+    def _on_expand_all(self, event):
+        self.tree.ExpandAll()
+
+    def _on_collapse_all(self, event):
+        self.tree.CollapseAll()
+        root = self.tree.GetRootItem()
+        if root.IsOk() and not self.tree.HasFlag(wx.TR_HIDE_ROOT):
+            self.tree.Expand(root)
+
     def load_history(self, filter_text=""):
         # Save expansion state if possible? Too complex for now.
         self.tree.DeleteChildren(self.root)
@@ -429,6 +469,14 @@ class Sidebar(wx.Panel):
         if hasattr(self, 'search_ctrl'):
             self.search_ctrl.SetBackgroundColour(self.theme.get_input_bg())
             self.search_ctrl.SetForegroundColour(self.theme.get_input_fg())
+
+        # [7.1.4] Atualizar botões de controle
+        if hasattr(self, 'btn_expand_all'):
+            self.btn_expand_all.SetBackgroundColour(self.theme.get_highlight_color())
+            self.btn_expand_all.SetForegroundColour(fg)
+        if hasattr(self, 'btn_collapse_all'):
+            self.btn_collapse_all.SetBackgroundColour(self.theme.get_highlight_color())
+            self.btn_collapse_all.SetForegroundColour(fg)
 
         # [6.2c] Propaga BG+FG para todos os StaticText filhos diretos
         for child in self.GetChildren():

@@ -26,7 +26,7 @@ class TabAnalysis(wx.Panel):
         # Colunas Analíticas [Specs 5.9 Expansion]
         self.col_labels = [
             " [x] ", " # ", "Preview", "Título", "Canal", "Duração", 
-            "Publicado", "Adicionado", "Playlist", "Tokens", "Tags", "Link", "Status", "Resumo"
+            "Publicado", "Adicionado", "Playlist", "Tokens", "Tags", "Link", "Resumo"
         ]
         self.table = VirtualVideoTable(col_labels=self.col_labels)
         
@@ -85,9 +85,8 @@ class TabAnalysis(wx.Panel):
         self.grid.SetColSize(8, 120)  # [QA4] Playlist
         self.grid.SetColSize(9, 80)   # [QA4] Tokens
         self.grid.SetColSize(10, 100) # Tags
-        self.grid.SetColSize(11, 40)  # Link
-        self.grid.SetColSize(12, 60)  # Status
-        self.grid.SetColSize(13, 70) # Resumo (Ajustado para ícones)
+        self.grid.SetColSize(11, 40)   # Link
+        self.grid.SetColSize(12, 130)  # Resumo (Espaço que era do Status + Resumo anterior)
         
         # [QA2 REFINE] Trava de Layout: Desabilita redimensionamento manual de linhas
         self.grid.DisableDragRowSize()

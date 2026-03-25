@@ -441,36 +441,16 @@ class VirtualVideoTable(wx.grid.GridTableBase):
                 'Tokens': 'token_count',
                 'Status': 'status',
                 'Duração': 'duration', # Fallback
-                'Resumo': 'transcript_snippet'
+                'Resumo': 'transcript_snippet',
+                'Tags': 'tags',
+                'Tags (Raw)': 'tags'
             }
             
             if label in mapping:
                 val = item.get(mapping[label])
                 
-                # [QA2 REFINE] Estabilidade de Células: Retorna '-' se vazio
-                if val is None or str(val).strip() == "":
-                    # [FASE 6.1b] CTA de resumir ou status
-                    if label == 'Resumo':
-                        ss = item.get('summary_status', '')
-                        if ss == 'summarizing':
-                            return "⏳"
-                        elif ss == 'summary_error':
-                            return "❌"
-                        elif ss == 'summarized':
-                            return "✅"
-                        else:
-                            return "—"
-                    return "-"
-                
-                # [QA4] Formatação de Milhares para Tokens
-                if label == 'Tokens':
-                    try:
-                        num = int(val)
-                        return f"{num:,}".replace(",", ".")
-                    except:
-                        return str(val)
-
-                if label == 'Resumo':
+                # [FASE 7.1.5] CTA de resumir (Apenas na coluna de Resumo)
+                if (val is None or str(val).strip() == "") and label == 'Resumo':
                     ss = item.get('summary_status', '')
                     if ss == 'summarizing':
                         return "⏳"
@@ -478,24 +458,33 @@ class VirtualVideoTable(wx.grid.GridTableBase):
                         return "❌"
                     elif ss == 'summarized':
                         return "✅"
-                    return "—"
+                    else:
+                        return "✦ Resumir"
                 
                 # [QA2 REFINE] Formatação de Data: YYYYMMDD -> DD/MM/AAAA
-                if label == 'Publicado':
+                if label == 'Publicado' and val:
                     d_str = str(val).strip()
                     if len(d_str) == 8 and d_str.isdigit():
                         return f"{d_str[6:8]}/{d_str[4:6]}/{d_str[0:4]}"
                 
+                # [QA4] Formatação de Milhares para Tokens
+                if label == 'Tokens' and val:
+                    try:
+                        num = int(val)
+                        return f"{num:,}".replace(",", ".")
+                    except:
+                        return str(val)
+
                 # [QA2 REFINE] Feedback Dinâmico de Status
-                if label == 'Status':
+                if label == 'Status' and val:
                     status_val = str(val).upper()
                     if status_val == 'DOWNLOADING':
                         prog = item.get('progress_msg')
                         return f"⏳ {prog}" if prog else "⏳ Baixando..."
                     return status_val
                 
-                if label == 'Tags' or label == 'Tags (Raw)':
-                    raw_tags = item.get('tags', '[]')
+                if (label == 'Tags' or label == 'Tags (Raw)') and val:
+                    raw_tags = val
                     if isinstance(raw_tags, str):
                         try:
                             import json
@@ -507,7 +496,7 @@ class VirtualVideoTable(wx.grid.GridTableBase):
                         return ", ".join(raw_tags)
                     return str(raw_tags)
 
-                return str(val)
+                return str(val) if val is not None else ""
             
             if label == 'Duração':
                 dur = item.get('duration_seconds') or item.get('duration')
@@ -570,6 +559,12 @@ class VirtualVideoTable(wx.grid.GridTableBase):
             attr.SetRenderer(BadgeStatusRenderer())
             attr.SetReadOnly(True)
         elif label == "Resumo" and is_ana_tab:
+            value = self.GetValue(row, col)
+            if value == "✦ Resumir":
+                attr.SetTextColour(wx.Colour(theme.get_accent_color()))
+                font = attr.GetFont()
+                font.SetWeight(wx.FONTWEIGHT_BOLD)
+                attr.SetFont(font)
             attr.SetRenderer(SummaryStatusRenderer())
             attr.SetReadOnly(True)
         else:
