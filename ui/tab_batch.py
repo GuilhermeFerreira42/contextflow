@@ -621,4 +621,12 @@ class TabBatch(wx.Panel):
                 child.SetBackgroundColour(bg)
                 child.SetForegroundColour(fg)
 
+        # [6.2d] StaticBox labels — força FG no Windows
+        for child in self.GetChildren():
+            if isinstance(child, wx.StaticBox):
+                try:
+                    child.SetForegroundColour(fg)
+                except Exception:
+                    pass
+
         self.Refresh()

@@ -80,3 +80,4 @@ F6.2d | BUGFIX | Botão ☰ invisível | FG hardcoded preto → tema dinâmico |
 F6.2d | BUGFIX | Cores hardcoded em _init_ui | wx.Colour(230,230,230) → theme.get_highlight_color() | `ui/tab_batch.py`, `ui/tab_analysis.py`
 F6.2d | BUGFIX | WebView flash branco | background-color:white → bg_hex do tema | `ui/panel_detail.py`
 F6.2d | BUGFIX | Labels pretos na toolbar | FG não aplicado na construção | `ui/components/analysis_toolbar.py`
+F6.2d | BUGFIX | Contraste StaticBox | SetForegroundColour(fg) forçado para títulos de seção | `ui/dialog_config.py`, `ui/tab_batch.py`

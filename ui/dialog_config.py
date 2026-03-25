@@ -141,9 +141,13 @@ class DialogConfig(wx.Dialog):
         def _apply_recursive(window):
             name = window.__class__.__name__
 
-            # StaticBox — limitação do Windows, pula
+            # StaticBox — tenta forçar FG (funciona em algumas versões do Windows)
             if name == 'StaticBox':
-                return
+                try:
+                    window.SetForegroundColour(fg)
+                except Exception:
+                    pass
+                # NÃO retorna — continua para processar filhos dentro do StaticBoxSizer
 
             # Botões com cor intencional — pula BG
             if name == 'Button':
