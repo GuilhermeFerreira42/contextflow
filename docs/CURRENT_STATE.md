@@ -1,5 +1,5 @@
 # CURRENT_STATE — ContextFlow
-> Última atualização: Fase 6.2 | 2026-03-24 (UI Polish & Multi-Theme)
+> Última atualização: Fase 6.2c | 2026-03-24 (Estabilização Final do Sistema de Temas)
 
 ## Arquitetura Ativa
 - **Padrão**: Fachada Singleton (`AppState`) com delegação para **Gerentes Especializados** (`core/managers/`).
@@ -14,7 +14,7 @@
 | VideoManager | `core/managers/video_manager.py` | `get_all_videos() -> List`, `promote_task_to_video(uuid, data)`, `delete_videos(ids)` | F6.0 |
 | TaskManager | `core/managers/task_manager.py` | `submit_task(id, func, *args)`, `is_cancelled() -> bool`, `atomic_kill_switch()` | F6.0 |
 | FinanceManager | `core/managers/finance_manager.py` | `log_transaction(amount, type)`, `get_balance() -> float` | F6.0 |
-| ThemeManager | `core/managers/theme_manager.py` | `get_theme_name()`, `set_theme(name)`, `apply_theme(parent)` | F6.2 |
+| ThemeManager | `core/managers/theme_manager.py` | `get_theme_name()`, `set_theme(name)`, `apply_theme(parent)` | F6.2c |
 | AI Governance | `core/ai_governance.py` | `TokenCounter.count_tokens(text)`, `AICostCalculator.estimate_cost(prompt, completion)` | F5.6 |
 | Cooldown | `core/cooldown_manager.py` | `trigger_cooldown(duration)`, `is_cooling_down() -> bool` | F5.12 |
 | Proxy Manager | `core/proxy_manager.py` | `get_next_proxy() -> str`, `report_failure(proxy_url)` | F5.12 |
@@ -50,6 +50,7 @@
 - **Pool de Threads**: Máximo de 4 workers concorrentes para download de metadados.
 - **Cache de Tokens**: `tiktoken` (cl100k_base) usado para estimativa GPT.
 - **SQLite**: Limite de 5000 vídeos para garantir performance de busca instantânea.
+- **Limitações wxWidgets (Windows)**: `wx.Notebook` tab labels e `wx.StaticBox` labels não suportam propagação de `ForegroundColour`. `ConsolePanel` retém fundo escuro por design intencional.
 
 ## Testes Obrigatórios
 - `tests/test_ai_governance.py`

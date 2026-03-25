@@ -39,6 +39,7 @@ class AnalysisToolbar(wx.Panel):
         lbl_provider = wx.StaticText(self, label="IA:")
         lbl_provider.SetFont(wx.Font(8, wx.FONTFAMILY_DEFAULT,
                                      wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
+        lbl_provider.SetForegroundColour(self.theme.get_fg_color())  # [6.2d]
         self.choice_provider = wx.Choice(self, choices=["ollama", "google"],
                                          size=(90, -1))
         
@@ -59,10 +60,12 @@ class AnalysisToolbar(wx.Panel):
         self.lbl_ai_status = wx.StaticText(self, label="")
         self.lbl_ai_status.SetFont(wx.Font(8, wx.FONTFAMILY_DEFAULT,
                                            wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
+        self.lbl_ai_status.SetForegroundColour(self.theme.get_fg_color())  # [6.2d]
 
         # Outras ações
         self.btn_export = wx.Button(self, label="📁 Export ZIP/MD")
-        self.btn_export.SetBackgroundColour(wx.Colour(230, 230, 230))
+        self.btn_export.SetBackgroundColour(self.theme.get_highlight_color())  # [6.2d]
+        self.btn_export.SetForegroundColour(self.theme.get_fg_color())  # [6.2d]
         
         self.btn_cancel = wx.Button(self, label="🛑 Cancelar")
         self.btn_cancel.SetForegroundColour(wx.Colour(200, 50, 50))
@@ -151,9 +154,28 @@ class AnalysisToolbar(wx.Panel):
         self.btn_export.SetBackgroundColour(self.theme.get_highlight_color())
         self.btn_export.SetForegroundColour(fg)
 
-        # Labels
+        # [6.2c] Botão refresh e cancel
+        self.btn_refresh_models.SetBackgroundColour(self.theme.get_highlight_color())
+        self.btn_refresh_models.SetForegroundColour(fg)
+        self.btn_cancel.SetBackgroundColour(self.theme.get_highlight_color())
+        self.btn_cancel.SetForegroundColour(wx.Colour(200, 50, 50))
+
+        # [6.2c] Choice selectors
+        self.choice_provider.SetBackgroundColour(self.theme.get_input_bg())
+        self.choice_provider.SetForegroundColour(self.theme.get_input_fg())
+        self.choice_model.SetBackgroundColour(self.theme.get_input_bg())
+        self.choice_model.SetForegroundColour(self.theme.get_input_fg())
+
+        # [6.2c] SearchCtrl
+        self.search.SetBackgroundColour(self.theme.get_input_bg())
+        self.search.SetForegroundColour(self.theme.get_input_fg())
+
+        # [6.2c] StaticText BG + FG, StaticLine BG
         for child in self.GetChildren():
             if isinstance(child, wx.StaticText):
+                child.SetBackgroundColour(bg)
                 child.SetForegroundColour(fg)
+            elif isinstance(child, wx.StaticLine):
+                child.SetBackgroundColour(self.theme.get_border_color())
 
         self.Refresh()

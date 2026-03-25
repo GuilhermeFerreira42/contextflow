@@ -115,6 +115,85 @@ class DialogConfig(wx.Dialog):
         btn_save.Bind(wx.EVT_BUTTON, self.on_save)
         self.on_update_status(None) # Initial update
 
+        # [6.2c] Aplica tema a todos os widgets internos
+        self._apply_internal_theme()
+
+        # [DEBUG 6.2c] Auditoria do DialogConfig na criação
+        try:
+            from scripts.debug_theme import ThemeDebugger
+            import logging
+            debug_logger = logging.getLogger("contextflow.theme.debug")
+            debug_logger.setLevel(logging.WARNING)
+            debug_logger.info("=== AUDITORIA DialogConfig ===")
+            ThemeDebugger.summary(self)
+            ThemeDebugger.audit(self)
+        except ImportError:
+            pass
+
+    def _apply_internal_theme(self):
+        """[FASE 6.2c] Propaga cores do tema para todos os widgets internos do diálogo."""
+        bg = self.theme.get_bg_color()
+        fg = self.theme.get_fg_color()
+        input_bg = self.theme.get_input_bg()
+        input_fg = self.theme.get_input_fg()
+        highlight = self.theme.get_highlight_color()
+
+        def _apply_recursive(window):
+            name = window.__class__.__name__
+
+            # StaticBox — limitação do Windows, pula
+            if name == 'StaticBox':
+                return
+
+            # Botões com cor intencional — pula BG
+            if name == 'Button':
+                current_bg = window.GetBackgroundColour()
+                # Preserva botões com cor accent/vermelho (Cancelar, Salvar, Abort)
+                is_accent = (current_bg == wx.Colour(37, 99, 235) or
+                             current_bg == wx.Colour(239, 68, 68))
+                if not is_accent:
+                    window.SetBackgroundColour(highlight)
+                    window.SetForegroundColour(fg)
+
+            elif name in ('TextCtrl',):
+                window.SetBackgroundColour(input_bg)
+                window.SetForegroundColour(input_fg)
+
+            elif name in ('SpinCtrl', 'Choice', 'ListBox'):
+                window.SetBackgroundColour(input_bg)
+                window.SetForegroundColour(input_fg)
+
+            elif name == 'CheckBox':
+                window.SetBackgroundColour(bg)
+                window.SetForegroundColour(fg)
+
+            elif name == 'StaticText':
+                current_fg = window.GetForegroundColour()
+                # Preserva cores intencionais (muted grey, accent blue, status colors)
+                is_intentional = (current_fg == wx.Colour(100, 116, 139) or
+                                  current_fg == wx.Colour(37, 99, 235) or
+                                  current_fg == wx.Colour(220, 38, 38) or
+                                  current_fg == wx.Colour(22, 163, 74))
+                window.SetBackgroundColour(bg)
+                if not is_intentional:
+                    window.SetForegroundColour(fg)
+
+            elif name in ('Panel', 'ScrolledWindow'):
+                window.SetBackgroundColour(bg)
+
+            elif name == 'Notebook':
+                try:
+                    window.SetBackgroundColour(bg)
+                    window.SetForegroundColour(fg)
+                except Exception:
+                    pass
+
+            # Recursa nos filhos
+            for child in window.GetChildren():
+                _apply_recursive(child)
+
+        _apply_recursive(self)
+
     def _create_tab_extraction(self):
         panel = wx.ScrolledWindow(self.nb)
         panel.SetScrollRate(0, 20)

@@ -3,6 +3,7 @@ import wx
 import wx.grid
 import os
 import webbrowser
+from wx.lib.buttons import GenButton
 from core.pubsub import PubSub
 from core.app_state import AppState
 from core.managers.theme_manager import ThemeManager
@@ -43,14 +44,20 @@ class TabBatch(wx.Panel):
         
         self.txt_input = wx.TextCtrl(self, style=wx.TE_MULTILINE, size=(-1, 80))
         self.txt_input.SetHint("Cole as URLs aqui (uma por linha)...")
+        self.txt_input.SetBackgroundColour(self.theme.get_input_bg())   # [6.2d]
+        self.txt_input.SetForegroundColour(self.theme.get_input_fg())   # [6.2d]
         input_sizer.Add(self.txt_input, 1, wx.EXPAND | wx.ALL, 5)
         
         btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.btn_clear = wx.Button(self, label="Limpar Lista")
         
         # [PROCEDIMENTO DE COOLDOWN] Botão de reset rápido para erros 429
-        self.btn_reset_safety = wx.Button(self, label="Reset Safety")
+        # [6.2c] GenButton — wx.Button nativo ignora SetBackgroundColour no Windows
+        self.btn_reset_safety = GenButton(self, label="Reset Safety")
+        self.btn_reset_safety.SetBackgroundColour(self.theme.get_highlight_color())
         self.btn_reset_safety.SetForegroundColour(wx.Colour(200, 50, 50))
+        if hasattr(self.btn_reset_safety, 'InitColours'):
+            self.btn_reset_safety.InitColours()
         
         self.btn_process = wx.Button(self, label="PROCESSAR FILA")
         self.btn_process.SetBackgroundColour(self.theme.get_accent_color())
@@ -563,7 +570,7 @@ class TabBatch(wx.Panel):
             wx.MessageBox("Comando de cancelamento enviado.", "Info", wx.OK)
 
     def apply_theme(self):
-        """[FASE 6.2] Atualiza cores e refresca a grade de processamento."""
+        """[FASE 6.2c] Atualiza cores e refresca a grade de processamento."""
         self.theme = ThemeManager()
         bg = self.theme.get_bg_color()
         fg = self.theme.get_fg_color()
@@ -574,7 +581,7 @@ class TabBatch(wx.Panel):
         if hasattr(self, 'grid'):
             self.theme.apply_grid_theme(self.grid)
 
-        # Botões com cores semânticas
+        # Botão processar (mantém accent)
         self.btn_process.SetBackgroundColour(self.theme.get_accent_color())
         self.btn_process.SetForegroundColour(wx.WHITE)
 
@@ -585,14 +592,33 @@ class TabBatch(wx.Panel):
 
         # Botões genéricos
         for btn in [self.btn_clear, self.btn_delete, self.btn_unify,
-                     self.btn_download_md, self.btn_export_zip]:
+                    self.btn_download_md, self.btn_export_zip,
+                    self.btn_reset_safety]:
             try:
                 btn.SetBackgroundColour(self.theme.get_highlight_color())
                 btn.SetForegroundColour(fg)
+                if hasattr(btn, 'InitColours'):
+                    btn.InitColours()
             except Exception:
                 pass
 
-        # Botão cancelar mantém vermelho
+        # Cancelar mantém vermelho
         self.btn_cancel.SetForegroundColour(wx.Colour(200, 50, 50))
+
+        # Reset Safety mantém texto vermelho
+        self.btn_reset_safety.SetForegroundColour(wx.Colour(200, 50, 50))
+
+        # [6.2c] Gauge
+        if hasattr(self, 'gauge'):
+            try:
+                self.gauge.SetBackgroundColour(bg)
+            except Exception:
+                pass
+
+        # [6.2c] Labels (StaticText) — propaga BG + FG
+        for child in self.GetChildren():
+            if isinstance(child, wx.StaticText):
+                child.SetBackgroundColour(bg)
+                child.SetForegroundColour(fg)
 
         self.Refresh()

@@ -158,3 +158,30 @@ class ThemeManager:
             grid.ForceRefresh()
         except Exception as e:
             logger.debug(f"apply_grid_theme error: {e}")
+
+    def apply_to_button(self, button, role="default"):
+        """
+        Aplica tema a um botão, tentando GenButton primeiro, fallback para nativo.
+        
+        Args:
+            button: wx.Button ou GenButton
+            role: "default", "accent", "danger", "cancel"
+        """
+        palette = {
+            "default": (self.get_highlight_color(), self.get_fg_color()),
+            "accent": (self.get_accent_color(), wx.WHITE),
+            "danger": (wx.Colour(220, 53, 69), wx.WHITE),
+            "cancel": (self.get_highlight_color(), wx.Colour(200, 50, 50)),
+        }
+        
+        bg, fg = palette.get(role, palette["default"])
+        
+        try:
+            button.SetBackgroundColour(bg)
+            button.SetForegroundColour(fg)
+            # GenButton precisa recalcular sombras
+            if hasattr(button, 'InitColours'):
+                button.InitColours()
+            button.Refresh()
+        except Exception:
+            pass

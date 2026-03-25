@@ -44,13 +44,14 @@ class DetailPanel(wx.Panel):
         # 2. Content (WebView for Rich Text)
         if wx.html2.WebView.IsBackendAvailable(wx.html2.WebViewBackendDefault):
             self.browser = wx.html2.WebView.New(self)
-            # [QA2 REFINE] Evita Flash Preto: Injeta fundo branco imediatamente
-            self.browser.SetPage("<html><body style='background-color:white;'></body></html>", "")
+            # [6.2d] Evita Flash: Injeta fundo do tema ativo imediatamente
+            bg_hex = self.theme.get_bg_color().GetAsString(wx.C2S_HTML_SYNTAX)
+            self.browser.SetPage(f"<html><body style='background-color:{bg_hex};'></body></html>", "")
             main_sizer.Add(self.browser, 1, wx.EXPAND | wx.ALL, 0)
         else:
             self.txt_content = wx.TextCtrl(self, style=wx.TE_MULTILINE | wx.TE_READONLY | wx.NO_BORDER)
-            self.txt_content.SetBackgroundColour(wx.WHITE)
-            self.txt_content.SetForegroundColour(wx.Colour(40, 40, 40))
+            self.txt_content.SetBackgroundColour(self.theme.get_bg_color())  # [6.2d]
+            self.txt_content.SetForegroundColour(self.theme.get_fg_color())  # [6.2d]
             main_sizer.Add(self.txt_content, 1, wx.EXPAND | wx.ALL, 0)
             self.browser = None
             
@@ -141,7 +142,7 @@ class DetailPanel(wx.Panel):
         self.lbl_stats.SetLabel(f"Tokens: {t_count} (Estimado)")
 
     def apply_theme(self):
-        """[FASE 6.2] Atualiza cores do DetailPanel e WebView."""
+        """[FASE 6.2c] Atualiza cores do DetailPanel e WebView."""
         self.theme = ThemeManager()
         bg = self.theme.get_bg_color()
         fg = self.theme.get_fg_color()
@@ -149,13 +150,20 @@ class DetailPanel(wx.Panel):
         self.SetBackgroundColour(bg)
         self.SetForegroundColour(fg)
 
-        # Labels
+        # [6.2c] Labels — BG + FG
         if hasattr(self, 'lbl_title'):
+            self.lbl_title.SetBackgroundColour(bg)
             self.lbl_title.SetForegroundColour(fg)
         if hasattr(self, 'lbl_meta'):
+            self.lbl_meta.SetBackgroundColour(bg)
             self.lbl_meta.SetForegroundColour(fg)
         if hasattr(self, 'lbl_stats'):
+            self.lbl_stats.SetBackgroundColour(bg)
             self.lbl_stats.SetForegroundColour(fg)
+
+        # [6.2c] Thumbnail placeholder — precisa de BG explícito
+        if hasattr(self, 'img_thumb'):
+            self.img_thumb.SetBackgroundColour(bg)
 
         # WebView — injeta CSS via JavaScript
         if self.browser:

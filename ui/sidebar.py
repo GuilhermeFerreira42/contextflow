@@ -34,10 +34,12 @@ class Sidebar(wx.Panel):
         
         header_lbl = wx.StaticText(self, label="Histórico")
         header_lbl.SetFont(wx.Font(10, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
+        header_lbl.SetForegroundColour(self.theme.get_fg_color())  # [6.2d]
         
         self.btn_toggle = wx.Button(self, label="☰", size=(30, 30), style=wx.BU_EXACTFIT)
         self.btn_toggle.SetToolTip("Ocultar Sidebar")
         self.btn_toggle.SetBackgroundColour(self.theme.get_border_color())
+        self.btn_toggle.SetForegroundColour(self.theme.get_fg_color())  # [6.2d]
         
         header_sizer.Add(header_lbl, 1, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 5)
         header_sizer.Add(self.btn_toggle, 0, wx.RIGHT, 5)
@@ -412,7 +414,7 @@ class Sidebar(wx.Panel):
             self.on_selection(data["id"])
 
     def apply_theme(self):
-        """[FASE 6.2] Atualiza cores internas da Sidebar."""
+        """[FASE 6.2c] Atualiza cores internas da Sidebar."""
         self.theme = ThemeManager()
         bg = self.theme.get_bg_color()
         fg = self.theme.get_fg_color()
@@ -421,8 +423,20 @@ class Sidebar(wx.Panel):
         self.tree.SetBackgroundColour(bg)
         self.tree.SetForegroundColour(fg)
         self.btn_toggle.SetBackgroundColour(self.theme.get_border_color())
+        self.btn_toggle.SetForegroundColour(fg)  # [6.2d] FG do botão ☰
 
-        # Recarrega a árvore para aplicar cores
+        # [6.2c] SearchCtrl — precisa de theming explícito no Windows
+        if hasattr(self, 'search_ctrl'):
+            self.search_ctrl.SetBackgroundColour(self.theme.get_input_bg())
+            self.search_ctrl.SetForegroundColour(self.theme.get_input_fg())
+
+        # [6.2c] Propaga BG+FG para todos os StaticText filhos diretos
+        for child in self.GetChildren():
+            if isinstance(child, wx.StaticText):
+                child.SetBackgroundColour(bg)
+                child.SetForegroundColour(fg)
+
+        # Recarrega árvore para aplicar novas cores nos itens
         try:
             self.load_history(self.search_ctrl.GetValue())
         except Exception:

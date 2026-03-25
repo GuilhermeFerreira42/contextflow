@@ -71,7 +71,7 @@ class TabAnalysis(wx.Panel):
         self.grid.SetColLabelSize(32)
         self.grid.SetRowLabelSize(0)
         self.grid.SetDefaultRowSize(52) # Conforto para Preview 80x45
-        self.grid.SetGridLineColour(wx.Colour(220, 220, 220)) # Light Gray lines for Light Mode
+        self.grid.SetGridLineColour(self.theme.get_grid_line())  # [6.2d] era hardcoded
         
         # Larguras Fixas
         self.grid.SetColSize(0, 40)   # [x]
@@ -109,7 +109,8 @@ class TabAnalysis(wx.Panel):
         
         # [CONTROLE MANUAL] Botão de Fechar Visualizador
         self.btn_close_viewer = wx.Button(self.pnl_side_info, label="✕ Fechar Visualizador", size=(-1, 30))
-        self.btn_close_viewer.SetBackgroundColour(wx.Colour(230, 230, 230))
+        self.btn_close_viewer.SetBackgroundColour(self.theme.get_highlight_color())  # [6.2d]
+        self.btn_close_viewer.SetForegroundColour(self.theme.get_fg_color())  # [6.2d]
         self.btn_close_viewer.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
         
         self.bmp_detail = wx.StaticBitmap(self.pnl_side_info, size=(320, 180))
@@ -721,34 +722,36 @@ class TabAnalysis(wx.Panel):
         wx.CallAfter(_update)
 
     def apply_theme(self):
-        """[FASE 6.2] Atualiza cores e refresca a grade analítica."""
+        """[FASE 6.2c] Atualiza cores e refresca a grade analítica."""
         self.theme = ThemeManager()
         bg = self.theme.get_bg_color()
         fg = self.theme.get_fg_color()
 
         self.SetBackgroundColour(bg)
 
-        # Toolbar (componente com apply_theme próprio)
+        # Toolbar
         if hasattr(self, 'toolbar_ctrl'):
             self.toolbar_ctrl.apply_theme()
 
-        # Grid — tratamento especializado
+        # Grid
         if hasattr(self, 'grid'):
             self.theme.apply_grid_theme(self.grid)
 
-        # Painéis estruturais
-        for panel in [self.pnl_master, self.pnl_detail, self.pnl_side_info]:
-            if hasattr(self, panel.__class__.__name__) or panel:
+        # [6.2c] Painéis estruturais via getattr seguro
+        for attr_name in ['pnl_master', 'pnl_detail', 'pnl_side_info']:
+            panel = getattr(self, attr_name, None)
+            if panel:
                 try:
                     panel.SetBackgroundColour(bg)
                 except Exception:
                     pass
 
-        # Labels e textos
+        # Labels — BG + FG
         if hasattr(self, 'lbl_side_title'):
+            self.lbl_side_title.SetBackgroundColour(bg)
             self.lbl_side_title.SetForegroundColour(self.theme.get_accent_color())
 
-        # TagWrapPanel (componente com apply_theme próprio)
+        # TagWrapPanel
         if hasattr(self, 'pnl_tags'):
             self.pnl_tags.apply_theme()
 
@@ -765,6 +768,10 @@ class TabAnalysis(wx.Panel):
         if hasattr(self, 'btn_close_viewer'):
             self.btn_close_viewer.SetBackgroundColour(self.theme.get_highlight_color())
             self.btn_close_viewer.SetForegroundColour(fg)
+
+        # [6.2c] StaticBitmap (bmp_detail) — fundo escuro intencional
+        if hasattr(self, 'bmp_detail'):
+            self.bmp_detail.SetBackgroundColour(wx.BLACK)
 
         self.Refresh()
 

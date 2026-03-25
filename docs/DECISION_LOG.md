@@ -62,3 +62,21 @@ F6.2 | RULE | CSS Dinâmico no Viewer | WebView injeta cores do `ThemeManager` v
 F6.2 | RULE | HeidiSQL density | Light Mode/SaaS Dark mantêm alta densidade técnica | Global
 F6.2 | BUGFIX | Correção do Dark Mode | Adaptação robusta via `theme.get_grid_bg()` e `ConsolePanel` | `ui/virtual_table.py`, `ui/panel_console.py`
 F6.2 | BUGFIX | Coluna Resumo Interativa | Disparo do resume via clique na célula sem texto extenso | `ui/tab_analysis.py`, `ui/virtual_table.py`
+
+### Fase 6.2c — Estabilização Final do Sistema de Temas
+F6.2c | BUGFIX | Propagação Notebook/Splitters | Notebook e Splitters não recebiam cor no toggle | `ui/app_window.py`
+F6.2c | BUGFIX | StaticText FG na Sidebar | Label "Histórico" ilegível no dark | `ui/sidebar.py`
+F6.2c | BUGFIX | StaticText FG no TabBatch | Labels de seção ilegíveis no dark | `ui/tab_batch.py`
+F6.2c | MOD | Simplificação apply_theme TabAnalysis | getattr em vez de __class__.__name__ | `ui/tab_analysis.py`
+F6.2c | RULE | Limitações wxWidgets documentadas | StaticBox e Notebook tabs não propagam FG no Windows | docs/
+F6.2c | MOD | GenButton para btn_reset_safety | Botão nativo ignora SetBackgroundColour no Windows | `ui/tab_batch.py`
+F6.2c | ADD | ThemeManager.apply_to_button() | Utilitário para aplicar tema a botões genéricos | `core/managers/theme_manager.py`
+F6.2c | ADD | DialogConfig._apply_internal_theme() | Propagação forçada para ScrolledWindow internos | `ui/dialog_config.py`
+F6.2c | MOD | ThemeDebugger whitelist | Falsos positivos em botões com cores intencionais | `scripts/debug_theme.py`
+
+### Fase 6.2d — Correções Finais de Contraste e Inicialização do Dark Mode
+F6.2d | BUGFIX | Inicialização dark mode | apply_theme chamado no __init__ quando theme=dark | `ui/app_window.py`
+F6.2d | BUGFIX | Botão ☰ invisível | FG hardcoded preto → tema dinâmico | `ui/sidebar.py`
+F6.2d | BUGFIX | Cores hardcoded em _init_ui | wx.Colour(230,230,230) → theme.get_highlight_color() | `ui/tab_batch.py`, `ui/tab_analysis.py`
+F6.2d | BUGFIX | WebView flash branco | background-color:white → bg_hex do tema | `ui/panel_detail.py`
+F6.2d | BUGFIX | Labels pretos na toolbar | FG não aplicado na construção | `ui/components/analysis_toolbar.py`

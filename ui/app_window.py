@@ -4,6 +4,7 @@ from core.pubsub import PubSub
 from constants import APP_NAME, APP_VERSION
 from core.app_state import AppState
 from core.managers.theme_manager import ThemeManager
+from scripts.debug_theme import ThemeDebugger
 
 # Importação das novas entidades segregadas (Fase 5.7)
 from ui.tab_batch import TabBatch
@@ -35,6 +36,11 @@ class AppWindow(wx.Frame):
         
         self.Maximize()
         self.Show(True)
+
+        # [6.2d] Aplica tema na inicialização se dark mode está salvo
+        if self.theme.get_theme_name() == "dark":
+            wx.CallAfter(self._apply_initial_theme)
+
         self.log_to_console("Sistema iniciado sob a Lei da Estabilidade (Fase 5.7).", "SYSTEM")
 
     def _init_ui(self):
@@ -302,15 +308,47 @@ class AppWindow(wx.Frame):
         """[FASE 6.2] Alterna entre temas via toolbar."""
         self.theme.toggle_theme()
 
+    def _apply_initial_theme(self):
+        """[6.2d] Aplica tema escuro na inicialização quando persistido."""
+        bg = self.theme.get_bg_color()
+        fg = self.theme.get_fg_color()
+        border = self.theme.get_border_color()
+
+        self.SetBackgroundColour(bg)
+        self.nb_container.SetBackgroundColour(bg)
+
+        try:
+            self.notebook.SetBackgroundColour(bg)
+            self.notebook.SetForegroundColour(fg)
+        except Exception:
+            pass
+
+        try:
+            self.main_splitter.SetBackgroundColour(border)
+            self.right_splitter.SetBackgroundColour(border)
+        except Exception:
+            pass
+
+        for comp in [self.sidebar, self.tab_batch, self.tab_analysis,
+                     self.panel_detail, self.panel_console]:
+            try:
+                if hasattr(comp, 'apply_theme'):
+                    comp.apply_theme()
+            except Exception:
+                pass
+
+        self.Refresh()
+        self.Update()
+
     def _on_theme_changed(self, theme, **kwargs):
-        """[FASE 6.2] Handler global de troca de tema — propagação controlada."""
+        """[FASE 6.2c] Handler global de troca de tema — propagação controlada."""
         def _apply():
-            # 1. Atualiza Toolbar
+            # 1. Toolbar label
             theme_label = "Modo Claro" if theme == "dark" else "Modo Escuro"
             self.toolbar.SetToolShortHelp(2005, theme_label)
             self.toolbar.Realize()
 
-            # 2. Atualiza menu de tema
+            # 2. Menu radio
             try:
                 if theme == "dark":
                     self.GetMenuBar().Check(2007, True)
@@ -319,11 +357,29 @@ class AppWindow(wx.Frame):
             except Exception:
                 pass
 
-            # 3. Atualiza janela principal e containers
-            self.SetBackgroundColour(self.theme.get_bg_color())
-            self.nb_container.SetBackgroundColour(self.theme.get_bg_color())
+            # 3. Frame e containers estruturais
+            bg = self.theme.get_bg_color()
+            fg = self.theme.get_fg_color()
+            border = self.theme.get_border_color()
 
-            # 4. Propaga para cada componente de alto nível (cada um sabe seus filhos)
+            self.SetBackgroundColour(bg)
+            self.nb_container.SetBackgroundColour(bg)
+
+            # [6.2c] Notebook — limitado no Windows nativo, mas funciona em GTK/macOS
+            try:
+                self.notebook.SetBackgroundColour(bg)
+                self.notebook.SetForegroundColour(fg)
+            except Exception:
+                pass
+
+            # [6.2c] Splitters — bordas visuais entre painéis
+            try:
+                self.main_splitter.SetBackgroundColour(border)
+                self.right_splitter.SetBackgroundColour(border)
+            except Exception:
+                pass
+
+            # 4. Componentes de alto nível (cada um propaga internamente)
             for comp in [self.sidebar, self.tab_batch, self.tab_analysis,
                          self.panel_detail, self.panel_console]:
                 try:
@@ -333,9 +389,16 @@ class AppWindow(wx.Frame):
                     import logging
                     logging.getLogger("contextflow").debug(f"Theme skip: {e}")
 
-            # 5. Força repintura global
+            # 5. Repintura
             self.Refresh()
             self.Update()
+
+            # [DEBUG 6.2c] Auditoria de propagação de tema
+            import logging
+            logging.getLogger("contextflow.theme.debug").setLevel(logging.WARNING)
+            ThemeDebugger.summary(self)
+            ThemeDebugger.audit(self)
+
             self.log_to_console(f"Tema alterado para: {theme.upper()}", "SYSTEM")
 
         wx.CallAfter(_apply)
