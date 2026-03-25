@@ -166,15 +166,22 @@ class DetailPanel(wx.Panel):
             self.img_thumb.SetBackgroundColour(bg)
 
         # WebView — injeta CSS via JavaScript
+        # [6.2d] Só executa JS se houver página carregada (evita erro de init)
         if self.browser:
-            bg_hex = bg.GetAsString(wx.C2S_HTML_SYNTAX)
-            fg_hex = fg.GetAsString(wx.C2S_HTML_SYNTAX)
-            js = f"document.body.style.backgroundColor='{bg_hex}';"
-            js += f"document.body.style.color='{fg_hex}';"
+            current_url = ""
             try:
-                self.browser.RunScript(js)
+                current_url = self.browser.GetCurrentURL()
             except Exception:
                 pass
+            if current_url and current_url not in ("", "about:blank"):
+                bg_hex = bg.GetAsString(wx.C2S_HTML_SYNTAX)
+                fg_hex = fg.GetAsString(wx.C2S_HTML_SYNTAX)
+                js = f"document.body.style.backgroundColor='{bg_hex}';"
+                js += f"document.body.style.color='{fg_hex}';"
+                try:
+                    self.browser.RunScript(js)
+                except Exception:
+                    pass
         elif hasattr(self, "txt_content"):
             self.txt_content.SetBackgroundColour(bg)
             self.txt_content.SetForegroundColour(fg)

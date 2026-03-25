@@ -118,18 +118,6 @@ class DialogConfig(wx.Dialog):
         # [6.2c] Aplica tema a todos os widgets internos
         self._apply_internal_theme()
 
-        # [DEBUG 6.2c] Auditoria do DialogConfig na criação
-        try:
-            from scripts.debug_theme import ThemeDebugger
-            import logging
-            debug_logger = logging.getLogger("contextflow.theme.debug")
-            debug_logger.setLevel(logging.WARNING)
-            debug_logger.info("=== AUDITORIA DialogConfig ===")
-            ThemeDebugger.summary(self)
-            ThemeDebugger.audit(self)
-        except ImportError:
-            pass
-
     def _apply_internal_theme(self):
         """[FASE 6.2c] Propaga cores do tema para todos os widgets internos do diálogo."""
         bg = self.theme.get_bg_color()

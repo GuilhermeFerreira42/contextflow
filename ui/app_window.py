@@ -4,7 +4,6 @@ from core.pubsub import PubSub
 from constants import APP_NAME, APP_VERSION
 from core.app_state import AppState
 from core.managers.theme_manager import ThemeManager
-from scripts.debug_theme import ThemeDebugger
 
 # Importação das novas entidades segregadas (Fase 5.7)
 from ui.tab_batch import TabBatch
@@ -392,12 +391,6 @@ class AppWindow(wx.Frame):
             # 5. Repintura
             self.Refresh()
             self.Update()
-
-            # [DEBUG 6.2c] Auditoria de propagação de tema
-            import logging
-            logging.getLogger("contextflow.theme.debug").setLevel(logging.WARNING)
-            ThemeDebugger.summary(self)
-            ThemeDebugger.audit(self)
 
             self.log_to_console(f"Tema alterado para: {theme.upper()}", "SYSTEM")
 
