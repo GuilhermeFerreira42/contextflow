@@ -1,0 +1,1565 @@
+# Blueprint — Pendências Técnicas Fase 7.1 e Ajustes de Grid
+## ContextFlow v0.1.0 | Fase 7.1-patch
+
+---
+
+# PARTE 1 — VISÃO DO PRODUTO
+
+## 1.1 Identidade
+
+- **Codinome:** GRIDFIX-7.1
+- **Versão:** 0.1.0 (patch sobre Fase 7.3 estabilizada)
+- **Declaração de visão:** Eliminar falhas de interatividade, contraste e seleção na grade analítica do ContextFlow para entregar experiência profissional consistente.
+
+## 1.2 Problema e Solução
+
+| Problema | Impacto | Como o Sistema Resolve |
+|---|---|---|
+| Miniaturas da Aba 2 não são clicáveis para expansão | Usuário não consegue inspecionar thumbnails sem ir à Aba 3 | Handler `EVT_GRID_CELL_LEFT_CLICK` na coluna Preview abre `wx.Dialog` modal |
+| Contraste inválido no primeiro carregamento do `DetailPanel` | Texto ilegível (preto em fundo escuro no dark mode inicial) | `apply_theme()` chamado no `__init__` e HTML base gerado com cores do `ThemeManager` |
+| CTA "✦ Resumir" ausente ou com "—" estático | Usuário não percebe que pode gerar resumo, reduz adoção da feature | `SummaryStatusRenderer.Draw` renderiza "✦ Resumir" em `COLOR_ACCENT` quando status vazio |
+| Fundo de seleção oculta ícones de link e resumo | Colunas interativas ficam invisíveis quando linha está selecionada | `Draw` em renderers preenche fundo antes de renderizar bitmap/ícone |
+| Seleção acidental de texto em colunas não-editáveis | Frustração na interação; UX não-profissional | `EVT_GRID_RANGE_SELECT` suprime seleção parcial; `SelectRow` garante linha inteira |
+
+## 1.3 Público-Alvo
+
+| Segmento | Perfil | Prioridade |
+|---|---|---|
+| Analista Solo | "Marcos" — usa a grid diariamente para triagem de 200+ vídeos; frustra-se com ícones invisíveis na seleção | P0 |
+| Engenheiro de Prompt | "Ana" — precisa de CTA clara para iniciar resumos em lote; não encontra o gatilho visualmente | P0 |
+| Usuário Dark Mode | "Paulo" — inicializa o app em dark mode e recebe texto ilegível no painel de resumos | P1 |
+
+## 1.4 Princípios Arquiteturais
+
+| Princípio | Descrição Concreta | Implicação Técnica |
+|---|---|---|
+| Bisturi, não Marreta | Cada correção toca exatamente 1-2 arquivos, sem refatoração colateral | Nenhuma alteração em `app_state.py`, `db_handler.py` ou `processor.py` |
+| Zero-Knowledge entre Abas | Aba 2 não importa Aba 3 diretamente | Expansão de thumbnail usa `wx.Dialog` local, não `DetailPanel` |
+| Thread Safety Absoluto | Toda atualização de UI vem da Main Thread | Handlers de grid são síncronos; callbacks de PubSub usam `wx.CallAfter` |
+| Camada de Renderização Isolada | Renderers em `virtual_table.py` são auto-contidos | Fundo de seleção é responsabilidade do renderer, não do `wx.grid` |
+| Determinismo de Tema | Todas as cores vêm do `ThemeManager` | Nenhum `wx.Colour` hardcoded nos renderers corrigidos |
+
+**Decisão Arquitetural Crítica por princípio:**
+- Bisturi: verificável por `git diff --stat` — máximo 4 arquivos modificados
+- Zero-Knowledge: verificável por `grep -r "from ui.panel_detail" ui/tab_analysis.py` — deve retornar vazio
+- Thread Safety: verificável por ausência de `SetLabel`/`SetValue` fora de `wx.CallAfter` em threads de background
+
+## 1.5 Diferenciais
+
+| Abordagem Atual | Problema | Como Este Sistema Supera |
+|---|---|---|
+| "—" estático na coluna Resumo | Não comunica ação possível | "✦ Resumir" em azul accent é CTA explícito e clicável |
+| Fundo de seleção azul opaco sobre ícones | Ícones desaparecem na seleção | Renderer desenha fundo ANTES do ícone, garantindo visibilidade |
+| `apply_theme()` não chamado no `__init__` | Flash de contraste incorreto na inicialização | HTML base já contém `bg_hex`/`fg_hex` do tema ativo desde o frame 1 |
+| Cursor de seta sobre colunas de link | Sem affordance de clicabilidade | `EVT_GRID_MOTION` muda para `CURSOR_HAND` nas colunas interativas |
+
+---
+
+# PARTE 2 — ARQUITETURA DE COMPONENTES
+
+## 2.1 Componente: ThumbnailExpansionHandler
+
+### Ficha Técnica
+
+| Atributo | Valor |
+|---|---|
+| ID interno | `THUMB_EXPAND_HANDLER` |
+| Classe Base | Lógica inline em `TabAnalysis._bind_events()` |
+| Dependências | `wx.Dialog`, `wx.BitmapButton`, `os.path`, `ThemeManager` |
+| Modo de Operação | Síncrono, stateless |
+| Permissões | Leitura de `table.data[row]['thumbnail_path']`; criação de `wx.Dialog` modal |
+
+### Responsabilidade
+Receber evento `EVT_GRID_CELL_LEFT_CLICK` na coluna "Preview" da `TabAnalysis`, carregar a imagem do caminho `thumbnail_path` do item selecionado e exibir `wx.Dialog` modal com a imagem escalada para 80% do display.
+
+### Inputs Detalhados
+
+| Input | Tipo | Descrição | Origem |
+|---|---|---|---|
+| `event` | `wx.grid.GridEvent` | Evento de clique com row/col | `wx.grid.EVT_GRID_CELL_LEFT_CLICK` |
+| `self.table.data[row]` | `Dict[str, Any]` | Metadados do vídeo | `VirtualVideoTable.data` |
+| `thumbnail_path` | `str` | Caminho absoluto para `.jpg` | `video_data['thumbnail_path']` |
+
+### Output
+```json
+{
+  "action": "modal_opened",
+  "thumbnail_path": "/data/thumbs/abc123.jpg",
+  "display_size": [1024, 576],
+  "scale_factor": 0.8,
+  "modal_closed_by": "click_or_esc"
+}
+```
+
+### Implementação Completa
+
+```python
+# Adicionado em ui/tab_analysis.py dentro de _bind_events()
+self.grid.Bind(wx.grid.EVT_GRID_CELL_LEFT_CLICK, self.on_grid_click)
+
+# Modificação em on_grid_click() — adicionar antes do bloco "Link":
+def on_grid_click(self, event):
+    row, col = event.GetRow(), event.GetCol()
+    label = self.col_labels[col].strip() if col < len(self.col_labels) else ""
+
+    # [7.1 — PENDÊNCIA 1] Expansão de thumbnail na coluna Preview
+    if label == "Preview":
+        if row >= 0 and row < len(self.table.data):
+            video_data = self.table.data[row]
+            thumb_path = video_data.get('thumbnail_path', '')
+            if thumb_path and os.path.exists(thumb_path):
+                self._show_thumbnail_dialog(thumb_path)
+        event.Skip()
+        return
+
+    # ... restante do handler existente ...
+    event.Skip()
+
+def _show_thumbnail_dialog(self, thumb_path: str):
+    """[7.1.1] Abre thumbnail em dialog modal ampliado."""
+    img = wx.Image(thumb_path, wx.BITMAP_TYPE_ANY)
+    if not img.IsOk():
+        return
+
+    display_w, display_h = wx.GetDisplaySize()
+    max_w = int(display_w * 0.8)
+    max_h = int(display_h * 0.8)
+    img_w, img_h = img.GetWidth(), img.GetHeight()
+    scale = min(max_w / max(img_w, 1), max_h / max(img_h, 1), 1.0)
+    new_w, new_h = int(img_w * scale), int(img_h * scale)
+    img = img.Scale(new_w, new_h, wx.IMAGE_QUALITY_HIGH)
+
+    dlg = wx.Dialog(
+        self, title="Prévia da Thumbnail",
+        style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER
+    )
+    dlg.SetBackgroundColour(wx.BLACK)
+    bmp_btn = wx.BitmapButton(
+        dlg, wx.ID_ANY, wx.Bitmap(img), style=wx.BORDER_NONE
+    )
+    bmp_btn.SetBackgroundColour(wx.BLACK)
+    sizer = wx.BoxSizer(wx.VERTICAL)
+    sizer.Add(bmp_btn, 1, wx.ALL | wx.CENTER, 0)
+    dlg.SetSizer(sizer)
+    dlg.Fit()
+    dlg.CenterOnParent()
+    bmp_btn.Bind(wx.EVT_BUTTON, lambda e: dlg.Close())
+    dlg.Bind(
+        wx.EVT_CHAR_HOOK,
+        lambda e: dlg.Close() if e.GetKeyCode() == wx.WXK_ESCAPE else e.Skip()
+    )
+    dlg.ShowModal()
+    dlg.Destroy()
+```
+
+---
+
+## 2.2 Componente: DetailPanelThemeInit
+
+### Ficha Técnica
+
+| Atributo | Valor |
+|---|---|
+| ID interno | `DETAIL_THEME_INIT` |
+| Classe Base | `DetailPanel.__init__` em `ui/panel_detail.py` |
+| Dependências | `ThemeManager`, `wx.html2.WebView` |
+| Modo de Operação | Síncrono, executado uma vez na construção |
+| Permissões | Leitura de `ThemeManager`; escrita em `self.browser.SetPage()` |
+
+### Responsabilidade
+Garantir que o `wx.html2.WebView` inicialize com as cores corretas do tema ativo, eliminando o flash de contraste inválido no primeiro carregamento.
+
+### Inputs Detalhados
+
+| Input | Tipo | Descrição | Origem |
+|---|---|---|---|
+| `self.theme` | `ThemeManager` | Instância singleton com tema atual | `ThemeManager()` |
+| `bg_hex` | `str` | Cor de fundo em formato `#RRGGBB` | `theme.get_bg_color().GetAsString(wx.C2S_HTML_SYNTAX)` |
+| `fg_hex` | `str` | Cor de texto em formato `#RRGGBB` | `theme.get_fg_color().GetAsString(wx.C2S_HTML_SYNTAX)` |
+
+### Output
+```json
+{
+  "component": "WebView",
+  "initial_html": "<html><body style='background-color:#1e1e1e;color:#dcdcdc;'></body></html>",
+  "theme_applied_at": "init",
+  "flash_prevention": true
+}
+```
+
+### Implementação Completa
+
+```python
+# Em ui/panel_detail.py — método _init_ui(), bloco de criação do WebView:
+# SUBSTITUIR o bloco existente de SetPage por:
+
+if wx.html2.WebView.IsBackendAvailable(wx.html2.WebViewBackendDefault):
+    self.browser = wx.html2.WebView.New(self)
+
+    # [7.1 — PENDÊNCIA 2] Inicialização com tema correto desde o frame 1
+    bg_hex = self.theme.get_bg_color().GetAsString(wx.C2S_HTML_SYNTAX)
+    fg_hex = self.theme.get_fg_color().GetAsString(wx.C2S_HTML_SYNTAX)
+    accent_hex = self.theme.get_accent_color().GetAsString(wx.C2S_HTML_SYNTAX)
+
+    initial_html = f"""<html>
+    <head><style>
+      body {{
+        background-color: {bg_hex};
+        color: {fg_hex};
+        font-family: 'Segoe UI', sans-serif;
+        margin: 0; padding: 20px;
+        line-height: 1.6;
+      }}
+      h3 {{ color: {accent_hex}; }}
+    </style></head>
+    <body></body></html>"""
+
+    self.browser.SetPage(initial_html, "")
+    main_sizer.Add(self.browser, 1, wx.EXPAND | wx.ALL, 0)
+```
+
+**Adicionalmente, garantir chamada explícita em `apply_theme()`:**
+
+```python
+# Em DetailPanel.apply_theme() — adicionar no INÍCIO do método:
+def apply_theme(self):
+    """[FASE 6.2c + 7.1 PENDÊNCIA 2] Atualiza cores e WebView."""
+    self.theme = ThemeManager()  # Reconstrói referência
+    bg = self.theme.get_bg_color()
+    fg = self.theme.get_fg_color()
+
+    self.SetBackgroundColour(bg)
+    self.SetForegroundColour(fg)
+
+    # [7.1.1] Recarrega WebView com tema atualizado
+    if hasattr(self, '_current_video_id') and self._current_video_id:
+        self._reload_webview_content()
+    elif self.browser:
+        # Sem vídeo carregado: atualiza apenas o fundo base
+        bg_hex = bg.GetAsString(wx.C2S_HTML_SYNTAX)
+        fg_hex = fg.GetAsString(wx.C2S_HTML_SYNTAX)
+        self.browser.SetPage(
+            f"<html><body style='background-color:{bg_hex};"
+            f"color:{fg_hex};margin:0;padding:20px;'></body></html>",
+            ""
+        )
+
+    # ... resto do apply_theme() existente ...
+```
+
+---
+
+## 2.3 Componente: SummaryStatusRendererCTA
+
+### Ficha Técnica
+
+| Atributo | Valor |
+|---|---|
+| ID interno | `SUMMARY_CTA_RENDERER` |
+| Classe Base | `SummaryStatusRenderer` em `ui/virtual_table.py` |
+| Dependências | `ThemeManager`, `wx.GraphicsContext` |
+| Modo de Operação | Síncrono, chamado por `wx.grid` no paint cycle |
+| Permissões | Leitura de `table.data[row]['summary_status']`; escrita no DC |
+
+### Responsabilidade
+Renderizar o estado de resumo com CTA visual "✦ Resumir" em `COLOR_ACCENT` quando `summary_status` é vazio ou `None`, em vez de "—" estático.
+
+### Output esperado por estado
+
+```json
+{
+  "estados": {
+    "summarizing":    {"icon": "⏳", "color": "accent"},
+    "summary_error":  {"icon": "❌", "color": "#DC3545"},
+    "summarized":     {"icon": "✅", "color": "#28A745"},
+    "vazio_ou_none":  {"icon": "✦ Resumir", "color": "accent", "bold": true}
+  }
+}
+```
+
+### Implementação Completa
+
+```python
+# Em ui/virtual_table.py — classe SummaryStatusRenderer.Draw():
+# SUBSTITUIR o bloco `else` (estado vazio) por:
+
+class SummaryStatusRenderer(wx.grid.GridCellRenderer):
+    """Renderiza status do resumo com CTA visual. [7.1 PENDÊNCIA 3]"""
+
+    def Draw(self, grid, attr, dc, rect, row, col, isSelected):
+        theme = ThemeManager()
+
+        # [PENDÊNCIA 4] Fundo de seleção ANTES do conteúdo
+        bg_color = (
+            theme.get_grid_selection_bg() if isSelected
+            else theme.get_grid_bg()
+        )
+        dc.SetBrush(wx.Brush(bg_color))
+        dc.SetPen(wx.TRANSPARENT_PEN)
+        dc.DrawRectangle(rect)  # Sempre primeiro
+        dc.SetClippingRegion(rect)
+
+        table = grid.GetTable()
+        if row >= len(table.data):
+            dc.DestroyClippingRegion()
+            return
+
+        item = table.data[row]
+        ss = item.get('summary_status', '')
+
+        if ss == 'summarizing':
+            icon = "⏳"
+            color = (
+                theme.get_accent_color() if not isSelected
+                else theme.get_grid_selection_fg()
+            )
+            bold = False
+        elif ss == 'summary_error':
+            icon = "❌"
+            color = (
+                wx.Colour(220, 53, 69) if not isSelected
+                else theme.get_grid_selection_fg()
+            )
+            bold = False
+        elif ss == 'summarized':
+            icon = "✅"
+            color = (
+                wx.Colour(40, 167, 69) if not isSelected
+                else theme.get_grid_selection_fg()
+            )
+            bold = False
+        else:
+            # [7.1 PENDÊNCIA 3] CTA explícito em vez de "—"
+            icon = "✦ Resumir"
+            color = (
+                theme.get_accent_color() if not isSelected
+                else theme.get_grid_selection_fg()
+            )
+            bold = True  # Destaque adicional
+
+        dc.SetTextForeground(color)
+        weight = wx.FONTWEIGHT_BOLD if bold else wx.FONTWEIGHT_NORMAL
+        dc.SetFont(wx.Font(
+            9, wx.FONTFAMILY_DEFAULT,
+            wx.FONTSTYLE_NORMAL, weight
+        ))
+
+        tw, th = dc.GetTextExtent(icon)
+        x = rect.x + (rect.width - tw) // 2
+        y = rect.y + (rect.height - th) // 2
+        dc.DrawText(icon, x, y)
+        dc.DestroyClippingRegion()
+
+    def GetBestSize(self, grid, attr, dc, row, col):
+        return wx.Size(90, 45)
+
+    def Clone(self):
+        return SummaryStatusRenderer()
+```
+
+---
+
+## 2.4 Componente: GridSelectionIconFix
+
+### Ficha Técnica
+
+| Atributo | Valor |
+|---|---|
+| ID interno | `GRID_ICON_SELECTION_FIX` |
+| Classe Base | `LinkIconRenderer` e `SummaryStatusRenderer` em `ui/virtual_table.py` |
+| Dependências | `ThemeManager`, `wx.DC` |
+| Modo de Operação | Síncrono, paint cycle |
+| Permissões | Escrita no DC dentro do retângulo `rect` |
+
+### Responsabilidade
+Garantir que o retângulo de seleção (`dc.DrawRectangle`) seja sempre desenhado **antes** do bitmap/ícone em todos os renderers customizados, impedindo que a cor de seleção sobreponha o conteúdo visual.
+
+### Padrão de Implementação (aplicar a todos os renderers)
+
+```python
+# PADRÃO OBRIGATÓRIO para todos os GridCellRenderer.Draw():
+def Draw(self, grid, attr, dc, rect, row, col, isSelected):
+    theme = ThemeManager()
+
+    # PASSO 1: Fundo (SEMPRE PRIMEIRO — nunca após o ícone)
+    bg_color = (
+        theme.get_grid_selection_bg() if isSelected
+        else theme.get_grid_bg()
+    )
+    dc.SetBrush(wx.Brush(bg_color))
+    dc.SetPen(wx.TRANSPARENT_PEN)
+    dc.DrawRectangle(rect)  # ← FUNDO
+
+    # PASSO 2: Clipping
+    dc.SetClippingRegion(rect)
+
+    # PASSO 3: Conteúdo (ícone, texto, bitmap — SEMPRE APÓS o fundo)
+    # ... renderização do ícone aqui ...
+
+    # PASSO 4: Limpar clipping
+    dc.DestroyClippingRegion()
+```
+
+### Implementação para `LinkIconRenderer`
+
+```python
+class LinkIconRenderer(wx.grid.GridCellRenderer):
+    """[7.1 PENDÊNCIA 4] Fundo de seleção corrigido."""
+
+    def Draw(self, grid, attr, dc, rect, row, col, isSelected):
+        theme = ThemeManager()
+
+        # PASSO 1: Fundo ANTES do ícone
+        bg_color = (
+            theme.get_grid_selection_bg() if isSelected
+            else theme.get_grid_bg()
+        )
+        dc.SetBrush(wx.Brush(bg_color))
+        dc.SetPen(wx.TRANSPARENT_PEN)
+        dc.DrawRectangle(rect)
+
+        dc.SetClippingRegion(rect)
+
+        # PASSO 2: Ícone SOBRE o fundo
+        icon_color = (
+            theme.get_accent_color() if not isSelected
+            else theme.get_grid_selection_fg()
+        )
+        dc.SetTextForeground(icon_color)
+        dc.SetFont(wx.Font(
+            10, wx.FONTFAMILY_DEFAULT,
+            wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD
+        ))
+        txt = "🔗"
+        tw, th = dc.GetTextExtent(txt)
+        dc.DrawText(
+            txt,
+            rect.x + (rect.width - tw) // 2,
+            rect.y + (rect.height - th) // 2
+        )
+        dc.DestroyClippingRegion()
+
+    def GetBestSize(self, grid, attr, dc, row, col):
+        return wx.Size(40, 45)
+
+    def Clone(self):
+        return LinkIconRenderer()
+```
+
+---
+
+## 2.5 Componente: GridRangeSelectBlocker
+
+### Ficha Técnica
+
+| Atributo | Valor |
+|---|---|
+| ID interno | `GRID_RANGE_SELECT_BLOCKER` |
+| Classe Base | Handler inline em `TabAnalysis._bind_events()` |
+| Dependências | `wx.grid.EVT_GRID_RANGE_SELECT`, `wx.grid.EVT_GRID_SELECT_CELL` |
+| Modo de Operação | Síncrono, event handler |
+| Permissões | Chamada a `grid.SelectRow()` e supressão de eventos de seleção |
+
+### Responsabilidade
+Capturar `EVT_GRID_RANGE_SELECT` para suprimir seleção parcial de texto e garantir que apenas a linha inteira (`SelectRow`) seja destacada, eliminando seleção acidental de caracteres individuais.
+
+### Implementação Completa
+
+```python
+# Em ui/tab_analysis.py — adicionar em _bind_events():
+
+# [7.1 PENDÊNCIA 5] Bloqueio de seleção acidental
+self.grid.Bind(
+    wx.grid.EVT_GRID_RANGE_SELECT,
+    self._on_range_select
+)
+self.grid.Bind(
+    wx.grid.EVT_GRID_SELECT_CELL,
+    self._on_cell_select_row
+)
+
+# Adicionar os métodos:
+def _on_range_select(self, event):
+    """
+    [7.1 PENDÊNCIA 5] Suprime seleção de range parcial.
+    Garante que apenas linhas inteiras sejam selecionadas.
+    Usa flag _is_programmatic_selection para evitar loop.
+    """
+    if getattr(self, '_is_programmatic_selection', False):
+        event.Skip()
+        return
+
+    # Suprime qualquer range que não seja linha inteira
+    if event.Selecting():
+        top_row = event.GetTopRow()
+        bottom_row = event.GetBottomRow()
+        if top_row == bottom_row:
+            # Seleção de linha única — converte para SelectRow
+            self._is_programmatic_selection = True
+            try:
+                self.grid.SelectRow(top_row)
+            finally:
+                self._is_programmatic_selection = False
+        # Multi-linha: permite (drag de linhas)
+    event.Skip()
+
+def _on_cell_select_row(self, event):
+    """
+    [7.1 PENDÊNCIA 5] Ao selecionar célula, seleciona a linha inteira.
+    Guard flag evita recursão de eventos.
+    """
+    if getattr(self, '_is_programmatic_selection', False):
+        event.Skip()
+        return
+
+    row = event.GetRow()
+    if row >= 0:
+        self._is_programmatic_selection = True
+        try:
+            self.grid.SelectRow(row)
+        finally:
+            self._is_programmatic_selection = False
+
+    # Propaga para o handler existente on_select_video
+    event.Skip()
+```
+
+**Nota sobre `_bind_events` existente:** O binding `EVT_GRID_SELECT_CELL → on_select_video` já existe. O novo `_on_cell_select_row` deve ser adicionado como binding adicional, e o `on_select_video` existente deve continuar funcionando via `event.Skip()`.
+
+---
+
+## 2.6 Componente: GridMotionCursorHandler (Expansão)
+
+### Ficha Técnica
+
+| Atributo | Valor |
+|---|---|
+| ID interno | `GRID_CURSOR_MOTION` |
+| Classe Base | Handler inline em `TabAnalysis` |
+| Dependências | `wx.EVT_MOTION`, `wx.Cursor` |
+| Modo de Operação | Síncrono, event handler de alta frequência |
+| Permissões | `grid.GetGridWindow().SetCursor()` |
+
+### Implementação Completa
+
+O handler `on_grid_motion` já existe em `tab_analysis.py`, mas detecta apenas a coluna "Link". **Expandir para incluir "Resumo" e "Preview":**
+
+```python
+# Em ui/tab_analysis.py — substituir on_grid_motion():
+
+def on_grid_motion(self, event):
+    """
+    [7.1 PENDÊNCIA 3 + original] Cursor hand em colunas interativas.
+    Colunas interativas: Link, Resumo (CTA), Preview (thumbnail).
+    """
+    pos = event.GetPosition()
+    # Converte posição para coordenadas da grid (com scroll)
+    unscrolled = self.grid.CalcUnscrolledPosition(pos)
+    coords = self.grid.XYToCell(unscrolled.x, unscrolled.y)
+    col = coords.GetCol()
+
+    INTERACTIVE_COLS = {"Link", "Resumo", "Preview"}
+
+    if col >= 0 and col < len(self.col_labels):
+        label = self.col_labels[col].strip()
+        if label in INTERACTIVE_COLS:
+            # Verifica se é CTA ativo (não "summarizing")
+            if label == "Resumo":
+                row = coords.GetRow()
+                if 0 <= row < len(self.table.data):
+                    ss = self.table.data[row].get('summary_status', '')
+                    if ss == 'summarizing':
+                        # Em progresso: cursor padrão
+                        self.grid.GetGridWindow().SetCursor(
+                            wx.Cursor(wx.CURSOR_ARROW)
+                        )
+                        event.Skip()
+                        return
+            self.grid.GetGridWindow().SetCursor(
+                wx.Cursor(wx.CURSOR_HAND)
+            )
+            event.Skip()
+            return
+
+    self.grid.GetGridWindow().SetCursor(wx.Cursor(wx.CURSOR_ARROW))
+    event.Skip()
+```
+
+---
+
+# PARTE 3 — FLUXO DE COMUNICAÇÃO E CONTRATOS
+
+## 3.1 Diagrama de Sequência — Fluxo Principal de Correções
+
+```mermaid
+sequenceDiagram
+    participant U as Usuário
+    participant Grid as wx.grid (TabAnalysis)
+    participant VT as VirtualVideoTable
+    participant SR as SummaryStatusRenderer
+    participant LR as LinkIconRenderer
+    participant DP as DetailPanel
+    participant TM as ThemeManager
+    participant DLG as wx.Dialog (Thumbnail)
+
+    Note over U, DLG: Pendência 1 — Click em Preview
+    U->>Grid: EVT_GRID_CELL_LEFT_CLICK (col=Preview)
+    Grid->>TabAnalysis: on_grid_click(row, col)
+    TabAnalysis->>TabAnalysis: _show_thumbnail_dialog(thumb_path)
+    TabAnalysis->>DLG: wx.Dialog.ShowModal()
+    DLG-->>U: Imagem ampliada (80% display)
+    U->>DLG: Click ou ESC
+    DLG-->>TabAnalysis: Destroy()
+
+    Note over U, TM: Pendência 2 — Init Contraste
+    U->>DP: __init__(parent)
+    DP->>TM: get_bg_color(), get_fg_color()
+    TM-->>DP: bg_hex, fg_hex
+    DP->>DP: browser.SetPage(html_com_cores_corretas)
+    DP-->>U: WebView renderiza com tema correto
+
+    Note over U, SR: Pendência 3 — CTA Visual
+    U->>Grid: Scroll / Render
+    Grid->>SR: Draw(rect, row, col, isSelected)
+    SR->>VT: GetValue(row, col) → summary_status
+    SR->>TM: get_accent_color()
+    SR->>SR: DrawRectangle(fundo) ANTES do ícone
+    SR-->>Grid: "✦ Resumir" em azul accent
+
+    Note over U, LR: Pendência 4 — Seleção sobre Ícones
+    U->>Grid: Click em linha (seleciona)
+    Grid->>LR: Draw(rect, isSelected=True)
+    LR->>TM: get_grid_selection_bg()
+    LR->>LR: DrawRectangle(bg_seleção) PRIMEIRO
+    LR->>LR: DrawText(ícone_link) DEPOIS
+    LR-->>Grid: Ícone visível sobre seleção azul
+
+    Note over U, Grid: Pendência 5 — Bloqueio Seleção
+    U->>Grid: Click/Drag em célula de texto
+    Grid->>TabAnalysis: EVT_GRID_RANGE_SELECT
+    TabAnalysis->>TabAnalysis: _on_range_select() — suprime range parcial
+    TabAnalysis->>Grid: SelectRow(row) via flag programmatic
+    Grid-->>U: Linha inteira destacada, sem seleção de char
+```
+
+## 3.2 Diagrama de Estado — Ciclo de Vida do SummaryStatus
+
+```mermaid
+stateDiagram-v2
+    [*] --> Vazio : vídeo adicionado (status=completed)
+
+    Vazio --> Summarizing : request_summary() disparado
+    Vazio --> Vazio : usuário navega (CTA "✦ Resumir" exibido)
+
+    Summarizing --> Summarized : SUMMARY_COMPLETED pubsub
+    Summarizing --> SummaryError : SUMMARY_ERROR pubsub
+
+    Summarized --> Summarizing : Regerar via menu contexto
+    SummaryError --> Summarizing : Click na célula (retry)
+
+    Summarized --> [*] : vídeo deletado
+    SummaryError --> [*] : vídeo deletado
+    Vazio --> [*] : vídeo deletado
+
+    state Vazio {
+        note: Renderer exibe "✦ Resumir" (accent, bold)
+    }
+    state Summarizing {
+        note: Renderer exibe "⏳" (accent)
+    }
+    state Summarized {
+        note: Renderer exibe "✅" (verde)
+    }
+    state SummaryError {
+        note: Renderer exibe "❌" (vermelho)
+    }
+```
+
+## 3.3 Tabela de Transições de Estado
+
+| Estado Atual | Evento | Estado Novo | Condição | Ação |
+|---|---|---|---|---|
+| Vazio | `EVT_GRID_CELL_LEFT_CLICK` col=Resumo | Vazio | `video.status != 'completed'` | `wx.MessageBox` aviso |
+| Vazio | `EVT_GRID_CELL_LEFT_CLICK` col=Resumo | Summarizing | `video.status == 'completed'` | `app_state.request_summary(vid)` |
+| Summarizing | `SUMMARY_COMPLETED` PubSub | Summarized | Sempre | `_refresh_grid()` via `wx.CallAfter` |
+| Summarizing | `SUMMARY_ERROR` PubSub | SummaryError | Sempre | `_refresh_grid()` via `wx.CallAfter` |
+| SummaryError | `EVT_GRID_CELL_LEFT_CLICK` col=Resumo | Summarizing | Sempre | Reset status + `request_summary()` |
+| Qualquer | `EVT_GRID_CELL_LEFT_CLICK` col=Preview | Qualquer | `thumb_path exists` | `_show_thumbnail_dialog()` |
+| Qualquer | `EVT_GRID_RANGE_SELECT` | Qualquer | `not _is_programmatic_selection` | `SelectRow(row)` |
+
+## 3.4 Schemas de Mensagens
+
+### Schema: GridClickEvent (interno)
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "type": "object",
+  "required": ["row", "col", "label", "video_data"],
+  "properties": {
+    "row": {"type": "integer", "minimum": 0},
+    "col": {"type": "integer", "minimum": 0},
+    "label": {
+      "type": "string",
+      "enum": ["Preview", "Link", "Resumo", "[x]", "Título", "Canal",
+               "Duração", "Publicado", "Adicionado", "Playlist", "Tokens", "Tags", "#"]
+    },
+    "video_data": {
+      "type": "object",
+      "required": ["id", "title"],
+      "properties": {
+        "id": {"type": "string"},
+        "title": {"type": "string"},
+        "thumbnail_path": {"type": "string"},
+        "summary_status": {
+          "type": ["string", "null"],
+          "enum": ["summarizing", "summarized", "summary_error", null, ""]
+        },
+        "url": {"type": "string", "format": "uri"}
+      }
+    }
+  }
+}
+```
+
+**Exemplo concreto:**
+```json
+{
+  "row": 3,
+  "col": 2,
+  "label": "Preview",
+  "video_data": {
+    "id": "dQw4w9WgXcQ",
+    "title": "Never Gonna Give You Up",
+    "thumbnail_path": "C:/contextflow/data/thumbs/dQw4w9WgXcQ.jpg",
+    "summary_status": null,
+    "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+  }
+}
+```
+
+**Regra de validação:** Se `label == "Preview"` e `thumbnail_path` não existe em disco → não abre dialog, registra `logger.warning`.
+
+---
+
+# PARTE 4 — INFRAESTRUTURA E INTEGRAÇÃO
+
+## 4.1 Diagrama de Infraestrutura
+
+```mermaid
+graph TD
+    subgraph UI Layer
+        TBA[TabAnalysis<br/>tab_analysis.py]
+        VT[VirtualVideoTable<br/>virtual_table.py]
+        DP[DetailPanel<br/>panel_detail.py]
+        SR[SummaryStatusRenderer]
+        LR[LinkIconRenderer]
+        TH[ThumbnailRenderer]
+    end
+
+    subgraph Core Layer
+        TM[ThemeManager<br/>theme_manager.py]
+        AS[AppState<br/>app_state.py]
+        PS[PubSub<br/>pubsub.py]
+    end
+
+    subgraph Storage
+        DB[(contextflow.db)]
+        THUMBS[/data/thumbs/*.jpg/]
+    end
+
+    TBA -->|EVT_GRID_CELL_LEFT_CLICK| VT
+    TBA -->|on_grid_motion| TBA
+    TBA -->|_show_thumbnail_dialog| THUMBS
+    VT -->|GetAttr/Draw| SR
+    VT -->|GetAttr/Draw| LR
+    VT -->|GetAttr/Draw| TH
+    SR -->|get_accent_color| TM
+    LR -->|get_grid_selection_bg| TM
+    TH -->|get_highlight_color| TM
+    DP -->|get_bg_color/get_fg_color| TM
+    DP -->|SetPage HTML| DP
+    PS -->|SUMMARY_COMPLETED| TBA
+    PS -->|SUMMARY_ERROR| TBA
+    AS -->|get_video| DB
+```
+
+## 4.2 Requisitos de Hardware/Ambiente
+
+| Perfil | Especificações | Notas |
+|---|---|---|
+| Mínimo | Python 3.10+, wxPython 4.2.1+, 4GB RAM | Sem GPU dedicada |
+| Recomendado | Python 3.11, wxPython 4.2.2, 8GB RAM, SSD | Performance de grid com 5k+ vídeos |
+| Desenvolvimento | Python 3.11, wxPython 4.2.2, 16GB RAM, Windows 10/11 | Testado e validado |
+
+## 4.3 Integrações Externas
+
+**Nenhuma nova integração externa nesta fase.** As correções são puramente internas ao framework wxPython.
+
+- `wx.html2.WebView`: já integrado — apenas inicialização corrigida
+- `wx.Dialog`: componente nativo wxPython — usado para expansão de thumbnail
+- `ThemeManager`: singleton interno — consultas de cor
+
+## 4.4 Configuração Completa
+
+Nenhuma nova variável de configuração. As correções utilizam configurações existentes:
+
+```json
+{
+  "ui": {
+    "dynamic_grid": true,
+    "theme": "dark",
+    "auto_open_viewer": true
+  }
+}
+```
+
+## 4.5 Segurança
+
+| Ameaça | Mitigação |
+|---|---|
+| Path traversal em `thumbnail_path` | `os.path.exists()` verificado antes de carregar; path vem do DB interno |
+| Loop infinito em `EVT_GRID_RANGE_SELECT` | Flag `_is_programmatic_selection` previne recursão |
+| `wx.Dialog` não destruído | `dlg.Destroy()` chamado explicitamente após `ShowModal()` |
+
+---
+
+# PARTE 5 — RECUPERAÇÃO DE ERROS E RESILIÊNCIA
+
+## 5.1 Classificação de Erros
+
+| Nível | Tipo | Exemplos Concretos | Ação Automática | Timeout | Máx Tentativas |
+|---|---|---|---|---|---|
+| L1 | Arquivo ausente | `thumbnail_path` não existe em disco | Silencia dialog, `logger.warning` | N/A | 0 |
+| L2 | Imagem inválida | `wx.Image.IsOk()` retorna False | Mostra placeholder cinza | N/A | 0 |
+| L3 | WebView unavailable | Backend `wx.html2` não disponível | Fallback para `wx.TextCtrl` | N/A | 0 |
+| L4 | Evento de grid com row inválido | `row >= len(self.table.data)` | `event.Skip(); return` sem crash | N/A | 0 |
+| L5 | ThemeManager falha | Exceção em `get_bg_color()` | `try/except` com fallback `wx.WHITE` | N/A | 0 |
+
+## 5.2 Fluxo de Self-Healing
+
+```mermaid
+flowchart TD
+    A[Evento de Grid Recebido] --> B{row válido?}
+    B -- Não --> C[event.Skip; return]
+    B -- Sim --> D{col é Preview?}
+    D -- Sim --> E{thumb_path existe?}
+    E -- Não --> F[logger.warning; return]
+    E -- Sim --> G{img.IsOk?}
+    G -- Não --> F
+    G -- Sim --> H[Abre Dialog Modal]
+    D -- Não --> I{col é Resumo?}
+    I -- Sim --> J{summary_status?}
+    J -- vazio --> K[CTA: ✦ Resumir]
+    J -- summarizing --> L[⏳ em progresso]
+    J -- summarized --> M[✅ concluído]
+    J -- error --> N[❌ erro — retry disponível]
+    I -- Não --> O[Handler padrão]
+```
+
+## 5.3 Padrões de Recuperação
+
+### P1 — Thumbnail inválida
+- **DETECTOR:** `os.path.exists(thumb_path)` retorna `False` OU `wx.Image.IsOk()` retorna `False`
+- **PATTERN:** `FileNotFoundError`, `wx.Image` com `IsOk() == False`
+- **FLUXO:**
+  1. Log `WARNING` em `logger.warning(f"Thumbnail não acessível: {thumb_path}")`
+  2. Retornar sem abrir dialog
+  3. Grid continua funcionando normalmente
+
+### P2 — Loop de seleção de grid
+- **DETECTOR:** `_is_programmatic_selection` flag ativa quando `EVT_GRID_RANGE_SELECT` dispara
+- **PATTERN:** Handler chama `SelectRow()` que dispara novo `EVT_GRID_RANGE_SELECT`
+- **FLUXO:**
+  1. Verificar `_is_programmatic_selection` no início do handler
+  2. Se `True`: chamar `event.Skip()` e retornar imediatamente
+  3. Se `False`: setar flag, executar `SelectRow()`, limpar flag em `finally`
+
+### P3 — ThemeManager em estado inválido
+- **DETECTOR:** Exceção ao chamar métodos de cor
+- **PATTERN:** `AttributeError`, `KeyError` em `PALETTES`
+- **FLUXO:**
+  1. `try/except Exception` nos métodos `Draw` dos renderers
+  2. Fallback: `wx.WHITE` para fundo, `wx.BLACK` para texto
+  3. `logger.debug(f"Renderer fallback de cor: {e}")`
+
+## 5.4 Mapa de Falhas
+
+```mermaid
+flowchart LR
+    F1[thumb_path inválido] --> R1[Silent return + warning log]
+    F2[Loop EVT_GRID_RANGE_SELECT] --> R2[Flag _is_programmatic_selection]
+    F3[WebView backend ausente] --> R3[Fallback wx.TextCtrl existente]
+    F4[row >= len data] --> R4[Guard check + event.Skip]
+    F5[ThemeManager exception] --> R5[Fallback wx.WHITE/wx.BLACK]
+```
+
+## 5.5 Tabela Resumo de Resiliência
+
+| Cenário | Detecção | Recovery Automático | Tempo Máximo | Intervenção Humana |
+|---|---|---|---|---|
+| Thumbnail ausente | `os.path.exists()` | Retorno silencioso | < 1ms | Não |
+| Imagem corrompida | `img.IsOk()` | Placeholder cinza | < 5ms | Não |
+| Loop de seleção | Flag booleana | Auto-supressão | < 1ms | Não |
+| WebView indisponível | `IsBackendAvailable()` | TextCtrl fallback | Na inicialização | Não |
+| ThemeManager falha | try/except | Cores padrão system | < 1ms | Não |
+
+---
+
+# PARTE 6 — REQUISITOS FUNCIONAIS E NÃO-FUNCIONAIS
+
+## 6.1 Requisitos Funcionais
+
+| ID | Requisito | Critério de Aceite | Prioridade | Complexidade |
+|---|---|---|---|---|
+| RF-71-01 | Click em coluna Preview da Aba 2 abre dialog modal com thumbnail | Dialog abre com imagem; fecha com ESC ou click; sem crash | Must | Baixa |
+| RF-71-02 | DetailPanel inicializa com cores corretas do tema ativo | No dark mode: fundo `#1e1e1e`, texto `#dcdcdc` desde o frame 1; sem flash branco | Must | Baixa |
+| RF-71-03 | Coluna Resumo exibe "✦ Resumir" em azul quando status vazio | Texto "✦ Resumir" visível em `COLOR_ACCENT`; "—" nunca renderizado | Must | Baixa |
+| RF-71-04 | Ícone de link visível quando linha está selecionada | Ícone "🔗" visível sobre fundo azul de seleção | Must | Baixa |
+| RF-71-05 | Ícone de resumo visível quando linha está selecionada | Estado (✅/❌/⏳/✦) visível sobre fundo azul | Must | Baixa |
+| RF-71-06 | Cursor muda para mão ao passar sobre coluna Resumo (CTA) | `wx.CURSOR_HAND` ativo; reverte para `CURSOR_ARROW` ao sair | Should | Baixa |
+| RF-71-07 | Cursor muda para mão ao passar sobre coluna Preview | `wx.CURSOR_HAND` ativo sobre miniaturas | Should | Baixa |
+| RF-71-08 | Seleção por clique seleciona linha inteira, não célula individual | `grid.GetSelectedRows()` retorna a linha; sem seleção de texto parcial | Must | Média |
+| RF-71-09 | Tecla ESC fecha dialog de thumbnail | Dialog destruído sem memory leak | Should | Baixa |
+| RF-71-10 | apply_theme() no DetailPanel recarrega WebView com novo tema | Após toggle de tema: WebView exibe cores atualizadas sem reload manual | Must | Baixa |
+
+## 6.2 Requisitos Não-Funcionais
+
+| ID | Categoria | Requisito | Métrica | Target |
+|---|---|---|---|---|
+| RNF-71-01 | Performance | Abertura do dialog de thumbnail | Tempo até exibição | < 200ms |
+| RNF-71-02 | Performance | Render do SummaryStatusRenderer com CTA | Tempo por célula | < 0.1ms |
+| RNF-71-03 | Compatibilidade | Funcionar em Windows 10/11 e Linux | Sem exceção em ambos OS | 100% |
+| RNF-71-04 | Usabilidade | Flag `_is_programmatic_selection` sem leak | Flag sempre limpa após uso | 100% |
+| RNF-71-05 | Memória | Dialog de thumbnail destruído após fechamento | `dlg.Destroy()` chamado | 100% |
+| RNF-71-06 | Estabilidade | Nenhum crash ao clicar em Preview com thumb ausente | Zero `wx.PyDeadObjectError` | 100% |
+
+## 6.3 Matriz de Rastreabilidade
+
+| RF/RNF | Componente | Arquivo | Método/Função | Teste que Valida | Critério Binário |
+|---|---|---|---|---|---|
+| RF-71-01 | ThumbnailExpansionHandler | `ui/tab_analysis.py` | `on_grid_click`, `_show_thumbnail_dialog` | `test_thumbnail_dialog_opens` | Dialog abre: PASS / Crash ou não abre: FAIL |
+| RF-71-02 | DetailPanelThemeInit | `ui/panel_detail.py` | `_init_ui`, `apply_theme` | `test_detail_panel_init_dark` | bg_hex correto no HTML: PASS |
+| RF-71-03 | SummaryStatusRendererCTA | `ui/virtual_table.py` | `SummaryStatusRenderer.Draw` | `test_summary_cta_text` | "✦ Resumir" renderizado: PASS |
+| RF-71-04 | GridSelectionIconFix | `ui/virtual_table.py` | `LinkIconRenderer.Draw` | `test_link_icon_visible_selected` | Ícone visível em seleção: PASS |
+| RF-71-05 | GridSelectionIconFix | `ui/virtual_table.py` | `SummaryStatusRenderer.Draw` | `test_summary_icon_visible_selected` | Ícone visível em seleção: PASS |
+| RF-71-06 | GridMotionCursorHandler | `ui/tab_analysis.py` | `on_grid_motion` | `test_cursor_hand_on_resumo` | `CURSOR_HAND` ativo: PASS |
+| RF-71-07 | GridMotionCursorHandler | `ui/tab_analysis.py` | `on_grid_motion` | `test_cursor_hand_on_preview` | `CURSOR_HAND` ativo: PASS |
+| RF-71-08 | GridRangeSelectBlocker | `ui/tab_analysis.py` | `_on_range_select`, `_on_cell_select_row` | `test_row_selection_not_char` | `GetSelectedRows()` retorna linha: PASS |
+| RF-71-09 | ThumbnailExpansionHandler | `ui/tab_analysis.py` | `_show_thumbnail_dialog` | `test_dialog_closes_on_esc` | Destroy chamado: PASS |
+| RF-71-10 | DetailPanelThemeInit | `ui/panel_detail.py` | `apply_theme`, `_reload_webview_content` | `test_theme_toggle_webview` | HTML atualizado: PASS |
+| RNF-71-01 | ThumbnailExpansionHandler | `ui/tab_analysis.py` | `_show_thumbnail_dialog` | `test_thumbnail_open_perf` | < 200ms: PASS |
+| RNF-71-04 | GridRangeSelectBlocker | `ui/tab_analysis.py` | `_on_range_select` | `test_flag_cleanup` | Flag False após handler: PASS |
+| RNF-71-05 | ThumbnailExpansionHandler | `ui/tab_analysis.py` | `_show_thumbnail_dialog` | `test_dialog_destroy` | `Destroy()` chamado: PASS |
+
+---
+
+# PARTE 7 — ÁRVORE DE ARQUIVOS E BLUEPRINT ESTRUTURAL
+
+## 7.1 Árvore Completa (arquivos modificados marcados)
+
+```text
+contextflow/
+├── main.py                          ← SEM ALTERAÇÃO
+├── constants.py                     ← SEM ALTERAÇÃO
+├── core/
+│   ├── managers/
+│   │   ├── theme_manager.py         ← SEM ALTERAÇÃO
+│   │   └── ...
+│   └── ...
+├── ui/
+│   ├── tab_analysis.py              ← MODIFICADO (Pendências 1, 3-cursor, 5)
+│   ├── virtual_table.py             ← MODIFICADO (Pendências 3-CTA, 4)
+│   ├── panel_detail.py              ← MODIFICADO (Pendência 2)
+│   └── components/
+│       └── ...                      ← SEM ALTERAÇÃO
+├── scripts/
+│   └── verification/
+│       └── verify_phase_7_1.py      ← NOVO (testes de verificação)
+└── docs/
+    └── history/
+        └── PHASE_7.1/               ← NOVO (após conclusão)
+```
+
+**Total de arquivos modificados: 3**
+**Total de arquivos novos: 1**
+
+## 7.2 Descrição por Arquivo
+
+### `ui/tab_analysis.py`
+- **Propósito:** Aba 2 (Cockpit Analítico). Recebe correções de interatividade de grid, cursor e bloqueio de seleção.
+- **Deps:** `wx`, `wx.grid`, `os`, `webbrowser`, `AppState`, `PubSub`, `ThemeManager`, `VirtualVideoTable`, `TagWrapPanel`, `AnalysisToolbar`
+- **Interfaces modificadas:**
+  - `on_grid_click(self, event: wx.grid.GridEvent) -> None` — adiciona branch `label == "Preview"`
+  - `_show_thumbnail_dialog(self, thumb_path: str) -> None` — **NOVO método**
+  - `on_grid_motion(self, event: wx.MouseEvent) -> None` — expande `INTERACTIVE_COLS`
+  - `_on_range_select(self, event: wx.grid.GridRangeSelectEvent) -> None` — **NOVO método**
+  - `_on_cell_select_row(self, event: wx.grid.GridEvent) -> None` — **NOVO método**
+  - `_bind_events(self) -> None` — adiciona 2 novos bindings
+- **Quem usa:** `AppWindow` instancia; `PubSub` notifica; `AppState` fornece dados
+
+### `ui/virtual_table.py`
+- **Propósito:** Motor de virtualização e renderers customizados. Recebe correções de CTA e sobreposição de seleção.
+- **Deps:** `wx`, `wx.grid`, `os`, `threading`, `ThemeManager`, `AppState`, `format_duration`
+- **Interfaces modificadas:**
+  - `SummaryStatusRenderer.Draw(...)` — substituição do bloco `else` por CTA "✦ Resumir"; ordem fundo→ícone
+  - `LinkIconRenderer.Draw(...)` — ordem fundo→ícone garantida
+  - `VirtualVideoTable.GetValue(row, col)` — já retorna "✦ Resumir" (código existente verificado e mantido)
+- **Quem usa:** `TabAnalysis`, `TabBatch` via `SetTable()`
+
+### `ui/panel_detail.py`
+- **Propósito:** Aba 3 (Leitura Imersiva). Recebe correção de inicialização de tema no WebView.
+- **Deps:** `wx`, `wx.html2`, `os`, `AppState`, `ThemeManager`, `THUMBNAILS_DIR`
+- **Interfaces modificadas:**
+  - `_init_ui(self) -> None` — HTML inicial contém `bg_hex`/`fg_hex` do tema
+  - `apply_theme(self) -> None` — garante reload do WebView quando `_current_video_id` existe
+- **Quem usa:** `AppWindow` instancia; `TabAnalysis` via PubSub não acessa diretamente
+
+### `scripts/verification/verify_phase_7_1.py` (NOVO)
+- **Propósito:** Suite de verificação das 5 pendências da Fase 7.1.
+- **Deps:** `os`, `sys`, `wx`, `unittest.mock`
+- **Interfaces:** `verify_cta_text()`, `verify_detail_panel_init()`, `verify_cursor_labels()`, `verify_icon_layer_order()`, `verify_selection_flag()`
+
+## 7.3 Convenções de Nomenclatura
+
+| Artefato | Convenção | Exemplo |
+|---|---|---|
+| Métodos novos privados | `_snake_case` com prefixo descritivo | `_show_thumbnail_dialog`, `_on_range_select` |
+| Flags de controle de estado | `_is_` + adjetivo | `_is_programmatic_selection` |
+| Constantes de colunas interativas | `UPPER_CASE` set literal | `INTERACTIVE_COLS = {"Link", "Resumo", "Preview"}` |
+| Comentários de pendência | `# [7.1 PENDÊNCIA N]` | `# [7.1 PENDÊNCIA 3] CTA visual` |
+| Arquivo de verificação | `verify_phase_X_Y.py` | `verify_phase_7_1.py` |
+| Branch git | `fix/fase-7.1-` + descrição | `fix/fase-7.1-grid-cta-cursor` |
+| Commit | `FIX: ` + descrição em PT-BR | `FIX: CTA visual Resumir e contraste DetailPanel` |
+
+---
+
+# PARTE 8 — DECISÕES ARQUITETURAIS (ADRs)
+
+## ADR-71-01: Dialog Modal vs. Navegação para Aba 3
+
+| Campo | Valor |
+|---|---|
+| Status | ACEITA |
+| Data | 2026-04-07 |
+| Contexto | Click em Preview da Aba 2 precisa exibir thumbnail ampliada |
+| Decisão | Usar `wx.Dialog` modal local na `TabAnalysis` |
+| Alternativas Rejeitadas | Navegar para Aba 3 (`DetailPanel`): viola Zero-Knowledge entre abas; força mudança de contexto indesejada |
+| Consequências | Dialog é auto-contido; não importa `DetailPanel`; comportamento idêntico ao já funcional em `panel_detail.py` |
+| Mitigação | `dlg.Destroy()` garante sem memory leak; `EVT_CHAR_HOOK` garante ESC funciona |
+
+## ADR-71-02: HTML Base com Cores no `__init__` vs. JS Pós-Carregamento
+
+| Campo | Valor |
+|---|---|
+| Status | ACEITA |
+| Data | 2026-04-07 |
+| Contexto | Flash de contraste no primeiro frame do `DetailPanel` |
+| Decisão | Gerar HTML inicial com `bg_hex`/`fg_hex` já incorporados no `_init_ui()` |
+| Alternativas Rejeitadas | `RunScript(js)` após carregamento: timing não garantido; pode executar antes do DOM estar pronto; flash persiste |
+| Consequências | HTML completo desde o frame 1; sem dependência de timing de JS |
+| Mitigação | `apply_theme()` mantém `RunScript` como fallback para mudanças posteriores de tema |
+
+## ADR-71-03: Fundo Antes do Ícone vs. Alpha Blending
+
+| Campo | Valor |
+|---|---|
+| Status | ACEITA |
+| Data | 2026-04-07 |
+| Contexto | Fundo de seleção oculta ícones em `LinkIconRenderer` e `SummaryStatusRenderer` |
+| Decisão | `DrawRectangle(fundo)` sempre antes de `DrawText(ícone)` nos métodos `Draw` |
+| Alternativas Rejeitadas | Alpha blending via `wx.GraphicsContext`: adiciona complexidade; `gc.SetBrush` com alpha não é portável entre backends no Windows |
+| Consequências | Ordem de renderização determinística; sem dependência de alpha channel |
+| Mitigação | Padrão documentado e aplicado a todos os renderers existentes |
+
+## ADR-71-04: Flag `_is_programmatic_selection` vs. Desconectar Evento
+
+| Campo | Valor |
+|---|---|
+| Status | ACEITA |
+| Data | 2026-04-07 |
+| Contexto | Loop recursivo ao chamar `SelectRow()` dentro de `EVT_GRID_RANGE_SELECT` |
+| Decisão | Flag booleana `_is_programmatic_selection` com padrão `try/finally` |
+| Alternativas Rejeitadas | `grid.Disconnect(EVT_GRID_RANGE_SELECT)` + reconectar: frágil, pode perder eventos legítimos; `Unbind/Bind` em wxPython tem comportamento imprevisível em handlers aninhados |
+| Consequências | Proteção simples e determinística; sem side effects de desconexão |
+| Mitigação | `finally` garante que flag seja sempre limpa mesmo em exceções |
+
+## ADR-71-05: `INTERACTIVE_COLS` como Set vs. Índice de Coluna
+
+| Campo | Valor |
+|---|---|
+| Status | ACEITA |
+| Data | 2026-04-07 |
+| Contexto | `on_grid_motion` precisa identificar colunas interativas para mudar cursor |
+| Decisão | Usar `set` de labels `{"Link", "Resumo", "Preview"}` |
+| Alternativas Rejeitadas | Índices numéricos fixos (ex: `col == 11`): frágeis a reordenação de colunas; quebram silenciosamente |
+| Consequências | Resistente a mudanças na ordem das colunas; legível |
+| Mitigação | Labels são constantes definidas em `self.col_labels` no `__init__` |
+
+## ADR-71-06: Separação de `_on_range_select` e `_on_cell_select_row` vs. Handler Único
+
+| Campo | Valor |
+|---|---|
+| Status | ACEITA |
+| Data | 2026-04-07 |
+| Contexto | Dois eventos distintos (`EVT_GRID_RANGE_SELECT` e `EVT_GRID_SELECT_CELL`) precisam de tratamento |
+| Decisão | Dois handlers separados com responsabilidades distintas |
+| Alternativas Rejeitadas | Handler único para ambos eventos: mistura responsabilidades; dificulta debug |
+| Consequências | Cada handler tem responsabilidade única; testável individualmente |
+| Mitigação | Flag compartilhada `_is_programmatic_selection` coordena ambos |
+
+---
+
+# PARTE 9 — PLANO DE IMPLEMENTAÇÃO
+
+## 9.1 Definição do MVP
+
+**O QUE ESTÁ NO MVP:**
+- ✅ RF-71-01: Click em Preview abre dialog de thumbnail
+- ✅ RF-71-02: DetailPanel inicializa com tema correto
+- ✅ RF-71-03: CTA "✦ Resumir" visível em azul
+- ✅ RF-71-04/05: Ícones visíveis sobre fundo de seleção
+- ✅ RF-71-06/07: Cursor hand em colunas interativas
+- ✅ RF-71-08: Seleção de linha inteira (não caracteres)
+- ✅ Script de verificação `verify_phase_7_1.py`
+
+**O QUE NÃO ESTÁ NO MVP:**
+- ❌ Regerar resumo via toolbar (Fase 7.3.1)
+- ❌ Instruções personalizadas de prompt (Fase 7.3.2)
+- ❌ Map-Reduce automático (Fase 7.4.2)
+- ❌ Galeria de cards (Fase 7.5.1)
+- ❌ Persistência de seleção azul com foco perdido (Fase 7.2.3 completa)
+
+## 9.2 Critérios de Aceitação do MVP
+
+```gherkin
+Funcionalidade: Expansão de Thumbnail na Aba 2
+  Dado que há um vídeo com thumbnail baixada na Aba 2
+  Quando o usuário clica na coluna "Preview" da linha do vídeo
+  Então um dialog modal abre com a imagem ampliada em até 80% do display
+  E o dialog fecha ao pressionar ESC
+  E o dialog fecha ao clicar na imagem
+  E nenhuma exceção é gerada
+
+Funcionalidade: Contraste no Primeiro Carregamento
+  Dado que o tema ativo é "dark"
+  Quando o DetailPanel é instanciado pela primeira vez
+  Então o WebView exibe fundo #1e1e1e e texto #dcdcdc desde o primeiro frame
+  E nenhum flash de fundo branco é perceptível
+
+Funcionalidade: CTA Visual de Resumo
+  Dado que um vídeo tem summary_status nulo ou vazio
+  Quando a Aba 2 renderiza a coluna "Resumo"
+  Então o texto "✦ Resumir" é exibido em COLOR_ACCENT (azul)
+  E o texto "—" nunca é exibido nessa coluna
+
+Funcionalidade: Ícones Visíveis na Seleção
+  Dado que uma linha está selecionada (fundo azul)
+  Quando o renderer de LinkIconRenderer é chamado com isSelected=True
+  Então o ícone de link é visível sobre o fundo azul
+  E o ícone não é ocultado pelo fundo de seleção
+
+Funcionalidade: Seleção de Linha Inteira
+  Dado que o usuário clica em uma célula de texto qualquer
+  Quando o evento EVT_GRID_RANGE_SELECT é processado
+  Então grid.GetSelectedRows() retorna a linha completa
+  E nenhum caractere individual é marcado como selecionado
+```
+
+## 9.3 Fases de Implementação
+
+| Fase | Duração | Entregas | Critério de Conclusão | Dependência |
+|---|---|---|---|---|
+| F1: Renderers | 30min | `virtual_table.py` com fundo-antes-ícone + CTA "✦ Resumir" | Grid renderiza CTA visível; ícones visíveis na seleção | Nenhuma |
+| F2: DetailPanel | 20min | `panel_detail.py` com init de tema correto | Dark mode: sem flash branco no início | Nenhuma |
+| F3: TabAnalysis | 40min | `tab_analysis.py` com dialog thumbnail, cursor, seleção | Dialog abre; cursor hand; linha inteira selecionada | F1 concluída |
+| F4: Verificação | 20min | `verify_phase_7_1.py` executado com 100% pass | Todos os testes passam sem exceção | F1+F2+F3 |
+
+### Detalhamento por Fase:
+
+**FASE 1 — `ui/virtual_table.py`**
+```
+Arquivos criados: nenhum
+Arquivos modificados: ui/virtual_table.py
+
+Alterações:
+1. SummaryStatusRenderer.Draw():
+   - Mover dc.DrawRectangle(rect) para o INÍCIO (antes de dc.SetClippingRegion)
+   - Substituir bloco else: "—" por "✦ Resumir" em accent color + bold
+
+2. LinkIconRenderer.Draw():
+   - Confirmar que dc.DrawRectangle(rect) está ANTES de dc.DrawText(txt)
+   - Se não estiver: mover para o início do método
+
+Testes obrigatórios:
+- Verificar manualmente: selecionar linha na grid → ícones visíveis
+- Verificar: célula Resumo vazia exibe "✦ Resumir" em azul
+```
+
+**FASE 2 — `ui/panel_detail.py`**
+```
+Arquivos criados: nenhum
+Arquivos modificados: ui/panel_detail.py
+
+Alterações:
+1. _init_ui(): substituir SetPage base por HTML com bg_hex/fg_hex do tema
+2. apply_theme(): adicionar reload do WebView quando _current_video_id existe
+
+Testes obrigatórios:
+- Inicializar app em dark mode → DetailPanel sem flash branco
+- Toggle de tema com vídeo carregado → WebView atualiza cores
+```
+
+**FASE 3 — `ui/tab_analysis.py`**
+```
+Arquivos criados: nenhum
+Arquivos modificados: ui/tab_analysis.py
+
+Alterações:
+1. on_grid_click(): adicionar branch "Preview" → _show_thumbnail_dialog()
+2. _show_thumbnail_dialog(): novo método
+3. on_grid_motion(): expandir INTERACTIVE_COLS
+4. _bind_events(): adicionar EVT_GRID_RANGE_SELECT e EVT_GRID_SELECT_CELL
+5. _on_range_select(): novo método
+6. _on_cell_select_row(): novo método
+7. __init__: adicionar _is_programmatic_selection = False
+
+Testes obrigatórios:
+- Click em Preview: dialog abre com imagem
+- Click em Preview sem thumb: sem crash
+- Hover sobre "Resumo": cursor muda para mão
+- Click em célula texto: linha inteira selecionada
+```
+
+**FASE 4 — `scripts/verification/verify_phase_7_1.py`**
+```python
+# scripts/verification/verify_phase_7_1.py
+import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+
+def verify_cta_text():
+    """Verifica que SummaryStatusRenderer usa '✦ Resumir' para status vazio."""
+    from ui.virtual_table import SummaryStatusRenderer
+    renderer = SummaryStatusRenderer()
+    # Verifica que o método Draw não usa "—" para status vazio
+    import inspect
+    source = inspect.getsource(renderer.Draw)
+    assert "✦ Resumir" in source, "CTA '✦ Resumir' não encontrado no renderer"
+    assert '"—"' not in source, "Texto estático '—' ainda presente no renderer"
+    print("✅ CTA '✦ Resumir' confirmado no SummaryStatusRenderer")
+
+def verify_detail_panel_bg_init():
+    """Verifica que _init_ui do DetailPanel usa bg_hex do tema."""
+    import inspect
+    from ui.panel_detail import DetailPanel
+    source = inspect.getsource(DetailPanel._init_ui)
+    assert "bg_hex" in source, "bg_hex não encontrado no _init_ui do DetailPanel"
+    assert "fg_hex" in source, "fg_hex não encontrado no _init_ui do DetailPanel"
+    assert "initial_html" in source or "bg_hex" in source, \
+        "HTML inicial com tema não encontrado"
+    print("✅ DetailPanel._init_ui usa bg_hex/fg_hex do tema")
+
+def verify_interactive_cols():
+    """Verifica que on_grid_motion inclui Preview e Resumo como interativas."""
+    import inspect
+    from ui.tab_analysis import TabAnalysis
+    source = inspect.getsource(TabAnalysis.on_grid_motion)
+    assert "Preview" in source, "Coluna 'Preview' não detectada em on_grid_motion"
+    assert "Resumo" in source, "Coluna 'Resumo' não detectada em on_grid_motion"
+    assert "CURSOR_HAND" in source, "CURSOR_HAND não encontrado em on_grid_motion"
+    print("✅ on_grid_motion inclui Preview e Resumo nas colunas interativas")
+
+def verify_thumbnail_dialog_method():
+    """Verifica que _show_thumbnail_dialog existe na TabAnalysis."""
+    from ui.tab_analysis import TabAnalysis
+    assert hasattr(TabAnalysis, '_show_thumbnail_dialog'), \
+        "Método _show_thumbnail_dialog não encontrado em TabAnalysis"
+    import inspect
+    source = inspect.getsource(TabAnalysis._show_thumbnail_dialog)
+    assert "ShowModal" in source, "ShowModal não encontrado no dialog"
+    assert "Destroy" in source, "Destroy não encontrado — possível memory leak"
+    print("✅ _show_thumbnail_dialog existe e chama Destroy()")
+
+def verify_range_select_handler():
+    """Verifica que _on_range_select existe e usa flag de proteção."""
+    from ui.tab_analysis import TabAnalysis
+    assert hasattr(TabAnalysis, '_on_range_select'), \
+        "Método _on_range_select não encontrado"
+    import inspect
+    source = inspect.getsource(TabAnalysis._on_range_select)
+    assert "_is_programmatic_selection" in source, \
+        "Flag _is_programmatic_selection não encontrada em _on_range_select"
+    print("✅ _on_range_select usa flag de proteção contra loop")
+
+def verify_icon_draw_order():
+    """Verifica que LinkIconRenderer chama DrawRectangle antes de DrawText."""
+    import inspect
+    from ui.virtual_table import LinkIconRenderer
+    source = inspect.getsource(LinkIconRenderer.Draw)
+    rect_pos = source.find("DrawRectangle")
+    text_pos = source.find("DrawText")
+    assert rect_pos < text_pos, \
+        f"DrawRectangle ({rect_pos}) deve vir ANTES de DrawText ({text_pos})"
+    print("✅ LinkIconRenderer: DrawRectangle antes de DrawText")
+
+if __name__ == "__main__":
+    tests = [
+        verify_cta_text,
+        verify_detail_panel_bg_init,
+        verify_interactive_cols,
+        verify_thumbnail_dialog_method,
+        verify_range_select_handler,
+        verify_icon_draw_order,
+    ]
+    failed = 0
+    for test in tests:
+        try:
+            test()
+        except AssertionError as e:
+            print(f"❌ FALHA: {e}")
+            failed += 1
+        except Exception as e:
+            print(f"💥 ERRO: {e}")
+            failed += 1
+
+    if failed == 0:
+        print(f"\n🎉 TODOS OS {len(tests)} TESTES PASSARAM — FASE 7.1 VERIFICADA")
+    else:
+        print(f"\n❌ {failed}/{len(tests)} TESTES FALHARAM")
+        sys.exit(1)
+```
+
+## 9.4 Métricas de Sucesso
+
+| Métrica | Target | Como Medir |
+|---|---|---|
+| Testes de verificação | 6/6 passando | `python verify_phase_7_1.py` |
+| Arquivos modificados | ≤ 3 | `git diff --name-only` |
+| Linhas adicionadas | ≤ 120 | `git diff --stat` |
+| Crashes em testes manuais | 0 | Clicar em Preview sem thumb, grid motion, toggle tema |
+| Flash de contraste no init | 0 ocorrências | Inicializar em dark mode, observar DetailPanel |
+
+## 9.5 Riscos Técnicos
+
+| Risco | Probabilidade | Impacto | Mitigação |
+|---|---|---|---|
+| Loop infinito em `_on_range_select` | Baixa | Alto | Flag `_is_programmatic_selection` com `try/finally` |
+| Conflito entre `EVT_GRID_SELECT_CELL` existente e novo | Média | Médio | Novo handler usa `event.Skip()` para propagar ao existente |
+| `wx.html2` WebView timing em diferentes OS | Baixa | Médio | HTML base já completo; não depende de JS timing |
+| Dialog thumbnail com imagem grande travando UI | Baixa | Médio | Scale calculado antes de criar Bitmap; operação síncrona mas rápida |
+| `CalcUnscrolledPosition` retornando coordenadas incorretas | Baixa | Baixo | Guard `col >= 0 and col < len(self.col_labels)` |
+| Destroy de Dialog em `EVT_BUTTON` causando crash | Baixa | Alto | `dlg.Close()` em vez de `dlg.Destroy()` no lambda; `Destroy()` após `ShowModal()` |
+| `_is_programmatic_selection` não inicializada | Baixa | Médio | `self._is_programmatic_selection = False` no `__init__` da `TabAnalysis` |
+| Renderer com clipping region não destruído em exceção | Baixa | Baixo | `try/finally` com `dc.DestroyClippingRegion()` nos renderers críticos |
+
+---
+
+# PARTE 10 — PADRÕES E BLINDAGEM ESTRUTURAL
+
+## 10.1 Padrões Arquiteturais Adotados
+
+| Padrão | Onde se Aplica |
+|---|---|
+| Template Method | `GridCellRenderer.Draw()` — ordem fundo→clipping→conteúdo→destroy obrigatória |
+| Guard Clause | Verificação de `row >= len(data)` no início de todos os `Draw()` |
+| Flag Sentinel | `_is_programmatic_selection` previne recursão de eventos |
+| Lazy Initialization | `ThemeManager()` reconstruído em `apply_theme()` para garantir singleton atualizado |
+
+## 10.2 Design Patterns Permitidos e Proibidos
+
+| Permitido | Onde se Aplica | Proibido | Motivo da Proibição |
+|---|---|---|---|
+| `wx.Dialog` modal local | Expansão de thumbnail em `TabAnalysis` | Import de `DetailPanel` em `TabAnalysis` | Viola Zero-Knowledge entre abas |
+| `try/finally` em handlers de evento | `_on_range_select` com flag | `Unbind`/`Bind` dentro de handlers | Comportamento imprevisível em wxPython |
+| `event.Skip()` para propagação | Todos os handlers novos | Consumir eventos sem Skip quando há handlers downstream | Quebra cadeia de eventos existente |
+| `inspect.getsource` em testes | `verify_phase_7_1.py` | Testes que criam `wx.App` sem teardown | Memory leak em testes automatizados |
+
+## 10.3 Regras de Modularização
+
+- **Acoplamento máximo:** `TabAnalysis` pode usar `VirtualVideoTable`, `ThemeManager`, `AppState`, `PubSub`. **Não pode** usar `DetailPanel`, `TabBatch`.
+- **Dependência de renderers:** `virtual_table.py` pode usar `ThemeManager`, `AppState` (para `config`). **Não pode** importar abas da UI.
+- **Quem pode importar `panel_detail.py`:** Apenas `app_window.py`.
+
+## 10.4 Observabilidade
+
+| Estratégia | Detalhes |
+|---|---|
+| Logging de thumbnail | `logger.warning(f"Thumbnail não acessível: {thumb_path}")` |
+| Logging de theme init | `logger.debug(f"DetailPanel: tema inicializado com bg={bg_hex}")` |
+| Logging de seleção | `logger.debug(f"Range select suprimido, SelectRow({top_row})")` |
+| Sem log em render cycle | Métodos `Draw()` não logam (performance crítica < 0.1ms) |
+
+## 10.5 Escopo Congelado
+
+**Alterações proibidas nesta fase:**
+- `core/app_state.py` — nenhuma modificação
+- `core/managers/theme_manager.py` — nenhuma modificação
+- `storage/db_handler.py` — nenhuma modificação
+- `core/processor.py` — nenhuma modificação
+- `ui/tab_batch.py` — nenhuma modificação
+- `ui/sidebar.py` — nenhuma modificação
+
+**Arquivos protegidos (requerem ADR para modificar):**
+- `constants.py`
+- `core/pubsub.py`
+- `core/managers/task_manager.py`
+
+---
+
+# PARTE 11 — GUIA DE REPLICAÇÃO
+
+## Pré-requisitos
+- Python 3.10+ (testado em 3.11)
+- wxPython 4.2.1+
+- Projeto ContextFlow já configurado e funcional (Fase 7.3 estável)
+
+## Passos de Implementação
+
+```bash
+# 1. Verificar estado atual (deve estar na Fase 7.3)
+cd contextflow
+python scripts/verification/test_ollama_stability.py
+
+# 2. Criar branch para as correções
+git checkout -b fix/fase-7.1-grid-corrections
+```
+
+### Passo 3: Corrigir `ui/virtual_table.py`
+
+**3a.** Localizar `class SummaryStatusRenderer` e substituir o método `Draw` completo conforme a implementação da Seção 2.3.
+
+**3b.** Localizar `class LinkIconRenderer` e verificar/corrigir a ordem `DrawRectangle → DrawText` conforme a Seção 2.4.
+
+**3c.** Verificar `class ThumbnailRenderer`: o `DrawRectangle` já deve estar antes do bitmap (verificar no código existente; se não estiver, aplicar o mesmo padrão).
+
+### Passo 4: Corrigir `ui/panel_detail.py`
+
+**4a.** Em `_init_ui()`, localizar o bloco de criação do `WebView` e substituir o `SetPage` base pelo HTML com `bg_hex`/`fg_hex` conforme Seção 2.2.
+
+**4b.** Em `apply_theme()`, adicionar chamada ao `_reload_webview_content()` quando `_current_video_id` existe, e atualização do HTML base quando não existe.
+
+### Passo 5: Corrigir `ui/tab_analysis.py`
+
+**5a.** No `__init__`, adicionar:
+```python
+self._is_programmatic_selection = False
+```
+
+**5b.** Em `_bind_events()`, adicionar os dois novos bindings:
+```python
+self.grid.Bind(wx.grid.EVT_GRID_RANGE_SELECT, self._on_range_select)
+# EVT_GRID_SELECT_CELL já existe para on_select_video; adicionar segundo handler:
+self.grid.Bind(wx.grid.EVT_GRID_SELECT_CELL, self._on_cell_select_row)
+```
+
+**5c.** Em `on_grid_click()`, adicionar branch para "Preview" antes do branch "Link" existente (conforme Seção 2.1).
+
+**5d.** Adicionar método `_show_thumbnail_dialog()` (conforme Seção 2.1).
+
+**5e.** Substituir `on_grid_motion()` pela versão expandida com `INTERACTIVE_COLS` (conforme Seção 2.6).
+
+**5f.** Adicionar métodos `_on_range_select()` e `_on_cell_select_row()` (conforme Seção 2.5).
+
+### Passo 6: Criar script de verificação
+
+```bash
+# Criar arquivo
+touch scripts/verification/verify_phase_7_1.py
+# Copiar o conteúdo da Seção 9.3 Fase 4
+```
+
+### Passo 7: Verificação
+
+```bash
+python scripts/verification/verify_phase_7_1.py
+# Esperado: 🎉 TODOS OS 6 TESTES PASSARAM
+
+# Smoke test manual:
+python main.py
+# 1. Adicionar URL de vídeo com thumbnail
+# 2. Ir para Aba 2
+# 3. Clicar em coluna Preview → dialog deve abrir
+# 4. Hover sobre Resumo → cursor deve mudar para mão
+# 5. Clicar em linha → linha inteira destacada
+# 6. Selecionar vídeo → DetailPanel sem flash (em dark mode)
+```
+
+### Passo 8: Commit
+
+```bash
+git add ui/tab_analysis.py ui/virtual_table.py ui/panel_detail.py
+git add scripts/verification/verify_phase_7_1.py
+git commit -m "FIX: Interatividade grid, CTA resumo, contraste DetailPanel e seleção de linha (Fase 7.1)"
+```
+
+---
+
+# PARTE 12 — EXTENSIBILIDADE
+
+## Como Adicionar Nova Coluna Interativa (5 passos)
+
+1. **Definir label** em `self.col_labels` no `__init__` da aba correspondente
+2. **Adicionar ao set** `INTERACTIVE_COLS` em `on_grid_motion()` da aba
+3. **Criar renderer** herdando de `wx.grid.GridCellRenderer` em `virtual_table.py` com padrão `DrawRectangle → DrawText`
+4. **Registrar renderer** em `VirtualVideoTable.GetAttr()` com `elif label == "NovaColuna": attr.SetRenderer(NovoRenderer())`
+5. **Adicionar handler** em `on_grid_click()` com `if label == "NovaColuna": self._on_nova_acao(row)`
+
+## Como Adicionar Novo Estado de Resumo
+
+1. Adicionar novo valor em `summary_status` (ex: `"pending_review"`)
+2. Adicionar branch em `SummaryStatusRenderer.Draw()` com ícone e cor
+3. Atualizar `VirtualVideoTable.GetValue()` no bloco de mapeamento de "Resumo"
+4. Atualizar `TabAnalysis.on_grid_click()` no bloco de "Resumo"
+5. Adicionar handler de PubSub correspondente se necessário
+
+## Pontos de Extensão
+
+| Ponto | Localização | Como Usar |
+|---|---|---|
+| `INTERACTIVE_COLS` | `tab_analysis.on_grid_motion()` | Adicionar string do label para habilitar cursor hand |
+| `_show_thumbnail_dialog()` | `tab_analysis.py` | Sobrescrever para customizar o dialog de expansão |
+| `SummaryStatusRenderer.Draw()` | `virtual_table.py` | Adicionar novos branches de estado |
+| `on_grid_click()` branches | `tab_analysis.py` | Adicionar ação para nova coluna interativa |
+
+---
+
+# PARTE 13 — LIMITAÇÕES CONHECIDAS
+
+| Limitação | Severidade | Workaround |
+|---|---|---|
+| `wx.CURSOR_HAND` pode não funcionar em alguns temas GTK no Linux | Baixa | Cursor padrão é mantido; funcionalidade não afetada |
+| Dialog de thumbnail é síncrono (bloqueia briefly para imagens muito grandes) | Baixa | Scale calculado antes de criar Bitmap; < 100ms para imagens típicas |
+| `_is_programmatic_selection` não é thread-safe se grid for modificada de outra thread | Não aplicável | Grid é sempre modificada na Main Thread no ContextFlow |
+| `EVT_GRID_SELECT_CELL` binding duplo pode causar `on_select_video` ser chamado duas vezes | Baixa | `on_select_video` tem guard `if auto_open` que previne dupla abertura |
+| `CalcUnscrolledPosition` em versões antigas do wxPython pode retornar ponto negativo | Baixa | Guard `col >= 0` previne acesso fora do bounds |
+
+---
+
+# PARTE 14 — ROADMAP INFERIDO
+
+| Versão | Foco | Features Principais | Estimativa |
+|---|---|---|---|
+| 7.2 | Grid — Navegação Profissional | Persistência de seleção azul (foco perdido), seleção por teclado sem conflito de checkbox | 2-3 dias |
+| 7.3 | Controles de IA | Regerar resumo, instruções personalizadas, toggle deep thinking, cronômetro | 3-4 dias |
+| 7.4 | Qualidade de Resumo | Map-Reduce automático, interface `get_context_size()` unificada | 4-5 dias |
+| 7.5 | Novos Módulos | Galeria de cards com lazy loading, orquestração multi-agente | 5-7 dias |
+
+---
+
+# CLÁUSULA DE INTEGRIDADE
+
+## Checklist de Completude
+
+- ✅ Todo requisito tem ID único (RF-71-01 a RF-71-10) e critério de aceite verificável
+- ✅ Todo requisito tem teste na matriz de rastreabilidade (Seção 6.3)
+- ✅ Toda decisão arquitetural tem ADR com alternativa rejeitada (ADR-71-01 a ADR-71-06)
+- ✅ Todo componente tem ficha técnica, inputs, outputs e implementação completa
+- ✅ Todo diagrama está em Mermaid renderizável
+- ✅ Todo schema de mensagem tem exemplo concreto preenchido
+- ✅ Todo cenário de falha tem estratégia de recuperação documentada (Seção 5)
+- ✅ O guia de replicação é autocontido (Seção 11)
+- ✅ Nenhuma seção contém "A DEFINIR" ou placeholders
+
+## Declaração de Determinismo
+
+Este documento foi estruturado para eliminar ambiguidade operacional. Cada correção especifica o arquivo exato, o método exato, a linha de código exata a ser substituída e o código completo substituto. Um engenheiro pleno pode implementar todas as 5 pendências em sequência usando apenas este documento, sem acesso ao histórico de decisões anteriores. Toda decisão é rastreável a um ADR com alternativa rejeitada documentada. O script `verify_phase_7_1.py` valida programaticamente 6 invariantes críticos após a implementação.

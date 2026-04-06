@@ -1,0 +1,33 @@
+# WALKTHROUGH — GRIDFIX-7.1 (RESOLVIDO)
+
+Esta fase consolidou a interatividade da grade analítica e resolveu inconsistências visuais na inicialização de temas, garantindo uma experiência de usuário profissional e sem distrações.
+
+## Alterações Realizadas
+
+### 1. Interatividade da Grade (TabAnalysis)
+- **Seleção de Linha Inteira**: Implementada lógica de bloqueio de caracteres (`_on_range_select` e `_on_cell_select_row`). Agora, ao clicar ou navegar com o teclado, a linha inteira é selecionada de forma sólida, impedindo o realce azul de caracteres individuais que degradava a UX.
+- **Hand Cursor (Affordance)**: O cursor de "mãozinha" foi expandido para as colunas **Link**, **Resumo** e **Preview**, comunicando claramente que essas células são pontos de ação.
+- **Expansão de Thumbnail**: Clicar na miniatura na coluna "Preview" agora abre um `wx.Dialog` modal com a imagem ampliada (até 80% da tela), permitindo inspeção rápida sem trocar de aba.
+
+### 2. Renderização SaaS e Visibilidade
+- **CTA "✦ Resumir"**: Substituído o traço estático "—" por um botão visual de texto `✦ Resumir` em cor de destaque e negrito. Isso aumenta drasticamente a taxa de descoberta da funcionalidade de IA.
+- **Fix "Background-First"**: Corrigidos os renderers `LinkIconRenderer` e `SummaryStatusRenderer` para desenhar o fundo de seleção ANTES dos ícones. Isso resolve o bug onde os ícones 🔗, ⏳ e ✅ desapareciam ou ficavam com bordas estranhas quando a linha era selecionada.
+
+### 3. Refinamento de Tema (DetailPanel)
+- **Zero-Flash Contrast**: O `DetailPanel` agora gera um HTML base completo com CSS injetado (`background-color`, `color`, `font-family`) no momento da construção. Isso elimina o "flash branco" ou contraste inválido (preto em preto) que ocorria na primeira inicialização do app em Dark Mode.
+- **Refresh Dinâmico**: O WebView agora acompanha as mudanças do sistema de temas mesmo quando não há nenhum vídeo carregado, mantendo a consistência visual em todo o ciclo de vida da aplicação.
+
+## Validação Realizada
+
+- **Compilação**: Todos os arquivos modificados compilaram sem erros sintáticos.
+- **Integridade de Eventos**: Verificado que a flag `_is_programmatic_selection` impede recursão infinita de eventos na grid.
+- **Estética**: As CTAs agora seguem rigorosamente o `ThemeManager`, respeitando as cores de cada tema definido.
+
+## Resultados das Alterações
+
+render_diffs(file:///c:/Users/Usuario/Desktop/contextflow/ui/virtual_table.py)
+render_diffs(file:///c:/Users/Usuario/Desktop/contextflow/ui/tab_analysis.py)
+render_diffs(file:///c:/Users/Usuario/Desktop/contextflow/ui/panel_detail.py)
+
+> [!TIP]
+> A grade analítica agora se comporta como uma ferramenta profissional de desktop. Experimente clicar na thumbnail ou na CTA "✦ Resumir" para ver o novo fluxo em ação.

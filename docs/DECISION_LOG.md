@@ -96,3 +96,10 @@ F7.3 | MOD | Discovery Assíncrono | Mover list_models para worker thread e libe
 F7.3 | MOD | Pools de Discovery | Discovery Ollama usa pool de IA (max_workers=1) para evitar OOM | `core/app_state.py`
 F7.3 | ADD | Availability Cache | Provider check em background com cache de 30s | `core/app_state.py`
 F7.3 | RULE | Zero HTTP na UI | Proibido requests.* direto em componentes de interface (Bisturi-Ollama) | Global
+
+### GRIDFIX-7.1 — Interatividade & Estética da Grade
+F7.1p | MOD | Full-Row Selection | Bloqueio de seleção parcial de texto para evitar realce azul sobre caracteres | `ui/tab_analysis.py`
+F7.1p | ADD | CTA "✦ Resumir" | Texto visual explícito em vez de "—" para aumentar discoverability | `ui/virtual_table.py`
+F7.1p | ADD | Thumbnail Modal | Expansão de miniatura em diálogo modal ao clicar na grid | `ui/tab_analysis.py`
+F7.1p | FIX | WebView Init Theme | Injeção de CSS no _init_ui para evitar flash branco ou contraste inválido | `ui/panel_detail.py`
+F7.1p | RULE | Background-First | Renderers DEVEM desenhar retângulo de seleção ANTES do conteúdo visual | `ui/virtual_table.py`

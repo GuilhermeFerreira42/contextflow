@@ -177,6 +177,10 @@ class TabAnalysis(wx.Panel):
         # [FASE 6.0] Expansão do Cockpit via Double Click
         self.grid.Bind(wx.grid.EVT_GRID_CELL_LEFT_DCLICK, self.on_grid_dclick)
 
+        # [7.1 PENDÊNCIA 5] Bloqueio de seleção acidental
+        self.grid.Bind(wx.grid.EVT_GRID_RANGE_SELECT, self._on_range_select)
+        self.grid.Bind(wx.grid.EVT_GRID_SELECT_CELL, self._on_cell_select_row)
+
     def _load_column_widths(self):
         """[FASE 6.2] Restaura larguras das colunas do ConfigManager."""
         widths = self.app_state.config.get("ui", "column_widths", {}).get("tab_analysis", {})
@@ -292,14 +296,40 @@ class TabAnalysis(wx.Panel):
             self.grid.ForceRefresh()
 
     def on_grid_motion(self, event):
+        """
+        [7.1 PENDÊNCIA 3 + original] Cursor hand em colunas interativas.
+        Colunas interativas: Link, Resumo (CTA), Preview (thumbnail).
+        """
         pos = event.GetPosition()
-        coords = self.grid.XYToCell(self.grid.CalcUnscrolledPosition(pos).x, 
-                                     self.grid.CalcUnscrolledPosition(pos).y)
+        # Converte posição para coordenadas da grid (com scroll)
+        unscrolled = self.grid.CalcUnscrolledPosition(pos)
+        coords = self.grid.XYToCell(unscrolled.x, unscrolled.y)
         col = coords.GetCol()
-        if col >= 0 and self.col_labels[col].strip() == "Link":
-            self.grid.GetGridWindow().SetCursor(wx.Cursor(wx.CURSOR_HAND))
-        else:
-            self.grid.GetGridWindow().SetCursor(wx.Cursor(wx.CURSOR_ARROW))
+
+        INTERACTIVE_COLS = {"Link", "Resumo", "Preview"}
+
+        if col >= 0 and col < len(self.col_labels):
+            label = self.col_labels[col].strip()
+            if label in INTERACTIVE_COLS:
+                # Verifica se é CTA ativo (não "summarizing")
+                if label == "Resumo":
+                    row = coords.GetRow()
+                    if 0 <= row < len(self.table.data):
+                        ss = self.table.data[row].get('summary_status', '')
+                        if ss == 'summarizing':
+                            # Em progresso: cursor padrão
+                            self.grid.GetGridWindow().SetCursor(
+                                wx.Cursor(wx.CURSOR_ARROW)
+                            )
+                            event.Skip()
+                            return
+                self.grid.GetGridWindow().SetCursor(
+                    wx.Cursor(wx.CURSOR_HAND)
+                )
+                event.Skip()
+                return
+
+        self.grid.GetGridWindow().SetCursor(wx.Cursor(wx.CURSOR_ARROW))
         event.Skip()
 
     def on_right_click(self, event):
@@ -397,6 +427,17 @@ class TabAnalysis(wx.Panel):
         if label == "Link":
             url = self.table.data[row].get('url')
             if url: webbrowser.open(url)
+            return
+
+        # [7.1 — PENDÊNCIA 1] Expansão de thumbnail na coluna Preview
+        if label == "Preview":
+            if row >= 0 and row < len(self.table.data):
+                video_data = self.table.data[row]
+                thumb_path = video_data.get('thumbnail_path', '')
+                if thumb_path and os.path.exists(thumb_path):
+                    self._show_thumbnail_dialog(thumb_path)
+            event.Skip()
+            return
 
         # [FASE 6.2] Coluna Resumo clicável — dispara ação de resumir
         if label == "Resumo":
@@ -795,6 +836,85 @@ class TabAnalysis(wx.Panel):
             self._refresh_grid()
         wx.CallAfter(_update)
 
+    def _on_range_select(self, event):
+        """
+        [7.1 PENDÊNCIA 5] Suprime seleção de range parcial.
+        Garante que apenas linhas inteiras sejam selecionadas.
+        Usa flag _is_programmatic_selection para evitar loop.
+        """
+        if getattr(self, '_is_programmatic_selection', False):
+            event.Skip()
+            return
+
+        # Suprime qualquer range que não seja linha inteira
+        if event.Selecting():
+            top_row = event.GetTopRow()
+            bottom_row = event.GetBottomRow()
+            if top_row == bottom_row:
+                # Seleção de linha única — converte para SelectRow
+                self._is_programmatic_selection = True
+                try:
+                    self.grid.SelectRow(top_row)
+                finally:
+                    self._is_programmatic_selection = False
+            # Multi-linha: permite (drag de linhas)
+        event.Skip()
+
+    def _on_cell_select_row(self, event):
+        """
+        [7.1 PENDÊNCIA 5] Ao selecionar célula, seleciona a linha inteira.
+        Guard flag evita recursão de eventos.
+        """
+        if getattr(self, '_is_programmatic_selection', False):
+            event.Skip()
+            return
+
+        row = event.GetRow()
+        if row >= 0:
+            self._is_programmatic_selection = True
+            try:
+                self.grid.SelectRow(row)
+            finally:
+                self._is_programmatic_selection = False
+
+        # Propaga para o handler existente on_select_video
+        event.Skip()
+
+    def _show_thumbnail_dialog(self, thumb_path: str):
+        """[7.1.1] Abre thumbnail em dialog modal ampliado."""
+        img = wx.Image(thumb_path, wx.BITMAP_TYPE_ANY)
+        if not img.IsOk():
+            return
+
+        display_w, display_h = wx.GetDisplaySize()
+        max_w = int(display_w * 0.8)
+        max_h = int(display_h * 0.8)
+        img_w, img_h = img.GetWidth(), img.GetHeight()
+        scale = min(max_w / max(img_w, 1), max_h / max(img_h, 1), 1.0)
+        new_w, new_h = int(img_w * scale), int(img_h * scale)
+        img = img.Scale(new_w, new_h, wx.IMAGE_QUALITY_HIGH)
+
+        dlg = wx.Dialog(
+            self, title="Prévia da Thumbnail",
+            style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER
+        )
+        dlg.SetBackgroundColour(wx.BLACK)
+        bmp_btn = wx.BitmapButton(
+            dlg, wx.ID_ANY, wx.Bitmap(img), style=wx.BORDER_NONE
+        )
+        bmp_btn.SetBackgroundColour(wx.BLACK)
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer.Add(bmp_btn, 1, wx.ALL | wx.CENTER, 0)
+        dlg.SetSizer(sizer)
+        dlg.Fit()
+        dlg.CenterOnParent()
+        bmp_btn.Bind(wx.EVT_BUTTON, lambda e: dlg.Close())
+        dlg.Bind(
+            wx.EVT_CHAR_HOOK,
+            lambda e: dlg.Close() if e.GetKeyCode() == wx.WXK_ESCAPE else e.Skip()
+        )
+        dlg.ShowModal()
+        dlg.Destroy()
     def _maybe_open_viewer(self, video_id):
         """
         Abre o painel de detalhe SE:

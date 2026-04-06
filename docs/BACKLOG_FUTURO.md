@@ -55,7 +55,8 @@
 - **Risco:** 🟢 Nenhum. Métodos nativos do `wx.TreeCtrl`.
 - **Impacto:** Navegação mais eficiente em bibliotecas grandes.
 
-### 7.1.5 — CTA Visual para Resumos Vazios
+### 7.1.5 — CTA Visual para Resumos Vazios [CONCLUÍDO - Fase 7.1p]
+- **Status:** CONCLUÍDO
 - **Problema:** Quando não há resumo, a coluna exibe um traço "—" que não comunica ação possível.
 - **Causa raiz:** O renderer da coluna de resumo usa texto estático para o estado vazio.
 - **Arquivo:** `ui/components/virtual_table.py`
@@ -78,7 +79,8 @@
 > Grupo de itens interdependentes que alteram o mecanismo de seleção da `wx.grid`.
 > ⚠️ IMPORTANTE: Itens #7.2.1 e #7.2.2 devem ser implementados JUNTOS como refactor único.
 
-### 7.2.1 — Destaque de Linha Inteira na Navegação por Teclado
+### 7.2.1 — Destaque de Linha Inteira na Navegação por Teclado [CONCLUÍDO - Fase 7.1p]
+- **Status:** CONCLUÍDO
 - **Problema:** Ao navegar com setas, o foco fica em célula individual em vez da linha toda.
 - **Causa raiz:** O `VirtualVideoTable` só aplica fundo de seleção quando detecta linha inteira selecionada. A navegação por teclado seleciona apenas a célula.
 - **Arquivos:** `ui/components/virtual_table.py`, `ui/tabs/tab_downloads.py`, `ui/tabs/tab_analysis.py`
@@ -87,7 +89,8 @@
 - **Risco:** 🟡 Médio. Loops de evento e conflito com checkbox.
 - **Impacto:** Navegação profissional consistente com ferramentas desktop de referência.
 
-### 7.2.2 — Bloqueio de Seleção Acidental de Caracteres
+### 7.2.2 — Bloqueio de Seleção Acidental de Caracteres [CONCLUÍDO - Fase 7.1p]
+- **Status:** CONCLUÍDO
 - **Problema:** Ao clicar/arrastar nas colunas de status, resumo ou link na aba 2, os caracteres são selecionados individualmente.
 - **Causa raiz:** Renderers personalizados não bloqueiam a seleção de texto padrão do `wx.grid`. As células se comportam como editáveis.
 - **Arquivos:** `ui/components/virtual_table.py`

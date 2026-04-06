@@ -292,13 +292,19 @@ class BadgeStatusRenderer(wx.grid.GridCellRenderer):
     def Clone(self): return BadgeStatusRenderer()
 
 class SummaryStatusRenderer(wx.grid.GridCellRenderer):
-    """Renderiza o status do resumo com ícones e cores SaaS."""
+    """Renderiza status do resumo com CTA visual. [7.1 PENDÊNCIA 3]"""
+
     def Draw(self, grid, attr, dc, rect, row, col, isSelected):
         theme = ThemeManager()
-        bg_color = theme.get_grid_selection_bg() if isSelected else theme.get_grid_bg()
+
+        # [PENDÊNCIA 4] Fundo de seleção ANTES do conteúdo
+        bg_color = (
+            theme.get_grid_selection_bg() if isSelected
+            else theme.get_grid_bg()
+        )
         dc.SetBrush(wx.Brush(bg_color))
         dc.SetPen(wx.TRANSPARENT_PEN)
-        dc.DrawRectangle(rect)
+        dc.DrawRectangle(rect)  # Sempre primeiro
         dc.SetClippingRegion(rect)
 
         table = grid.GetTable()
@@ -309,51 +315,86 @@ class SummaryStatusRenderer(wx.grid.GridCellRenderer):
         item = table.data[row]
         ss = item.get('summary_status', '')
 
-        # Ícone centralizado baseado no status
         if ss == 'summarizing':
             icon = "⏳"
-            color = theme.get_accent_color() if not isSelected else theme.get_grid_selection_fg()
+            color = (
+                theme.get_accent_color() if not isSelected
+                else theme.get_grid_selection_fg()
+            )
+            bold = False
         elif ss == 'summary_error':
             icon = "❌"
-            color = wx.Colour(220, 53, 69) if not isSelected else theme.get_grid_selection_fg()
+            color = (
+                wx.Colour(220, 53, 69) if not isSelected
+                else theme.get_grid_selection_fg()
+            )
+            bold = False
         elif ss == 'summarized':
             icon = "✅"
-            color = wx.Colour(40, 167, 69) if not isSelected else theme.get_grid_selection_fg()
+            color = (
+                wx.Colour(40, 167, 69) if not isSelected
+                else theme.get_grid_selection_fg()
+            )
+            bold = False
         else:
-            # Pendente / CTA
-            icon = "—"
-            color = theme.get_muted_color() if not isSelected else theme.get_grid_selection_fg()
+            # [7.1 PENDÊNCIA 3] CTA explícito em vez de "—"
+            icon = "✦ Resumir"
+            color = (
+                theme.get_accent_color() if not isSelected
+                else theme.get_grid_selection_fg()
+            )
+            bold = True  # Destaque adicional
 
         dc.SetTextForeground(color)
-        dc.SetFont(wx.Font(11, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
+        weight = wx.FONTWEIGHT_BOLD if bold else wx.FONTWEIGHT_NORMAL
+        dc.SetFont(wx.Font(
+            9, wx.FONTFAMILY_DEFAULT,
+            wx.FONTSTYLE_NORMAL, weight
+        ))
 
         tw, th = dc.GetTextExtent(icon)
         x = rect.x + (rect.width - tw) // 2
         y = rect.y + (rect.height - th) // 2
         dc.DrawText(icon, x, y)
-
         dc.DestroyClippingRegion()
 
     def GetBestSize(self, grid, attr, dc, row, col): return wx.Size(70, 45)
     def Clone(self): return SummaryStatusRenderer()
 
 class LinkIconRenderer(wx.grid.GridCellRenderer):
+    """[7.1 PENDÊNCIA 4] Fundo de seleção corrigido."""
+
     def Draw(self, grid, attr, dc, rect, row, col, isSelected):
         theme = ThemeManager()
-        bg_color = theme.get_grid_selection_bg() if isSelected else theme.get_grid_bg()
+
+        # PASSO 1: Fundo ANTES do ícone
+        bg_color = (
+            theme.get_grid_selection_bg() if isSelected
+            else theme.get_grid_bg()
+        )
         dc.SetBrush(wx.Brush(bg_color))
         dc.SetPen(wx.TRANSPARENT_PEN)
         dc.DrawRectangle(rect)
+
         dc.SetClippingRegion(rect)
 
-        icon_color = theme.get_accent_color() if not isSelected else theme.get_grid_selection_fg()
+        # PASSO 2: Ícone SOBRE o fundo
+        icon_color = (
+            theme.get_accent_color() if not isSelected
+            else theme.get_grid_selection_fg()
+        )
         dc.SetTextForeground(icon_color)
-        dc.SetFont(wx.Font(10, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
-
+        dc.SetFont(wx.Font(
+            10, wx.FONTFAMILY_DEFAULT,
+            wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD
+        ))
         txt = "🔗"
         tw, th = dc.GetTextExtent(txt)
-        dc.DrawText(txt, rect.x + (rect.width - tw)//2, rect.y + (rect.height - th)//2)
-
+        dc.DrawText(
+            txt,
+            rect.x + (rect.width - tw) // 2,
+            rect.y + (rect.height - th) // 2
+        )
         dc.DestroyClippingRegion()
 
     def GetBestSize(self, grid, attr, dc, row, col): return wx.Size(40, 45)

@@ -47,9 +47,26 @@ class DetailPanel(wx.Panel):
         # 2. Content (WebView for Rich Text)
         if wx.html2.WebView.IsBackendAvailable(wx.html2.WebViewBackendDefault):
             self.browser = wx.html2.WebView.New(self)
-            # [6.2d] Evita Flash: Injeta fundo do tema ativo imediatamente
+
+            # [7.1 — PENDÊNCIA 2] Inicialização com tema correto desde o frame 1
             bg_hex = self.theme.get_bg_color().GetAsString(wx.C2S_HTML_SYNTAX)
-            self.browser.SetPage(f"<html><body style='background-color:{bg_hex};'></body></html>", "")
+            fg_hex = self.theme.get_fg_color().GetAsString(wx.C2S_HTML_SYNTAX)
+            accent_hex = self.theme.get_accent_color().GetAsString(wx.C2S_HTML_SYNTAX)
+
+            initial_html = f"""<html>
+            <head><style>
+              body {{
+                background-color: {bg_hex};
+                color: {fg_hex};
+                font-family: 'Segoe UI', sans-serif;
+                margin: 0; padding: 20px;
+                line-height: 1.6;
+              }}
+              h3 {{ color: {accent_hex}; }}
+            </style></head>
+            <body></body></html>"""
+
+            self.browser.SetPage(initial_html, "")
             main_sizer.Add(self.browser, 1, wx.EXPAND | wx.ALL, 0)
         else:
             self.txt_content = wx.TextCtrl(self, style=wx.TE_MULTILINE | wx.TE_READONLY | wx.NO_BORDER)
@@ -174,6 +191,15 @@ class DetailPanel(wx.Panel):
         # [7.1.1] Recarregar o WebView com o tema atualizado
         if hasattr(self, '_current_video_id') and self._current_video_id:
             self._reload_webview_content()
+        elif self.browser:
+            # [7.1 PENDÊNCIA 2] Sem vídeo carregado: atualiza apenas o fundo base
+            bg_hex = bg.GetAsString(wx.C2S_HTML_SYNTAX)
+            fg_hex = fg.GetAsString(wx.C2S_HTML_SYNTAX)
+            self.browser.SetPage(
+                f"<html><body style='background-color:{bg_hex};"
+                f"color:{fg_hex};margin:0;padding:20px;'></body></html>",
+                ""
+            )
 
         # WebView — injeta CSS via JavaScript (Legado/Fallback)
         # [6.2d] Só executa JS se houver página carregada (evita erro de init)
