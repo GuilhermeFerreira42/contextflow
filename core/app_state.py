@@ -10,6 +10,8 @@ from core.managers.video_manager import VideoManager
 from core.managers.finance_manager import FinanceManager
 from core.managers.task_manager import TaskManager
 from core.managers.theme_manager import ThemeManager
+from constants import AI_PROVIDER_AVAILABILITY_CACHE_TTL_SECONDS
+import time
 
 logger = logging.getLogger("contextflow.state")
 
@@ -44,6 +46,10 @@ class AppState:
             self.finance_manager = FinanceManager()
             self.task_manager = TaskManager()
             self.theme_manager = ThemeManager()
+            
+            # [BISTURI-OLLAMA] Cache de Disponibilidade de Provedores
+            self._availability_cache: Dict[str, bool] = {}
+            self._availability_timestamps: Dict[str, float] = {}
             
             # PubSub Interno (Observers)
             self._observers: List[Callable[[str, Any], None]] = []
@@ -200,27 +206,39 @@ class AppState:
         for vid in video_ids:
             self.request_summary(vid)
 
-    def discover_ai_models(self, provider: str = None, callback=None):
+    def discover_ai_models(self, provider: str = None, callback=None, force_refresh: bool = False):
         """
         Descobre modelos de IA disponíveis em background.
-        [THREAD SAFETY] O discovery roda no generic_executor.
+        [BISTURI-OLLAMA] Corrigido para carregar na pool correta.
         O callback recebe a lista de modelos e DEVE usar wx.CallAfter.
 
         Args:
             provider: Nome do provedor (None = active_provider)
             callback: Callable[[List[Dict]], None] chamado com resultado
+            force_refresh: Força re-discovery ignorando cache
         """
         def _discover():
             from services.ai_discovery import AIDiscovery
             discovery = AIDiscovery()
-            models = discovery.discover_models(provider)
+            models = discovery.discover_models(provider, force_refresh=force_refresh)
             if callback:
-                callback(models)
+                # [FIX FASE 6.1b] Sempre garante wx.CallAfter no callback
+                if wx.GetApp():
+                    wx.CallAfter(callback, models)
+                else:
+                    callback(models)
+
+        # [BISTURI-OLLAMA] Usa pool 'ollama' para discovery local (max_workers=1)
+        # para evitar concorrência destrutiva no servidor local.
+        exec_provider = provider if provider == "ollama" else "generic"
+        if exec_provider is None: # Se provider for None, pega o ativo
+            active = self.config.get("orchestration", "active_provider", "ollama")
+            exec_provider = "ollama" if active == "ollama" else "generic"
 
         self.task_manager.submit_task(
             "ai_discovery",
             _discover,
-            provider="generic"
+            provider=exec_provider
         )
 
     def get_ai_model_context(self, model_name: str, provider: str = "ollama") -> int:
@@ -229,15 +247,46 @@ class AppState:
         return AIDiscovery().get_model_context_limit(model_name, provider)
 
     def is_ai_provider_available(self, provider: str = None) -> bool:
-        """Verifica se o provedor de IA está acessível."""
+        """
+        Verifica se o provedor de IA está acessível.
+        [BISTURI-OLLAMA] Implementa Cache TTL para evitar bloqueio da Main Thread.
+        """
         if provider is None:
             provider = self.config.get("orchestration", "active_provider", "ollama")
-        if provider == "ollama":
-            import requests
-            endpoint = self.config.get("ollama", "endpoint", "http://localhost:11434")
-            try:
-                r = requests.get(f"{endpoint}/", timeout=3)
-                return r.status_code == 200
-            except Exception:
-                return False
-        return False
+        
+        # 1. Verifica Cache
+        now = time.time()
+        with self._lock:
+            ts = self._availability_timestamps.get(provider, 0)
+            if now - ts < AI_PROVIDER_AVAILABILITY_CACHE_TTL_SECONDS:
+                return self._availability_cache.get(provider, False)
+
+        # 2. Se expirado, faz a verificação (ou dispara background)
+        # Para evitar o bloqueio inicial de 3s do requests.get na Main Thread,
+        # aqui usamos um truque: se for a primeira vez ou tiver expirado, 
+        # disparamos a verificação em uma thread rápida e retornamos o anterior.
+        
+        def _check():
+            res = False
+            if provider == "ollama":
+                import requests
+                endpoint = self.config.get("ollama", "endpoint", "http://localhost:11434")
+                try:
+                    r = requests.get(f"{endpoint}/", timeout=2) # Timeout menor
+                    res = (r.status_code == 200)
+                except Exception:
+                    res = False
+            elif provider == "google":
+                # Check simplificado para Google Gemini
+                from services.ai_providers.google_provider import GoogleProvider
+                res = GoogleProvider().is_available()
+            
+            with self._lock:
+                self._availability_cache[provider] = res
+                self._availability_timestamps[provider] = time.time()
+                logger.debug(f"AppState: IA Provider {provider} availability check: {res}")
+
+        # Dispara thread one-off se não houver uma rodando (opcional, aqui simplificado)
+        threading.Thread(target=_check, daemon=True).start()
+        
+        return self._availability_cache.get(provider, False)

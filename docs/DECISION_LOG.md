@@ -89,3 +89,10 @@ F7.2 | MOD | Persistência Síncrona | UPDATE no DB antes da notificação de UI
 F7.2 | ADD | PubSub AI Visibility | TabBatch monitora SUMMARY_COMPLETED/ERROR para fechar gauge | `ui/tab_batch.py`
 F7.2 | ADD | Handlers Globais de IA | Feedbacks em StatusBar e Log para eventos de resumo | `ui/app_window.py`
 F7.2 | RULE | Invariante Nº2 Reforçada | Persistência física OBRIGATÓRIA antes de qualquer cache de memória | Global
+
+### Fase 7.3 — Estabilidade do Módulo Ollama
+F7.3 | ADD | Discovery Cache TTL | 60s de cache para evitar hits redundantes ao Ollama | `services/ai_discovery.py`
+F7.3 | MOD | Discovery Assíncrono | Mover list_models para worker thread e liberar Main Thread | `ui/components/analysis_toolbar.py`
+F7.3 | MOD | Pools de Discovery | Discovery Ollama usa pool de IA (max_workers=1) para evitar OOM | `core/app_state.py`
+F7.3 | ADD | Availability Cache | Provider check em background com cache de 30s | `core/app_state.py`
+F7.3 | RULE | Zero HTTP na UI | Proibido requests.* direto em componentes de interface (Bisturi-Ollama) | Global

@@ -1,0 +1,57 @@
+# WALKTHROUGH — OPERAÇÃO BISTURI-OLLAMA (RESOLVIDO)
+
+Esta fase eliminou os travamentos síncronos da interface (UI) causados por chamadas de rede ao servidor Ollama, movendo as operações de descoberta e monitoramento para threads de background com cache inteligente.
+
+## Alterações Realizadas
+
+### 1. Fundação e Constantes
+- **`constants.py`**: Adicionadas as constantes `AI_DISCOVERY_CACHE_TTL_SECONDS (60s)` e `AI_PROVIDER_AVAILABILITY_CACHE_TTL_SECONDS (30s)` para reger a expiração dos caches.
+
+### 2. Infraestrutura de Descoberta (Discovery)
+- **`services/ai_discovery.py`**: 
+    - Implementado cache baseado em tempo (timestamps) no `AIDiscovery`.
+    - Adicionado suporte ao parâmetro `force_refresh` para invalidar o cache manualmente.
+- **`core/app_state.py`**: 
+    - Corrigido o envio de tarefas de descoberta: agora usam a pool `_ai_executor` (max_workers=1) para Ollama, evitando concorrência excessiva.
+    - O callback de descoberta agora garante o uso de `wx.CallAfter` para segurança de threads.
+
+### 3. Monitoramento de Disponibilidade
+- **`core/app_state.py`**: O método `is_ai_provider_available` agora é não-bloqueante. Ele retorna o último estado conhecido do cache e dispara uma thread de atualização em background se o TTL expirou. Isso remove o delay de 2-3 segundos no rodapé do `DialogConfig`.
+
+### 4. Interface do Usuário (AnalysisToolbar)
+- **`ui/components/analysis_toolbar.py`**: 
+    - Refatoração do `populate_model_selector` para ser totalmente assíncrono.
+    - O botão de "Refresh" agora utiliza `force_refresh=True` para garantir que o usuário veja novos modelos instalados no Ollama imediatamente.
+    - Uso rigoroso de `wx.CallAfter` no processamento dos resultados recebidos da thread de background.
+
+## Validação Automatizada
+
+Foi criado o script `scripts/verification/test_ollama_stability.py` que valida:
+- **Cache TTL**: Confirma que chamadas repetidas não geram tráfego HTTP.
+- **Force Refresh**: Confirma que o botão de refresh ignora o cache.
+- **Async Availability**: Confirma que o check de saúde do provider não bloqueia a chamada principal.
+- **Discovery Pools**: Confirma que o Ollama usa a pool correta de trabalhadores.
+
+**Resultado dos Testes:**
+```text
+--- Testando TTL do Cache de Modelos ---
+✅ Sucesso: Cache TTL e Force Refresh funcionando em AIDiscovery.
+
+--- Testando Cache de Disponibilidade no AppState ---
+✅ Sucesso: Cache de disponibilidade funcionando em AppState.
+
+--- Testando Pool de Execução de Discovery ---
+✅ Sucesso: Discovery agora usa pools diferenciadas.
+
+🎉 TODOS OS TESTES PASSARAM!
+```
+
+## Resultados das Alterações
+
+render_diffs(file:///c:/Users/Usuario/Desktop/contextflow/constants.py)
+render_diffs(file:///c:/Users/Usuario/Desktop/contextflow/services/ai_discovery.py)
+render_diffs(file:///c:/Users/Usuario/Desktop/contextflow/core/app_state.py)
+render_diffs(file:///c:/Users/Usuario/Desktop/contextflow/ui/components/analysis_toolbar.py)
+
+> [!TIP]
+> A experiência do usuário com Ollama local agora é fluida, sem congelamentos ao trocar de provador ou abrir configurações, mesmo com o servidor Ollama offline ou lento.

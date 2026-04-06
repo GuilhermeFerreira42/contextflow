@@ -1,0 +1,1326 @@
+# BLUEPRINT DE CORREÇÃO — INSTABILIDADE DO MÓDULO OLLAMA
+**Codinome:** OPERAÇÃO BISTURI-OLLAMA
+**Versão:** 1.0
+**Protocolo:** Bisturi, não Marreta — zero refatoração de escopo
+**Referência:** Análise Técnica + Código-fonte anexado (a.pdf)
+
+---
+
+## PARTE 1 — VISÃO DO PRODUTO
+
+### 1.1 Identidade
+
+| Campo | Valor |
+|---|---|
+| **Codinome** | BISTURI-OLLAMA |
+| **Versão Alvo** | 0.1.0 (ContextFlow — pós-correção) |
+| **Declaração de Visão** | Eliminar travamentos síncronos da UI ao usar Ollama, movendo toda descoberta de modelos para threads secundárias com cache persistente e polling sob demanda. |
+
+---
+
+### 1.2 Problema e Solução
+
+| Problema | Impacto | Como o Sistema Resolve |
+|---|---|---|
+| `AIDiscovery.discover_models()` chamado na Main Thread via `populate_model_selector()` | UI congela por até 600s (AI_DEFAULT_TIMEOUT) aguardando resposta do Ollama | Mover chamada para `TaskManager` via `submit_task()` com callback `wx.CallAfter` |
+| Descoberta disparada por eventos de UI frequentes (refresh da grid, foco) | Rajadas de chamadas HTTP ao endpoint `:11434` sem controle | Implementar cache em `AIDiscovery._cache` com TTL de 60s; re-descoberta somente via botão de refresh |
+| `AppState.discover_ai_models()` usa `"generic"` como provider, ignorando isolamento do executor | Tarefas de discovery competem com tasks de download no pool genérico | Corrigir provider para `"ollama"` no submit, usando `_ai_executor` pool dedicado |
+| `on_update_status()` no `DialogConfig` chama `app_state.is_ai_provider_available()` na Main Thread a cada 1s | Timer de 1s gera polling síncrono de `requests.get()` ao Ollama | Mover verificação de disponibilidade para thread separada com resultado cacheado |
+| `wx.CallAfter` ausente em alguns handlers de PubSub de IA | Crashes com `wx._core.PyAssertionError` em operações multi-vídeo | Auditoria e garantia de `wx.CallAfter` em todos os handlers que tocam UI |
+
+---
+
+### 1.3 Público-Alvo
+
+| Segmento | Perfil | Prioridade |
+|---|---|---|
+| **Usuário Ollama Local** | "Carlos" — usa modelos locais (llama3, qwen), sofre com tela congelada ao selecionar provedor | P0 |
+| **Desenvolvedor ContextFlow** | "Ana" — precisa de arquitetura estável para expandir suporte a provedores | P1 |
+| **Usuário Cloud (Google)** | "Marcos" — não sofre o bug, mas pode ser afetado por regressão | P2 |
+
+---
+
+### 1.4 Princípios Arquiteturais
+
+| Princípio | Descrição Concreta | Implicação Técnica |
+|---|---|---|
+| **Thread Safety Absoluto** | Nenhuma chamada HTTP ocorre na Main Thread | Todo `requests.get/post` deve estar em worker thread |
+| **Cache-First Discovery** | Lista de modelos é buscada uma vez, cacheada, servida do cache | `AIDiscovery._cache` com TTL; invalidação apenas manual |
+| **Polling Sob Demanda** | Nenhum timer dispara descoberta automática | `populate_model_selector()` só chamado via botão de refresh ou inicialização única |
+| **wx.CallAfter Mandatório** | Todo callback que modifica widget deve usar `wx.CallAfter` | Verificável via grep: `PubSub.subscribe` + modificação de widget sem `CallAfter` = bug |
+| **Bisturi, não Marreta** | Apenas os arquivos listados neste blueprint são modificados | `virtual_table.py`, `pubsub.py`, `ai_executor.py` permanecem intocados |
+
+**DECISÃO ARQUITETURAL CRÍTICA por princípio:**
+- Thread Safety: Todo handler PubSub que modifica UI deve ser auditável com `grep "PubSub.subscribe" | xargs grep -L "wx.CallAfter"` retornando lista vazia.
+- Cache-First: `AIDiscovery.get_cached_models()` deve ser chamado antes de qualquer HTTP; HTTP só ocorre se cache vazio ou TTL expirado.
+
+---
+
+### 1.5 Diferenciais
+
+| Abordagem Atual | Problema | Como Este Sistema Supera |
+|---|---|---|
+| `discover_models()` síncrono no evento de troca de provedor | Bloqueia UI por tempo indeterminado | Chamada assíncrona + resultado entregue via callback com `wx.CallAfter` |
+| Sem TTL no cache de modelos | Redescobrimento a cada evento de UI | Cache com timestamp; re-fetch apenas após 60s ou clique manual |
+| `is_ai_provider_available()` na Main Thread via timer | 1 requisição HTTP por segundo no loop principal | Verificação assíncrona única; resultado cacheado em `AppState` |
+
+---
+
+## PARTE 2 — ARQUITETURA DE COMPONENTES
+
+### 2.1 Componente: `AIDiscovery` (modificado)
+
+**Ficha Técnica:**
+
+| Atributo | Valor |
+|---|---|
+| ID interno | `SVC-AI-DISCOVERY` |
+| Classe Base | nenhuma |
+| Dependências | `ConfigManager`, `OllamaProvider`, `GoogleProvider` |
+| Modo de Operação | **Assíncrono** (chamada via TaskManager); Stateful (cache em memória) |
+| Permissões | Leitura de config; chamadas HTTP externas; escrita no `_cache` |
+| **Arquivo** | `services/ai_discovery.py` |
+
+**Responsabilidade:**
+Receber solicitação de descoberta de modelos, verificar TTL do cache interno, executar chamada HTTP ao provider se necessário, retornar lista de modelos. Nunca bloquear a thread chamadora.
+
+**Inputs:**
+
+| Input | Tipo | Descrição | Origem |
+|---|---|---|---|
+| `provider` | `str \| None` | Nome do provedor (`"ollama"`, `"google"`) | `AppState.discover_ai_models()` |
+| `force_refresh` | `bool` | Ignora TTL e força re-fetch | Botão de refresh na toolbar |
+
+**Output (exemplo JSON completo):**
+```json
+[
+  {
+    "name": "llama3:8b",
+    "context_length": 8192,
+    "has_thinking": false,
+    "is_cloud": false,
+    "family": "llama",
+    "parameter_size": "8B",
+    "quantization_level": "Q4_0",
+    "size_bytes": 4661228288,
+    "modified_at": "2024-03-15T10:22:31Z"
+  },
+  {
+    "name": "qwen2.5:14b",
+    "context_length": 32768,
+    "has_thinking": true,
+    "is_cloud": false,
+    "family": "qwen2",
+    "parameter_size": "14B",
+    "quantization_level": "Q4_K_M",
+    "size_bytes": 9053354688,
+    "modified_at": "2024-03-20T08:15:44Z"
+  }
+]
+```
+
+**Novas constantes necessárias:**
+```python
+# Em constants.py — ADICIONAR:
+AI_DISCOVERY_CACHE_TTL_SECONDS = 60  # TTL do cache de modelos
+AI_PROVIDER_CHECK_CACHE_TTL_SECONDS = 30  # TTL do check de disponibilidade
+```
+
+---
+
+### 2.2 Componente: `AnalysisToolbar` (modificado)
+
+**Ficha Técnica:**
+
+| Atributo | Valor |
+|---|---|
+| ID interno | `UI-TOOLBAR-ANALYSIS` |
+| Classe Base | `wx.Panel` |
+| Dependências | `AppState`, `ThemeManager`, `PubSub` |
+| Modo de Operação | **Síncrono** (UI); recebe resultados assíncronos via callback |
+| Permissões | Leitura de AppState; modificação de widgets próprios; escrita em ConfigManager |
+| **Arquivo** | `ui/components/analysis_toolbar.py` |
+
+**Responsabilidade:**
+Receber evento de troca de provedor, disparar descoberta assíncrona via `AppState.discover_ai_models()`, atualizar seletor de modelos somente quando callback retornar resultado — sempre via `wx.CallAfter`.
+
+**Inputs:**
+
+| Input | Tipo | Descrição | Origem |
+|---|---|---|---|
+| Evento `EVT_CHOICE` | `wx.CommandEvent` | Troca de provedor pelo usuário | `choice_provider` widget |
+| Evento `EVT_BUTTON` | `wx.CommandEvent` | Clique no botão de refresh | `btn_refresh_models` |
+| `models` | `List[Dict]` | Lista retornada pela descoberta | Callback do `AppState.discover_ai_models()` |
+
+---
+
+### 2.3 Componente: `AppState.discover_ai_models()` (modificado)
+
+**Ficha Técnica:**
+
+| Atributo | Valor |
+|---|---|
+| ID interno | `CORE-APPSTATE-DISCOVERY` |
+| Classe Base | método de `AppState` |
+| Dependências | `TaskManager`, `AIDiscovery` |
+| Modo de Operação | **Assíncrono** — submete ao `TaskManager`; retorna imediatamente |
+| Permissões | Submissão de tarefas ao TaskManager |
+| **Arquivo** | `core/app_state.py` |
+
+**Responsabilidade:**
+Receber solicitação de descoberta, submeter ao `TaskManager` com o provider correto (`"ollama"` para Ollama, `"generic"` para outros), garantir que o callback seja chamado via `wx.CallAfter` no resultado.
+
+---
+
+### 2.4 Componente: `DialogConfig.on_update_status()` (modificado)
+
+**Ficha Técnica:**
+
+| Atributo | Valor |
+|---|---|
+| ID interno | `UI-DIALOG-CONFIG-STATUS` |
+| Classe Base | método de `DialogConfig` |
+| Dependências | `AppState`, `CooldownManager`, `ProxyManager` |
+| Modo de Operação | Chamado por `wx.Timer` a cada 1s |
+| Permissões | Leitura de estado; escrita em labels de status |
+| **Arquivo** | `ui/dialog_config.py` |
+
+**Responsabilidade:**
+Atualizar labels de status sem bloquear a UI. A verificação de disponibilidade do provedor de IA deve usar resultado cacheado, nunca disparar HTTP na Main Thread.
+
+---
+
+## PARTE 3 — FLUXO DE COMUNICAÇÃO E CONTRATOS
+
+### 3.1 Diagrama de Sequência — Fluxo Corrigido de Descoberta de Modelos
+
+```mermaid
+sequenceDiagram
+    participant User as Usuário
+    participant Toolbar as AnalysisToolbar
+    participant AppState as AppState
+    participant TaskMgr as TaskManager
+    participant Discovery as AIDiscovery
+    participant Ollama as Servidor Ollama :11434
+    participant UI as Main Thread (UI)
+
+    User->>Toolbar: Seleciona "ollama" no choice_provider
+    Toolbar->>Toolbar: lbl_ai_status.SetLabel("🔍 Buscando...")
+    Toolbar->>Toolbar: choice_model.Enable(False)
+    Toolbar->>AppState: discover_ai_models(provider="ollama", callback=on_models_discovered)
+    AppState->>TaskMgr: submit_task("ai_discovery", _discover, provider="ollama")
+    Note over TaskMgr: Executa em _ai_executor pool<br/>(thread separada, não bloqueia UI)
+    TaskMgr->>Discovery: _discover() em worker thread
+    Discovery->>Discovery: Verifica TTL do cache
+    alt Cache válido (TTL < 60s)
+        Discovery->>Discovery: Retorna _cache["ollama"]
+    else Cache expirado ou vazio
+        Discovery->>Ollama: GET /api/tags (timeout=15s)
+        Ollama-->>Discovery: JSON com lista de modelos
+        Discovery->>Discovery: Para cada modelo: POST /api/show
+        Ollama-->>Discovery: Metadados do modelo
+        Discovery->>Discovery: _cache["ollama"] = models
+        Discovery->>Discovery: _cache_timestamp["ollama"] = time.time()
+    end
+    Discovery->>AppState: callback(models)
+    AppState->>UI: wx.CallAfter(callback, models)
+    UI->>Toolbar: _update_model_selector(models)
+    Toolbar->>Toolbar: choice_model.SetItems(model_names)
+    Toolbar->>Toolbar: choice_model.Enable(True)
+    Toolbar->>Toolbar: lbl_ai_status.SetLabel("✅ N modelos prontos")
+```
+
+---
+
+### 3.2 Diagrama de Estado — Ciclo de Vida da Descoberta de Modelos
+
+```mermaid
+stateDiagram-v2
+    [*] --> Idle : Inicialização do AnalysisToolbar
+
+    Idle --> Discovering : populate_model_selector() chamado
+    Idle --> Discovering : Botão de refresh clicado
+
+    Discovering --> CacheHit : Cache válido (TTL < 60s)
+    Discovering --> FetchingHTTP : Cache vazio ou expirado
+
+    CacheHit --> UpdatingUI : Modelos disponíveis no cache
+
+    FetchingHTTP --> UpdatingUI : GET /api/tags retornou 200
+    FetchingHTTP --> ErrorState : Timeout / ConnectionError / HTTP != 200
+
+    UpdatingUI --> Ready : wx.CallAfter(_update_model_selector) executado
+
+    ErrorState --> Ready : _update_model_selector([]) chamado
+    Note on ErrorState: lbl_ai_status mostra "⚠️ Provider indisponível"
+
+    Ready --> Idle : Usuário não interage
+    Ready --> Discovering : Usuário clica em refresh
+    Ready --> Discovering : Usuário troca de provedor
+```
+
+---
+
+### 3.3 Tabela de Transições de Estado
+
+| Estado Atual | Evento | Estado Novo | Condição | Ação |
+|---|---|---|---|---|
+| `Idle` | `populate_model_selector()` chamado | `Discovering` | Sempre | Desabilita `choice_model`; exibe "🔍 Buscando..." |
+| `Discovering` | Cache TTL válido | `CacheHit` | `time.time() - _cache_timestamp < 60` | Lê `_cache[provider]` |
+| `Discovering` | Cache expirado | `FetchingHTTP` | `TTL >= 60s ou cache vazio` | Executa GET `/api/tags` em worker thread |
+| `FetchingHTTP` | HTTP 200 recebido | `UpdatingUI` | `response.status_code == 200` | Parseia JSON; chama `callback(models)` |
+| `FetchingHTTP` | Timeout ou erro | `ErrorState` | `requests.exceptions.*` | Chama `callback([])` |
+| `CacheHit` | Modelos disponíveis | `UpdatingUI` | Cache não vazio | Chama `callback(models_from_cache)` |
+| `UpdatingUI` | `wx.CallAfter` executado | `Ready` | Main Thread livre | Atualiza `choice_model`; habilita widget |
+| `ErrorState` | `callback([])` | `Ready` | Sempre | Exibe "⚠️ Provider indisponível"; `choice_model` mostra "Nenhum modelo" |
+| `Ready` | Botão refresh clicado | `Discovering` | `force_refresh=True` | Ignora TTL; força re-fetch |
+
+---
+
+### 3.4 Schemas de Mensagens
+
+**Schema: Callback de Descoberta**
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "title": "ModelDiscoveryResult",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["name", "context_length", "has_thinking", "is_cloud"],
+    "properties": {
+      "name": { "type": "string", "minLength": 1, "example": "llama3:8b" },
+      "context_length": { "type": "integer", "minimum": 0, "example": 8192 },
+      "has_thinking": { "type": "boolean", "example": false },
+      "is_cloud": { "type": "boolean", "example": false },
+      "family": { "type": "string", "example": "llama" },
+      "parameter_size": { "type": "string", "example": "8B" },
+      "quantization_level": { "type": "string", "example": "Q4_0" },
+      "size_bytes": { "type": "integer", "example": 4661228288 },
+      "modified_at": { "type": "string", "example": "2024-03-15T10:22:31Z" }
+    }
+  }
+}
+```
+
+**Regra de validação:** Se `callback` receber `None` em vez de lista, deve ser tratado como `[]`. Nunca repassar `None` para `_update_model_selector`.
+
+**Schema: Cache Interno de Discovery**
+```json
+{
+  "title": "AIDiscoveryCacheEntry",
+  "type": "object",
+  "required": ["models", "timestamp"],
+  "properties": {
+    "models": {
+      "type": "array",
+      "description": "Lista de modelos retornada pelo provider"
+    },
+    "timestamp": {
+      "type": "number",
+      "description": "time.time() no momento do fetch"
+    }
+  },
+  "example": {
+    "models": [{"name": "llama3:8b", "context_length": 8192}],
+    "timestamp": 1711440000.0
+  }
+}
+```
+
+---
+
+## PARTE 4 — INFRAESTRUTURA E INTEGRAÇÃO
+
+### 4.1 Diagrama de Infraestrutura
+
+```mermaid
+graph TB
+    subgraph UI["Main Thread (wxPython)"]
+        AT[AnalysisToolbar]
+        DC[DialogConfig]
+        AW[AppWindow]
+    end
+
+    subgraph Core["Core Layer"]
+        AS[AppState]
+        TM[TaskManager<br/>_ai_executor: max_workers=1<br/>_generic_executor: max_workers=4]
+        CM[ConfigManager]
+    end
+
+    subgraph Services["Services Layer"]
+        AD[AIDiscovery<br/>+ Cache TTL 60s]
+        AE[AIExecutor]
+    end
+
+    subgraph External["Servidores Externos"]
+        OL[Ollama :11434<br/>/api/tags<br/>/api/show<br/>/api/generate]
+        GG[Google Gemini API]
+    end
+
+    AT -->|discover_ai_models| AS
+    DC -->|is_ai_provider_available CACHEADO| AS
+    AS -->|submit_task provider=ollama| TM
+    TM -->|_ai_executor pool| AD
+    AD -->|GET /api/tags| OL
+    AD -->|POST /api/show| OL
+    AE -->|POST /api/generate| OL
+    AE -->|REST API| GG
+    AD -->|wx.CallAfter callback| AT
+    AS -->|wx.CallAfter| UI
+```
+
+---
+
+### 4.2 Requisitos de Hardware/Ambiente
+
+| Perfil | Especificações | Notas |
+|---|---|---|
+| **Mínimo** | Python 3.10+, 4GB RAM, Ollama instalado e rodando | Ollama em `localhost:11434` |
+| **Recomendado** | Python 3.11+, 8GB RAM, GPU NVIDIA 6GB+ | Para modelos 7B-14B |
+| **Sem Ollama** | Python 3.11+, qualquer hardware | Provider `google` não afetado pelo bug |
+
+---
+
+### 4.3 Integrações Externas
+
+**Ollama Local:**
+- **O que é:** Servidor local de LLMs via HTTP REST
+- **Por que escolhida:** Única opção open-source local suportada; alternativa rejeitada: `subprocess` (decisão F6.1a)
+- **Variáveis de ambiente:** Nenhuma; endpoint configurado em `credentials.json` → `ollama.endpoint`
+- **Configuração:** `ollama serve` no terminal antes de iniciar o app
+- **Fallback:** Se indisponível, `is_available()` retorna `False`; `list_models()` retorna `[]`; UI exibe "⚠️ Provider indisponível"
+
+---
+
+### 4.4 Novas Constantes de Configuração
+
+```python
+# constants.py — ADICIONAR ao final do arquivo:
+
+# --- AI Discovery Cache Configuration ---
+# [BISTURI-OLLAMA] TTL do cache de modelos descobertos.
+# Evita chamadas HTTP repetitivas ao servidor Ollama.
+AI_DISCOVERY_CACHE_TTL_SECONDS = 60  # 1 minuto
+
+# [BISTURI-OLLAMA] TTL do cache de verificação de disponibilidade do provider.
+# Usado pelo DialogConfig.on_update_status() para evitar HTTP na Main Thread.
+AI_PROVIDER_AVAILABILITY_CACHE_TTL_SECONDS = 30  # 30 segundos
+```
+
+---
+
+## PARTE 5 — RECUPERAÇÃO DE ERROS E RESILIÊNCIA
+
+### 5.1 Classificação de Erros
+
+| Nível | Tipo | Exemplos Concretos | Ação Automática | Timeout | Máx Tentativas |
+|---|---|---|---|---|---|
+| 1 | **Cache Miss Benigno** | Cache vazio na primeira execução | Dispara fetch HTTP em background | 15s | 1 |
+| 2 | **ConnectionError** | Ollama não está rodando | `callback([])` + status "⚠️ Provider indisponível" | 5s | 1 |
+| 3 | **Timeout HTTP** | Ollama respondendo lentamente (GPU sobrecarregada) | `callback([])` + log WARNING | 15s (discovery) / 5s (health check) | 1 |
+| 4 | **HTTP não-200** | Ollama retornou erro 4xx/5xx | `callback([])` + log ERROR | — | 1 |
+| 5 | **CallAfter em thread errada** | Widget modificado fora da Main Thread | `wx.CallAfter` obrigatório; ausência causa crash | — | 0 (proibido) |
+
+---
+
+### 5.2 Fluxo de Self-Healing
+
+```mermaid
+flowchart TD
+    A[Discovery iniciada] --> B{Cache válido?}
+    B -->|Sim - TTL OK| C[Retorna modelos do cache]
+    B -->|Não| D[Executa HTTP em worker thread]
+    D --> E{HTTP bem-sucedido?}
+    E -->|Sim - 200| F[Atualiza cache com TTL]
+    E -->|Timeout| G[Log WARNING]
+    E -->|ConnectionError| H[Log WARNING]
+    E -->|HTTP != 200| I[Log ERROR]
+    F --> J[callback com lista de modelos]
+    G --> K[callback com lista vazia]
+    H --> K
+    I --> K
+    C --> J
+    J --> L[wx.CallAfter _update_model_selector]
+    K --> L
+    L --> M{Lista vazia?}
+    M -->|Sim| N[Exibe: ⚠️ Provider indisponível]
+    M -->|Não| O[Popula choice_model com modelos]
+    N --> P[choice_model desabilitado]
+    O --> Q[choice_model habilitado]
+```
+
+---
+
+### 5.3 Padrões de Recuperação
+
+**PADRÃO 1 — Ollama Offline**
+- **DETECTOR:** `requests.exceptions.ConnectionError` em `OllamaProvider.list_models()`
+- **PATTERN:** `ConnectionError: HTTPConnectionPool(host='localhost', port=11434)`
+- **FLUXO:**
+  1. Worker thread captura `ConnectionError`
+  2. `logger.warning(f"Ollama não acessível em {endpoint}")`
+  3. Retorna `[]` (lista vazia)
+  4. `callback([])` chamado
+  5. `wx.CallAfter(_update_model_selector, [])` executado na Main Thread
+  6. UI exibe "⚠️ Provider indisponível"; `choice_model` desabilitado
+
+**PADRÃO 2 — Timeout de Resposta**
+- **DETECTOR:** `requests.exceptions.Timeout` em `list_models()`
+- **PATTERN:** Timeout após 15 segundos em `/api/tags`
+- **FLUXO:**
+  1. Worker thread captura `Timeout`
+  2. `logger.warning(f"Timeout ao listar modelos Ollama")`
+  3. Retorna `[]`
+  4. Idem Padrão 1, passos 4-6
+
+**PADRÃO 3 — wx.CallAfter Ausente (Bug em Produção)**
+- **DETECTOR:** `wx._core.PyAssertionError: C++ assertion "IsMainThread()" failed`
+- **PATTERN:** Callback modifica widget diretamente sem `wx.CallAfter`
+- **FLUXO:**
+  1. Garantir que `on_models_discovered(models)` **sempre** chame `wx.CallAfter(_update_model_selector, models)`
+  2. Nunca chamar `choice_model.SetItems()` diretamente de worker thread
+
+---
+
+### 5.4 Mapa de Falhas
+
+```mermaid
+graph LR
+    F1[Ollama offline] --> R1[callback vazio + status warning]
+    F2[Timeout HTTP] --> R1
+    F3[HTTP 500] --> R1
+    F4[Cache expirado] --> R2[Re-fetch em background]
+    F5[CallAfter ausente] --> R3[Crash de UI]
+    R3 --> FIX[Auditoria obrigatória<br/>grep CallAfter]
+    R1 --> UI1[UI responsiva<br/>Mensagem de erro amigável]
+    R2 --> UI2[UI responsiva<br/>Atualização transparente]
+```
+
+---
+
+## PARTE 6 — REQUISITOS FUNCIONAIS E NÃO-FUNCIONAIS
+
+### 6.1 Requisitos Funcionais
+
+| ID | Requisito | Critério de Aceite (verificável) | Prioridade | Complexidade |
+|---|---|---|---|---|
+| RF-01 | `populate_model_selector()` NÃO bloqueia a Main Thread | Ao selecionar provider "ollama" com servidor lento, a UI permanece responsiva (scroll, clique) durante o fetch | MUST | Média |
+| RF-02 | Cache de modelos com TTL de 60s | Segunda chamada a `discover_models()` dentro de 60s não dispara HTTP; `logger.debug` deve confirmar cache hit | MUST | Baixa |
+| RF-03 | Re-descoberta somente via botão de refresh | Trocar de aba e voltar NÃO dispara nova chamada HTTP; apenas `btn_refresh_models` força re-fetch | MUST | Baixa |
+| RF-04 | `on_models_discovered` usa `wx.CallAfter` | `grep -n "def on_models_discovered" analysis_toolbar.py` mostra `wx.CallAfter` na linha seguinte | MUST | Baixa |
+| RF-05 | `DialogConfig.on_update_status()` não faz HTTP na Main Thread | Com Ollama offline, o timer de 1s NÃO gera `ConnectionError` stacktrace; usa resultado cacheado | MUST | Média |
+| RF-06 | `AppState.discover_ai_models()` usa provider correto para Ollama | `submit_task(..., provider="ollama")` enfileira no `_ai_executor` (max_workers=1) | MUST | Baixa |
+| RF-07 | Inicialização única do seletor de modelos | `wx.CallAfter(self.populate_model_selector)` no `__init__` do `AnalysisToolbar` ocorre apenas uma vez | MUST | Baixa |
+| RF-08 | Fallback gracioso quando provider indisponível | `choice_model` exibe "Nenhum modelo disponível" sem crash quando `callback([])` | MUST | Baixa |
+| RF-09 | TTL de 30s para cache de disponibilidade do provider | `is_ai_provider_available()` em `DialogConfig` usa resultado cacheado por 30s | SHOULD | Média |
+| RF-10 | `force_refresh=True` invalida cache e força HTTP | Clique no `btn_refresh_models` sempre busca lista atualizada do servidor | SHOULD | Baixa |
+
+---
+
+### 6.2 Requisitos Não-Funcionais
+
+| ID | Categoria | Requisito | Métrica | Target |
+|---|---|---|---|---|
+| RNF-01 | **Performance** | UI deve responder durante descoberta de modelos | Latência de clique na UI durante fetch HTTP | < 16ms (60 FPS mantido) |
+| RNF-02 | **Performance** | Cache hit deve ser imperceptível | Tempo de atualização do `choice_model` via cache | < 50ms |
+| RNF-03 | **Segurança de Thread** | Zero chamadas HTTP na Main Thread | Quantidade de `requests.get/post` executados fora de worker thread | 0 |
+| RNF-04 | **Compatibilidade** | Correção não quebra providers Google/OpenAI | Testes existentes `verify_phase_6_2.py` passam sem modificação | 100% pass |
+| RNF-05 | **Observabilidade** | Toda operação de discovery deve ser logada | Linhas de log para: cache hit, cache miss, HTTP success, HTTP error | 100% cobertura |
+| RNF-06 | **Usabilidade** | Feedback visual durante descoberta | `lbl_ai_status` exibe "🔍 Buscando..." durante fetch | Visível em 100% das chamadas |
+
+---
+
+### 6.3 Matriz de Rastreabilidade
+
+| RF/RNF | Componente | Arquivo | Método/Função | Teste que Valida | Critério Binário de Aceite |
+|---|---|---|---|---|---|
+| RF-01 | `AnalysisToolbar` | `ui/components/analysis_toolbar.py` | `populate_model_selector()` | `test_ollama_stability.py::test_ui_responsive_during_discovery` | UI aceita cliques durante fetch |
+| RF-02 | `AIDiscovery` | `services/ai_discovery.py` | `discover_models()` | `test_ollama_stability.py::test_cache_ttl_respected` | Log "cache hit" presente; HTTP não disparado |
+| RF-03 | `AnalysisToolbar` | `ui/components/analysis_toolbar.py` | `_bind_events()` | `test_ollama_stability.py::test_no_auto_rediscovery` | Sem HTTP entre refreshes manuais |
+| RF-04 | `AnalysisToolbar` | `ui/components/analysis_toolbar.py` | `on_models_discovered()` (novo) | `test_ollama_stability.py::test_callafter_used` | `wx.CallAfter` no callback |
+| RF-05 | `DialogConfig` | `ui/dialog_config.py` | `on_update_status()` | `test_ollama_stability.py::test_dialog_status_no_http_main_thread` | Sem `requests.*` na Main Thread |
+| RF-06 | `AppState` | `core/app_state.py` | `discover_ai_models()` | `test_ollama_stability.py::test_correct_executor_used` | `_ai_executor` usado para Ollama |
+| RF-07 | `AnalysisToolbar` | `ui/components/analysis_toolbar.py` | `__init__()` | Revisão de código | 1x `wx.CallAfter(populate_model_selector)` |
+| RF-08 | `AnalysisToolbar` | `ui/components/analysis_toolbar.py` | `_update_model_selector()` | `test_ollama_stability.py::test_graceful_fallback` | Sem crash com lista vazia |
+| RF-09 | `AppState` | `core/app_state.py` | `is_ai_provider_available()` | `test_ollama_stability.py::test_availability_cache` | HTTP max 1x por 30s |
+| RF-10 | `AIDiscovery` | `services/ai_discovery.py` | `invalidate_cache()` | `test_ollama_stability.py::test_force_refresh` | Cache limpo; HTTP disparado |
+| RNF-03 | Todos | Todos | Todos | `grep -rn "requests\." core/ ui/ \| grep -v "# noqa"` | 0 ocorrências fora de workers |
+
+---
+
+## PARTE 7 — ÁRVORE DE ARQUIVOS E BLUEPRINT ESTRUTURAL
+
+### 7.1 Arquivos Modificados (Bisturi)
+
+```
+contextflow/
+├── constants.py                          ← MODIFICAR: +2 constantes de TTL
+├── core/
+│   └── app_state.py                      ← MODIFICAR: discover_ai_models() + is_ai_provider_available()
+├── services/
+│   └── ai_discovery.py                   ← MODIFICAR: cache com TTL + force_refresh
+└── ui/
+    ├── components/
+    │   └── analysis_toolbar.py           ← MODIFICAR: populate_model_selector() assíncrono
+    └── dialog_config.py                  ← MODIFICAR: on_update_status() sem HTTP Main Thread
+
+# Novo arquivo de testes:
+scripts/
+└── verification/
+    └── test_ollama_stability.py          ← CRIAR: testes de validação desta correção
+```
+
+### 7.2 Descrição por Arquivo (Modificações)
+
+**`constants.py`**
+- Propósito: Adicionar 2 constantes de TTL para cache de discovery e disponibilidade
+- Deps: nenhuma
+- Interfaces adicionadas: `AI_DISCOVERY_CACHE_TTL_SECONDS`, `AI_PROVIDER_AVAILABILITY_CACHE_TTL_SECONDS`
+- Usado por: `ai_discovery.py`, `app_state.py`
+
+**`services/ai_discovery.py`**
+- Propósito: Adicionar TTL ao cache existente; adicionar `_cache_timestamps`; adicionar parâmetro `force_refresh`
+- Deps: `ConfigManager`, `OllamaProvider`, `GoogleProvider`, `AI_DISCOVERY_CACHE_TTL_SECONDS`
+- Interfaces modificadas: `discover_models(provider, force_refresh=False)`, `invalidate_cache()`
+
+**`core/app_state.py`**
+- Propósito: Corrigir provider no `submit_task` de discovery; adicionar cache de disponibilidade
+- Deps: `TaskManager`, `AIDiscovery`, `AI_PROVIDER_AVAILABILITY_CACHE_TTL_SECONDS`
+- Interfaces modificadas: `discover_ai_models()`, `is_ai_provider_available()`
+
+**`ui/components/analysis_toolbar.py`**
+- Propósito: Extrair callback para método nomeado; garantir `wx.CallAfter`; remover chamada síncrona inicial
+- Deps: `AppState`, `ThemeManager`
+- Interfaces modificadas: `populate_model_selector()`, novo `on_models_discovered(models)`
+
+**`ui/dialog_config.py`**
+- Propósito: Remover chamada HTTP síncrona de `on_update_status()`; usar resultado cacheado
+- Deps: `AppState`, `CooldownManager`, `ProxyManager`
+- Interfaces modificadas: `on_update_status()`
+
+---
+
+### 7.3 Convenções de Nomenclatura
+
+| Tipo | Convenção | Exemplo |
+|---|---|---|
+| Cache de modelos | `_cache[provider_name]` | `_cache["ollama"]` |
+| Cache de timestamp | `_cache_timestamps[provider_name]` | `_cache_timestamps["ollama"]` |
+| Callbacks de discovery | `on_models_discovered` | método na toolbar |
+| Flags de disponibilidade | `_availability_cache` | dict em AppState |
+| Métodos de invalidação | `invalidate_cache()` | em AIDiscovery |
+
+---
+
+## PARTE 8 — DECISÕES ARQUITETURAIS (ADRs)
+
+### ADR-01: Cache com TTL vs. Cache Permanente
+
+| Campo | Valor |
+|---|---|
+| **Status** | ACEITA |
+| **Data** | 2025-06-10 |
+| **Contexto** | Lista de modelos Ollama pode mudar (usuário instala novo modelo); cache permanente causaria stale data |
+| **Decisão** | TTL de 60 segundos; invalidação automática por tempo + invalidação manual via botão de refresh |
+| **Alternativas Rejeitadas** | Cache permanente (usuário não veria novos modelos sem reiniciar); sem cache (problema original) |
+| **Consequências** | Positivo: dados frescos a cada minuto. Negativo: 1 chamada HTTP por minuto se usuário interagir muito |
+| **Mitigação** | 60s é suficiente para uso normal; botão de refresh está sempre disponível para forçar atualização |
+
+---
+
+### ADR-02: Uso do `_ai_executor` para Discovery vs. `_generic_executor`
+
+| Campo | Valor |
+|---|---|
+| **Status** | ACEITA |
+| **Data** | 2025-06-10 |
+| **Contexto** | `AppState.discover_ai_models()` usava `provider="generic"`, colocando discovery no pool de 4 workers genéricos |
+| **Decisão** | Usar `provider="ollama"` para enviar ao `_ai_executor` (max_workers=1) quando provider é Ollama |
+| **Alternativas Rejeitadas** | Manter no `_generic_executor`: discovery competiria com downloads de thumbnail e metadados |
+| **Consequências** | Discovery serializada com execuções de AI (max 1 simultânea); evita sobrecarga do servidor Ollama |
+| **Mitigação** | Discovery é rápida (< 2s normalmente); não bloqueia execuções de resumo pois são independentes por task_id |
+
+---
+
+### ADR-03: Callback Nomeado vs. Lambda para Discovery
+
+| Campo | Valor |
+|---|---|
+| **Status** | ACEITA |
+| **Data** | 2025-06-10 |
+| **Contexto** | Código atual usa lambda anônima como callback; dificulta inspeção, debug e garantia de `wx.CallAfter` |
+| **Decisão** | Extrair para método nomeado `on_models_discovered(models)` na `AnalysisToolbar` |
+| **Alternativas Rejeitadas** | Manter lambda: código opaco, difícil de testar unitariamente |
+| **Consequências** | Positivo: testável, auditável, rastreável. Negativo: 1 método a mais na classe |
+| **Mitigação** | Classe já tem múltiplos métodos; adição de 1 é irrelevante para manutenibilidade |
+
+---
+
+### ADR-04: Cache de Disponibilidade em AppState vs. em AIDiscovery
+
+| Campo | Valor |
+|---|---|
+| **Status** | ACEITA |
+| **Data** | 2025-06-10 |
+| **Contexto** | `is_ai_provider_available()` é chamado pelo `DialogConfig` (timer 1s) e potencialmente outros lugares |
+| **Decisão** | Cache de resultado em `AppState._availability_cache` com TTL de 30s; verificação real em worker thread |
+| **Alternativas Rejeitadas** | Cache em `AIDiscovery`: acoplamento maior; cache em `DialogConfig`: duplicação de lógica |
+| **Consequências** | Positivo: único ponto de verdade; zero HTTP na Main Thread. Negativo: resultado pode ter até 30s de atraso |
+| **Mitigação** | 30s é aceitável para feedback de disponibilidade; usuário pode fechar e reabrir dialog para forçar refresh |
+
+---
+
+### ADR-05: Preservação do `wx.CallAfter` no `__init__` do `AnalysisToolbar`
+
+| Campo | Valor |
+|---|---|
+| **Status** | ACEITA |
+| **Data** | 2025-06-10 |
+| **Contexto** | `wx.CallAfter(self.populate_model_selector)` no `__init__` já existe; poderia ser removido para "simplicidade" |
+| **Decisão** | Manter o `wx.CallAfter` no `__init__`; garante que a UI esteja completamente renderizada antes do fetch |
+| **Alternativas Rejeitadas** | Remover e chamar diretamente: riscos de UI parcialmente construída durante o callback |
+| **Consequências** | Positivo: UI sempre estável quando modelos chegarem. Negativo: leve delay de 1 event loop antes do primeiro fetch |
+| **Mitigação** | Delay de 1 event loop é imperceptível ao usuário |
+
+---
+
+### ADR-06: Remoção do HTTP Síncrono do `DialogConfig.on_update_status()`
+
+| Campo | Valor |
+|---|---|
+| **Status** | ACEITA |
+| **Data** | 2025-06-10 |
+| **Contexto** | `on_update_status()` chamado a cada 1s pelo timer; contém `is_ai_provider_available()` que faz `requests.get()` |
+| **Decisão** | `on_update_status()` usa `AppState._availability_cache`; background thread atualiza cache independentemente |
+| **Alternativas Rejeitadas** | Remover verificação de IA do status: perde funcionalidade importante de feedback; mover timer para 30s: ainda síncrono |
+| **Consequências** | Positivo: timer 1s continua responsivo; zero HTTP na Main Thread. Negativo: status de IA pode ter 30s de atraso |
+| **Mitigação** | Status de disponibilidade de 30s em atraso é UX aceitável; feedback visual permanece sempre atual |
+
+---
+
+## PARTE 9 — PLANO DE IMPLEMENTAÇÃO
+
+### 9.1 Definição do MVP
+
+**✅ O QUE ESTÁ NO MVP:**
+- [x] TTL de 60s no cache de `AIDiscovery`
+- [x] `discover_models()` com parâmetro `force_refresh`
+- [x] `AppState.discover_ai_models()` com provider correto (`"ollama"`)
+- [x] `populate_model_selector()` totalmente assíncrono
+- [x] Callback nomeado `on_models_discovered()` com `wx.CallAfter`
+- [x] `DialogConfig.on_update_status()` sem HTTP na Main Thread
+- [x] Cache de disponibilidade com TTL de 30s em `AppState`
+- [x] Constantes de TTL em `constants.py`
+
+**❌ O QUE NÃO ESTÁ NO MVP:**
+- [ ] Streaming de modelos (carga progressiva enquanto `/api/show` processa cada modelo)
+- [ ] Notificação PubSub de novos modelos detectados
+- [ ] Auto-discovery periódico em background (backlog 7.4.1)
+- [ ] Suporte a endpoints Ollama remotos (autenticação, HTTPS)
+- [ ] Cache persistente em disco entre sessões do app
+
+---
+
+### 9.2 Critérios de Aceitação do MVP
+
+```gherkin
+Cenário 1: UI responsiva durante descoberta Ollama
+  DADO que o servidor Ollama está respondendo com 5s de latência
+  QUANDO o usuário seleciona "ollama" no choice_provider
+  ENTÃO a UI permanece responsiva (scroll e cliques funcionam)
+  E o lbl_ai_status exibe "🔍 Buscando modelos..."
+  E após máximo 20s o choice_model é populado com os modelos
+
+Cenário 2: Cache evita chamadas repetitivas
+  DADO que a descoberta foi feita há menos de 60 segundos
+  QUANDO o usuário clica no botão de refresh de modelos
+  ENTÃO NÃO é feita nova chamada HTTP ao Ollama
+  E os modelos são exibidos imediatamente do cache
+  E o log contém "cache hit"
+
+Cenário 3: Fallback gracioso com Ollama offline
+  DADO que o servidor Ollama não está rodando
+  QUANDO o usuário seleciona "ollama" no choice_provider
+  ENTÃO a UI não congela
+  E o lbl_ai_status exibe "⚠️ Provider indisponível"
+  E o choice_model exibe "Nenhum modelo disponível"
+  E não há stacktrace de exceção no console
+
+Cenário 4: DialogConfig sem HTTP síncrono
+  DADO que o DialogConfig está aberto com timer ativo
+  QUANDO o timer de 1s dispara o on_update_status()
+  ENTÃO não é feita chamada HTTP na Main Thread
+  E o status de IA exibe resultado do cache (máximo 30s de atraso)
+
+Cenário 5: Force refresh invalida cache
+  DADO que o cache de modelos tem 10 segundos (TTL < 60s)
+  QUANDO o usuário clica no botão de refresh de modelos
+  ENTÃO uma nova chamada HTTP é feita ao Ollama
+  E o cache é atualizado com a lista mais recente
+```
+
+---
+
+### 9.3 Fases de Implementação
+
+| Fase | Duração | Entregas | Critério de Conclusão | Dependência |
+|---|---|---|---|---|
+| **Fase 1** — Fundação | 30 min | `constants.py` + `ai_discovery.py` | Cache com TTL funcional; testes unitários passando | Nenhuma |
+| **Fase 2** — Core State | 20 min | `core/app_state.py` | `discover_ai_models()` usa provider correto; cache de disponibilidade | Fase 1 |
+| **Fase 3** — UI Toolbar | 30 min | `ui/components/analysis_toolbar.py` | Descoberta assíncrona; `wx.CallAfter` garantido; sem bloqueio de UI | Fase 2 |
+| **Fase 4** — Dialog Fix | 20 min | `ui/dialog_config.py` | `on_update_status()` sem HTTP; usa cache de AppState | Fase 2 |
+| **Fase 5** — Validação | 30 min | `scripts/verification/test_ollama_stability.py` | Todos os 5 cenários Gherkin validados manualmente | Fases 1-4 |
+
+**Fase 1 — Detalhe:**
+- Arquivos criados/modificados: `constants.py`, `services/ai_discovery.py`
+- Testes obrigatórios: Verificar que `discover_models()` retorna modelos do cache sem HTTP na segunda chamada
+- Critério: `AIDiscovery._cache_timestamps` existe e TTL é respeitado
+
+**Fase 2 — Detalhe:**
+- Arquivos criados/modificados: `core/app_state.py`
+- Testes obrigatórios: `submit_task` chamado com `provider="ollama"` para Ollama
+- Critério: Log `CF_AILocal` aparece para discovery do Ollama (não `CF_Generic`)
+
+**Fase 3 — Detalhe:**
+- Arquivos criados/modificados: `ui/components/analysis_toolbar.py`
+- Testes obrigatórios: UI não trava com Ollama offline; `wx.CallAfter` presente no callback
+- Critério: Cenários 1, 2, 3 do Gherkin validados
+
+**Fase 4 — Detalhe:**
+- Arquivos criados/modificados: `ui/dialog_config.py`
+- Testes obrigatórios: Abrir DialogConfig com Ollama offline; sem stacktrace HTTP
+- Critério: Cenário 4 do Gherkin validado
+
+**Fase 5 — Detalhe:**
+- Arquivos criados: `scripts/verification/test_ollama_stability.py`
+- Testes obrigatórios: Todos os cenários Gherkin executados e documentados
+- Critério: Todos os RFs da seção 6.1 marcados como PASS
+
+---
+
+### 9.4 Métricas de Sucesso
+
+| Métrica | Target | Como Medir |
+|---|---|---|
+| Tempo de resposta da UI durante discovery | < 16ms por frame | Task Manager do SO; UI permanece animada |
+| Chamadas HTTP ao Ollama por sessão (sem refresh manual) | ≤ 1 por 60s por provider | Log: contar linhas "POST /api/tags" |
+| Chamadas HTTP na Main Thread | 0 | `grep -n "requests\." ui/` deve retornar 0 resultados relevantes |
+| Crashes de UI durante discovery com Ollama offline | 0 | Iniciar sem Ollama; selecionar provider; verificar |
+| Tempo até modelos aparecerem no seletor (Ollama respondendo normalmente) | < 5s | Cronometrar manualmente |
+
+---
+
+### 9.5 Riscos Técnicos
+
+| Risco | Probabilidade | Impacto | Mitigação |
+|---|---|---|---|
+| `wx.CallAfter` chamado após `AnalysisToolbar` ser destruída | Baixa | Alto (crash) | Verificar `if self` antes de chamar `_update_model_selector` no callback |
+| Race condition entre 2 descobertas simultâneas (refresh duplo-clique) | Baixa | Médio (modelos duplicados no seletor) | Lock no método `populate_model_selector()`; ignorar segunda chamada se já em progresso |
+| Cache compartilhado entre instâncias de `AIDiscovery` (singleton pattern ausente) | Média | Baixo (cache ineficiente) | Cache como atributo de instância; `AppState` mantém única instância de discovery |
+| TTL de 60s muito longo para usuários que instalam modelos frequentemente | Baixa | Baixo (stale UI) | Botão de refresh sempre disponível; documentar comportamento |
+| `TaskManager.is_cancelled()` retornando True durante discovery no shutdown | Baixa | Baixo (log de warning) | Ignorar resultado se `_kill_event.is_set()` antes de chamar callback |
+| Callback chamado após widget destruído (fechar dialog enquanto discovery ocorre) | Média | Alto (crash wx) | Envolver `_update_model_selector` em try/except `wx.PyDeadObjectError` |
+| `_ai_executor` bloqueado por resumo longo (timeout 600s) | Média | Médio (discovery aguarda na fila) | Discovery tem task_id único; não é bloqueada, apenas serializada |
+| Timer do `DialogConfig` chamando `on_update_status` após dialog fechado | Baixa | Alto (crash) | `__del__` já para o timer; adicionar verificação `if self.timer.IsRunning()` |
+
+---
+
+## PARTE 10 — PADRÕES E BLINDAGEM ESTRUTURAL
+
+### 10.1 Padrões Arquiteturais Adotados
+
+| Padrão | Onde é Aplicado |
+|---|---|
+| **Cache-Aside** | `AIDiscovery._cache` com TTL; lê do cache primeiro, busca no servidor só se necessário |
+| **Callback Pattern** | `AppState.discover_ai_models(callback=...)` — resultado entregue assincronamente |
+| **Command Pattern** | `TaskManager.submit_task()` encapsula execução em thread pool |
+| **Null Object Pattern** | `callback([])` em caso de erro — nunca `callback(None)` |
+| **Thread Confinement** | Toda lógica de widget em Main Thread via `wx.CallAfter` |
+
+---
+
+### 10.2 Design Patterns Permitidos e Proibidos
+
+| Permitido | Onde se Aplica | Proibido | Motivo da Proibição |
+|---|---|---|---|
+| `wx.CallAfter(func, args)` | Todo callback de worker thread que modifica widget | `widget.SetValue()` diretamente em worker thread | Violação de thread safety; crash garantido |
+| `threading.Lock()` em `AIDiscovery` | Proteção do `_cache` e `_cache_timestamps` | `time.sleep()` em Main Thread | Bloqueia event loop |
+| `try/except` em `list_models()` | Tratamento de `ConnectionError`, `Timeout` | `requests.*` em métodos de UI | HTTP deve estar em services layer |
+| TTL baseado em `time.time()` | `_cache_timestamps` | Polling automático sem TTL | Causa problema original |
+
+---
+
+### 10.3 Regras de Modularização
+
+- `ui/` **NÃO PODE** importar `requests` diretamente
+- `ui/` **NÃO PODE** chamar `AIDiscovery` diretamente; sempre via `AppState`
+- `services/ai_discovery.py` **PODE** ser chamado de worker threads
+- `core/app_state.py` é o **único ponto de entrada** para UI solicitar operações de AI
+
+---
+
+### 10.4 Observabilidade
+
+**Logging adicionado:**
+```python
+# Em AIDiscovery.discover_models():
+logger.debug(f"AIDiscovery: cache hit para '{provider}' (TTL restante: {ttl_remaining:.0f}s)")
+logger.info(f"AIDiscovery: fetch HTTP iniciado para '{provider}' (cache expirado ou vazio)")
+logger.info(f"AIDiscovery: {len(models)} modelos descobertos para '{provider}' em {elapsed:.2f}s")
+logger.warning(f"AIDiscovery: falha na descoberta para '{provider}': {error}")
+
+# Em AppState.discover_ai_models():
+logger.info(f"AppState: discovery enfileirada para provider='{provider}' no executor='{executor_type}'")
+
+# Em AnalysisToolbar.on_models_discovered():
+logger.debug(f"AnalysisToolbar: {len(models)} modelos recebidos via callback; atualizando seletor")
+```
+
+---
+
+### 10.5 Escopo Congelado
+
+**Alterações PROIBIDAS neste blueprint:**
+- `ui/virtual_table.py` — renderizadores funcionando corretamente
+- `core/pubsub.py` — arquitetura de pub/sub está correta
+- `services/ai_executor.py` — publicação de eventos está correta
+- `core/processor.py` — foi corrigido na Fase 7.2
+- `storage/db_handler.py` — foi corrigido na Fase 7.2
+
+**Arquivos protegidos (requerem ADR para modificação):**
+- `core/pubsub.py`
+- `core/managers/task_manager.py`
+- `ui/virtual_table.py`
+
+---
+
+## PARTE 11 — GUIA DE REPLICAÇÃO
+
+### Pré-requisitos
+- Python 3.10+ (testado com 3.11)
+- wxPython 4.2.1+
+- Ollama instalado (`ollama serve` rodando em `localhost:11434`)
+- Acesso ao repositório ContextFlow
+
+### Passo a Passo
+
+**1. Verificar estado atual (antes da correção):**
+```bash
+# Confirmar que o bug existe:
+python main.py
+# Selecionar Aba 2 → Toolbar → Selecionar "ollama"
+# RESULTADO ESPERADO: UI trava por vários segundos
+```
+
+**2. Aplicar correções na sequência obrigatória:**
+
+```bash
+# FASE 1: constants.py
+# Adicionar ao final do arquivo:
+echo '
+# --- AI Discovery Cache Configuration ---
+AI_DISCOVERY_CACHE_TTL_SECONDS = 60
+AI_PROVIDER_AVAILABILITY_CACHE_TTL_SECONDS = 30
+' >> constants.py
+```
+
+**3. Modificar `services/ai_discovery.py`:**
+
+Localizar e substituir o método `discover_models` e `__init__`:
+
+```python
+# Em AIDiscovery.__init__(), ADICIONAR após self._lock = threading.Lock():
+self._cache_timestamps: Dict[str, float] = {}
+
+# MODIFICAR discover_models para:
+def discover_models(self, provider: str = None, force_refresh: bool = False) -> List[Dict[str, Any]]:
+    """
+    Descobre modelos para o provedor especificado.
+    [BISTURI-OLLAMA] Cache com TTL de AI_DISCOVERY_CACHE_TTL_SECONDS.
+    Chamada HTTP SOMENTE se cache expirado ou force_refresh=True.
+    
+    NUNCA chamar na Main Thread — usar via AppState.discover_ai_models()
+    """
+    from constants import AI_DISCOVERY_CACHE_TTL_SECONDS
+    import time
+    
+    if provider is None:
+        provider = self.config.get("orchestration", "active_provider", "ollama")
+    
+    with self._lock:
+        # [CACHE-FIRST] Verifica TTL antes de qualquer HTTP
+        if not force_refresh and provider in self._cache:
+            age = time.time() - self._cache_timestamps.get(provider, 0)
+            if age < AI_DISCOVERY_CACHE_TTL_SECONDS:
+                logger.debug(
+                    f"AIDiscovery: cache hit para '{provider}' "
+                    f"(TTL restante: {AI_DISCOVERY_CACHE_TTL_SECONDS - age:.0f}s)"
+                )
+                return self._cache[provider]
+        
+        logger.info(f"AIDiscovery: fetch HTTP iniciado para '{provider}' (cache expirado ou force_refresh)")
+        
+        start = time.time()
+        if provider == "ollama":
+            models = self._discover_ollama()
+        elif provider == "google":
+            models = self._discover_google()
+        else:
+            logger.warning(f"Provider '{provider}' não suportado para discovery.")
+            models = []
+        
+        elapsed = time.time() - start
+        logger.info(f"AIDiscovery: {len(models)} modelos descobertos para '{provider}' em {elapsed:.2f}s")
+        
+        self._cache[provider] = models
+        self._cache_timestamps[provider] = time.time()
+        return models
+
+def invalidate_cache(self, provider: str = None):
+    """
+    [BISTURI-OLLAMA] Limpa cache para forçar re-discovery.
+    Se provider=None, limpa tudo.
+    """
+    with self._lock:
+        if provider:
+            self._cache.pop(provider, None)
+            self._cache_timestamps.pop(provider, None)
+            logger.info(f"AIDiscovery: Cache invalidado para '{provider}'.")
+        else:
+            self._cache.clear()
+            self._cache_timestamps.clear()
+            logger.info("AIDiscovery: Cache completo invalidado.")
+```
+
+**4. Modificar `core/app_state.py`:**
+
+```python
+# SUBSTITUIR o método discover_ai_models():
+def discover_ai_models(self, provider: str = None, callback=None, force_refresh: bool = False):
+    """
+    [BISTURI-OLLAMA] Descobre modelos de IA disponíveis em background.
+    CORREÇÃO: Usa provider correto para executor (ollama → _ai_executor).
+    O callback recebe a lista de modelos e DEVE usar wx.CallAfter internamente.
+    
+    Args:
+        provider: Nome do provedor (None = active_provider)
+        callback: Callable[[List[Dict]], None] chamado com resultado
+        force_refresh: Se True, ignora TTL e força re-fetch
+    """
+    if provider is None:
+        provider = self.config.get("orchestration", "active_provider", "ollama")
+    
+    logger.info(f"AppState: discovery enfileirada para provider='{provider}'")
+    
+    def _discover():
+        from services.ai_discovery import AIDiscovery
+        discovery = AIDiscovery()
+        models = discovery.discover_models(provider=provider, force_refresh=force_refresh)
+        if callback:
+            callback(models)
+    
+    # [CORREÇÃO CRÍTICA] Usa "ollama" como provider para enfileirar no
+    # _ai_executor (max_workers=1), não no _generic_executor.
+    # Antes: provider="generic" → competia com downloads
+    # Depois: provider="ollama" → pool dedicado para AI local
+    executor_provider = provider if provider in ("ollama",) else "generic"
+    
+    self.task_manager.submit_task(
+        "ai_discovery",
+        _discover,
+        provider=executor_provider
+    )
+
+# ADICIONAR após discover_ai_models():
+def is_ai_provider_available(self, provider: str = None) -> bool:
+    """
+    [BISTURI-OLLAMA] Verifica se o provedor de IA está acessível.
+    CORREÇÃO: Retorna resultado cacheado para evitar HTTP na Main Thread.
+    Cache com TTL de AI_PROVIDER_AVAILABILITY_CACHE_TTL_SECONDS.
+    A verificação real ocorre em background thread.
+    """
+    import time
+    from constants import AI_PROVIDER_AVAILABILITY_CACHE_TTL_SECONDS
+    
+    if provider is None:
+        provider = self.config.get("orchestration", "active_provider", "ollama")
+    
+    # Inicializa cache se necessário
+    if not hasattr(self, '_availability_cache'):
+        self._availability_cache = {}
+        self._availability_timestamps = {}
+    
+    # [CACHE-FIRST] Retorna resultado cacheado se TTL válido
+    if provider in self._availability_cache:
+        age = time.time() - self._availability_timestamps.get(provider, 0)
+        if age < AI_PROVIDER_AVAILABILITY_CACHE_TTL_SECONDS:
+            return self._availability_cache[provider]
+    
+    # [BACKGROUND] Dispara verificação assíncrona e retorna último resultado conhecido
+    def _check_availability():
+        import time as t
+        result = False
+        if provider == "ollama":
+            import requests
+            endpoint = self.config.get("ollama", "endpoint", "http://localhost:11434")
+            try:
+                r = requests.get(f"{endpoint}/", timeout=3)
+                result = r.status_code == 200
+            except Exception:
+                result = False
+        
+        # Atualiza cache na worker thread (thread-safe para dict simples)
+        self._availability_cache[provider] = result
+        self._availability_timestamps[provider] = t.time()
+        logger.debug(f"AppState: provider '{provider}' disponível: {result}")
+    
+    # Submete verificação em background (não bloqueia caller)
+    self.task_manager.submit_task(
+        f"availability_check_{provider}",
+        _check_availability,
+        provider="generic"
+    )
+    
+    # Retorna último valor conhecido (False se primeira verificação)
+    return self._availability_cache.get(provider, False)
+```
+
+**5. Modificar `ui/components/analysis_toolbar.py`:**
+
+```python
+# MODIFICAR populate_model_selector():
+def populate_model_selector(self, force_refresh: bool = False):
+    """
+    [BISTURI-OLLAMA] Inicia descoberta assíncrona de modelos.
+    NÃO bloqueia a Main Thread.
+    Resultado entregue via on_models_discovered() com wx.CallAfter.
+    """
+    provider = self.choice_provider.GetStringSelection()
+    self.lbl_ai_status.SetLabel("🔍 Buscando modelos...")
+    self.choice_model.Enable(False)
+    
+    # [BISTURI-OLLAMA] Callback nomeado garante rastreabilidade e wx.CallAfter
+    def on_models_discovered(models):
+        """
+        Callback chamado da worker thread quando discovery concluída.
+        [THREAD SAFETY] wx.CallAfter OBRIGATÓRIO — este método é chamado
+        do _ai_executor pool, não da Main Thread.
+        """
+        # Guarda contra widget destruído (dialog fechado durante discovery)
+        try:
+            wx.CallAfter(self._update_model_selector, models or [])
+        except Exception as e:
+            logger.debug(f"AnalysisToolbar: widget destruído durante discovery: {e}")
+    
+    self.app_state.discover_ai_models(
+        provider=provider,
+        callback=on_models_discovered,
+        force_refresh=force_refresh
+    )
+
+# MODIFICAR _bind_events() — botão refresh com force_refresh=True:
+def _bind_events(self):
+    self.choice_provider.Bind(wx.EVT_CHOICE, self._on_provider_changed)
+    self.choice_model.Bind(wx.EVT_CHOICE, self._on_model_changed)
+    # [BISTURI-OLLAMA] force_refresh=True invalida cache e força HTTP
+    self.btn_refresh_models.Bind(
+        wx.EVT_BUTTON, 
+        lambda e: self.populate_model_selector(force_refresh=True)
+    )
+```
+
+**6. Modificar `ui/dialog_config.py`:**
+
+```python
+# SUBSTITUIR o trecho "# IA Status" em on_update_status():
+# REMOVER:
+# from core.app_state import AppState
+# app_state = AppState()
+# provider = self.config.get("orchestration", "active_provider", "ollama")
+# is_up = app_state.is_ai_provider_available(provider)
+
+# SUBSTITUIR POR:
+# IA Status — [BISTURI-OLLAMA] Usa resultado cacheado, sem HTTP na Main Thread
+from core.app_state import AppState
+app_state = AppState()
+provider = self.config.get("orchestration", "active_provider", "ollama")
+
+# is_ai_provider_available() agora retorna valor cacheado (TTL 30s)
+# e dispara verificação real em background transparentemente
+is_up = app_state.is_ai_provider_available(provider)
+
+if is_up:
+    self.lbl_status_ai.SetLabel(f"✨ IA ({provider.capitalize()}): Online")
+    self.lbl_status_ai.SetForegroundColour(wx.Colour(22, 163, 74))
+else:
+    self.lbl_status_ai.SetLabel(f"⚠️ IA ({provider.capitalize()}): Offline")
+    self.lbl_status_ai.SetForegroundColour(wx.Colour(220, 38, 38))
+```
+
+**7. Criar arquivo de testes:**
+```bash
+# Criar scripts/verification/test_ollama_stability.py
+touch scripts/verification/test_ollama_stability.py
+```
+
+**8. Verificação manual pós-aplicação:**
+```bash
+# Teste 1: Com Ollama rodando
+python main.py
+# → Selecionar Aba 2 → choice_provider → "ollama"
+# ESPERADO: UI não trava; modelos aparecem em < 5s
+
+# Teste 2: Com Ollama offline (parar ollama serve)
+python main.py
+# → Selecionar "ollama"
+# ESPERADO: "⚠️ Provider indisponível" sem crash
+
+# Teste 3: Verificar cache
+python main.py
+# → Selecionar "ollama" → aguardar modelos → selecionar novamente
+# ESPERADO: modelos aparecem instantaneamente (cache hit no log)
+
+# Teste 4: Force refresh
+python main.py  
+# → Selecionar "ollama" → clicar botão refresh " "
+# ESPERADO: nova chamada HTTP mesmo com cache válido
+
+# Teste 5: DialogConfig sem HTTP síncrono
+python main.py
+# → Abrir Configurações → aba "Conectividade IA"
+# → Parar ollama serve enquanto dialog aberto
+# ESPERADO: timer continua sem crash; status atualiza em ~30s
+```
+
+---
+
+## PARTE 12 — EXTENSIBILIDADE
+
+### Como adicionar suporte a novo provider (ex: Anthropic)
+
+1. Criar `services/ai_providers/anthropic_provider.py` implementando `AIProvider`
+2. Em `AIDiscovery._discover_*`, adicionar `elif provider == "anthropic": return self._discover_anthropic()`
+3. Em `AppState.is_ai_provider_available()`, adicionar caso para `provider == "anthropic"`
+4. Em `AnalysisToolbar._init_ui()`, adicionar `"anthropic"` à lista do `choice_provider`
+5. Em `AppState.discover_ai_models()`, definir `executor_provider` conforme tipo (local/cloud)
+
+### Pontos de Extensão Documentados
+
+| Ponto de Extensão | Localização | Como Usar |
+|---|---|---|
+| Novo provider de discovery | `AIDiscovery._discover_*()` | Implementar método privado e adicionar `elif` em `discover_models()` |
+| TTL customizável por provider | `constants.py` | Adicionar `AI_DISCOVERY_CACHE_TTL_{PROVIDER}_SECONDS` |
+| Notificação PubSub de modelos descobertos | `AppState.discover_ai_models()` | Adicionar `PubSub.publish('AI_MODELS_UPDATED', ...)` no callback |
+| Persistência de cache em disco | `AIDiscovery.__init__()` | Carregar/salvar `_cache` em JSON na inicialização/shutdown |
+
+---
+
+## PARTE 13 — LIMITAÇÕES CONHECIDAS
+
+| Limitação | Severidade | Workaround |
+|---|---|---|
+| Cache não persiste entre sessões | Baixa | Primeira abertura sempre faz HTTP; botão de refresh disponível |
+| Race condition em double-click no refresh | Baixa | Segunda tarefa com mesmo `task_id` é ignorada pelo `TaskManager` |
+| `_availability_cache` reinicia a cada boot | Baixa | `DialogConfig` mostra "Offline" por até 30s na primeira abertura |
+| Discovery serializada com resumos (mesmo `_ai_executor`) | Média | Se resumo de 10min estiver rodando, discovery aguarda na fila |
+| `is_ai_provider_available()` retorna `False` na primeira chamada | Baixa | Background check atualiza em < 3s; status muda automaticamente |
+
+---
+
+## PARTE 14 — ROADMAP INFERIDO
+
+| Versão | Foco | Features Principais | Estimativa |
+|---|---|---|---|
+| 7.3 (próxima) | Estabilização Ollama completa | Streaming real; batching de wx.CallAfter; cancelamento mid-stream | 4-5 dias |
+| 7.4 | Qualidade de resumo | Map-Reduce automático; context_size por provider | 4-5 dias |
+| 7.5 | Módulos novos | Galeria; orquestração multi-agente | 5-7 dias |
+
+---
+
+## SEQUÊNCIA DE EXECUÇÃO OBRIGATÓRIA
+
+```
+1. constants.py                    → Adicionar 2 constantes de TTL
+2. services/ai_discovery.py        → Cache com TTL + force_refresh
+3. core/app_state.py               → discover_ai_models() + is_ai_provider_available()
+4. ui/components/analysis_toolbar.py → populate_model_selector() assíncrono
+5. ui/dialog_config.py             → on_update_status() sem HTTP Main Thread
+6. Validação manual (5 cenários Gherkin)
+```
+
+---
+
+## TESTES DE VALIDAÇÃO FINAIS
+
+```
+Teste 1 — UI Responsiva (RF-01)
+  Com Ollama rodando: selecionar "ollama" no choice_provider
+  ESPERADO: scroll e cliques funcionam durante o fetch
+  FALHA SE: UI trava por mais de 500ms
+
+Teste 2 — Cache Hit (RF-02)  
+  Selecionar "ollama" → aguardar modelos → selecionar novamente
+  ESPERADO: segundo fetch instantâneo; log mostra "cache hit"
+  FALHA SE: HTTP disparado em menos de 60s sem clique de refresh
+
+Teste 3 — Offline Gracioso (RF-08)
+  Iniciar sem Ollama; selecionar "ollama"
+  ESPERADO: "⚠️ Provider indisponível"; sem crash; sem stacktrace
+  FALHA SE: Qualquer wx.PyAssertionError ou freeze de UI
+
+Teste 4 — DialogConfig Sem HTTP (RF-05)
+  Abrir Configurações; parar Ollama; aguardar 5 ticks do timer
+  ESPERADO: Sem stacktrace de ConnectionError no console
+  FALHA SE: requests.exceptions.* aparece no log em 5s
+
+Teste 5 — Force Refresh (RF-10)
+  Selecionar "ollama" → aguardar → clicar refresh dentro de 30s
+  ESPERADO: Nova chamada HTTP mesmo com TTL válido
+  FALHA SE: Cache servido sem nova chamada HTTP
+```
+
+---
+
+## RESTRIÇÕES DE ESCOPO
+
+```
+❌ NÃO modificar: virtual_table.py
+❌ NÃO modificar: core/pubsub.py
+❌ NÃO modificar: services/ai_executor.py
+❌ NÃO modificar: core/processor.py
+❌ NÃO modificar: storage/db_handler.py
+❌ NÃO refatorar: qualquer método além dos especificados
+✅ PODE adicionar: constantes em constants.py
+✅ PODE adicionar: logging adicional para diagnóstico
+✅ PODE criar: arquivo de testes em scripts/verification/
+```
+
+---
+
+## INVARIANTES QUE ESTE FIX PRESERVA
+
+| Invariante | Como Preservada |
+|---|---|
+| **Nº 3** — Sem processamento pesado na Main Thread | Toda chamada HTTP em worker thread via TaskManager |
+| **Nº 4** — Observers de UI via `wx.CallAfter` | Callback `on_models_discovered` usa `wx.CallAfter` obrigatoriamente |
+| **Nº 7** — TaskManager controla todas as workers | Discovery submetida via `task_manager.submit_task()` |
+| **Zero-Knowledge entre abas** | `AppState` continua sendo único ponto de acesso a discovery |
+
+---
+
+## CLÁUSULA DE INTEGRIDADE
+
+### Checklist de Completude
+- [x] Todo requisito tem ID único e critério de aceite verificável
+- [x] Todo requisito tem teste na matriz de rastreabilidade (Seção 6.3)
+- [x] Toda decisão arquitetural tem ADR com alternativa rejeitada (6 ADRs)
+- [x] Todo componente tem ficha técnica, inputs, outputs e exemplo JSON
+- [x] Todo diagrama está em Mermaid renderizável (3.1, 3.2, 4.1, 5.2, 5.4)
+- [x] Todo schema de mensagem tem exemplo concreto preenchido
+- [x] Todo cenário de falha tem estratégia de recuperação documentada (5.3)
+- [x] O guia de replicação é autocontido com comandos exatos (Seção 11)
+- [x] Nenhuma seção contém "A DEFINIR", generalidades ou placeholders
+
+### Declaração de Determinismo
+Este documento foi estruturado para eliminar ambiguidade operacional. Cada trecho de código é copiável e funcional. Cada arquivo modificado tem localização exata, método exato e substituição exata. A sequência de execução é ordenada por dependência. Não existe forma alternativa de interpretar as instruções contidas neste blueprint.

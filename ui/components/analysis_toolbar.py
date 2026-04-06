@@ -92,17 +92,29 @@ class AnalysisToolbar(wx.Panel):
     def _bind_events(self):
         self.choice_provider.Bind(wx.EVT_CHOICE, self._on_provider_changed)
         self.choice_model.Bind(wx.EVT_CHOICE, self._on_model_changed)
-        self.btn_refresh_models.Bind(wx.EVT_BUTTON, lambda e: self.populate_model_selector())
+        self.btn_refresh_models.Bind(wx.EVT_BUTTON, self._on_refresh_click)
 
-    def populate_model_selector(self):
+    def _on_refresh_click(self, event):
+        """Dispara refresh manual ignorando cache TTL."""
+        self.populate_model_selector(force_refresh=True)
+
+    def populate_model_selector(self, force_refresh: bool = False):
         provider = self.choice_provider.GetStringSelection()
         self.lbl_ai_status.SetLabel("🔍 Buscando modelos...")
         self.choice_model.Enable(False)
 
-        def on_models_discovered(models):
-            wx.CallAfter(self._update_model_selector, models)
+        self.app_state.discover_ai_models(
+            provider=provider, 
+            callback=self.on_models_discovered,
+            force_refresh=force_refresh
+        )
 
-        self.app_state.discover_ai_models(provider=provider, callback=on_models_discovered)
+    def on_models_discovered(self, models):
+        """
+        [BISTURI-OLLAMA] Callback central para descoberta de modelos.
+        Garante Thread Safety via wx.CallAfter (embora AppState já o faça).
+        """
+        wx.CallAfter(self._update_model_selector, models)
 
     def _update_model_selector(self, models):
         self._ai_models_cache = models

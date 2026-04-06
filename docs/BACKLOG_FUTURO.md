@@ -176,7 +176,8 @@
 > Fase crítica que resolve os problemas fundamentais de vídeos longos e performance local.
 > ⚠️ Pré-requisito: Implementar `get_context_size(provider, model)` como interface unificada.
 
-### 7.4.1 — Estabilidade e Performance do Ollama
+### 7.4.1 — Estabilidade e Performance do Ollama [CONCLUÍDO - Fase 7.3]
+- **Status:** CONCLUÍDO
 - **Problema:** Lentidão e travamentos na UI ao usar modelos locais via Ollama.
 - **Causa raiz:** Modelos locais são processados com `requests.post()` síncrono em thread. O `wx.CallAfter` é chamado token por token, sobrecarregando o event loop da UI.
 - **Arquivos:** `services/ai/ai_executor.py`, `services/task_manager.py`

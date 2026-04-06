@@ -10,7 +10,8 @@ from typing import Dict, Any, List, Optional
 from core.config_manager import ConfigManager
 from services.ai_providers.ollama_provider import OllamaProvider
 from services.ai_providers.google_provider import GoogleProvider
-from constants import AI_DEFAULT_CONTEXT_FALLBACK
+from constants import AI_DEFAULT_CONTEXT_FALLBACK, AI_DISCOVERY_CACHE_TTL_SECONDS
+import time
 
 logger = logging.getLogger("contextflow.ai.discovery")
 
@@ -28,18 +29,29 @@ class AIDiscovery:
     def __init__(self):
         self.config = ConfigManager()
         self._cache: Dict[str, List[Dict[str, Any]]] = {}
+        self._cache_timestamps: Dict[str, float] = {}  # [BISTURI-OLLAMA] timestamp do cache
         self._lock = threading.Lock()
 
-    def discover_models(self, provider: str = None) -> List[Dict[str, Any]]:
+    def discover_models(self, provider: str = None, force_refresh: bool = False) -> List[Dict[str, Any]]:
         """
         Descobre modelos para o provedor especificado.
         Se provider=None, usa active_provider do ConfigManager.
         Thread-safe via lock.
+        
+        [BISTURI-OLLAMA] Implementa Cache TTL e force_refresh.
         """
         if provider is None:
             provider = self.config.get("orchestration", "active_provider", "ollama")
 
         with self._lock:
+            # Verifica TTL do cache (a menos que seja force_refresh)
+            if not force_refresh and provider in self._cache:
+                ts = self._cache_timestamps.get(provider, 0)
+                if time.time() - ts < AI_DISCOVERY_CACHE_TTL_SECONDS:
+                    logger.debug(f"AIDiscovery: Cache hit para {provider} (TTL OK).")
+                    return self._cache[provider]
+
+            logger.info(f"AIDiscovery: Descoberta iniciada para {provider} (force={force_refresh}).")
             if provider == "ollama":
                 models = self._discover_ollama()
             elif provider == "google":
@@ -49,6 +61,7 @@ class AIDiscovery:
                 models = []
 
             self._cache[provider] = models
+            self._cache_timestamps[provider] = time.time()
             return models
 
     def get_cached_models(self, provider: str = None) -> List[Dict[str, Any]]:
@@ -105,6 +118,7 @@ class AIDiscovery:
         """Limpa todo o cache para forçar re-discovery."""
         with self._lock:
             self._cache.clear()
+            self._cache_timestamps.clear()
             logger.info("AIDiscovery: Cache invalidado.")
 
     # ─── DISCOVERY POR PROVEDOR ───────────────────────────────
