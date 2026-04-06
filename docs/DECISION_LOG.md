@@ -81,3 +81,11 @@ F6.2d | BUGFIX | Cores hardcoded em _init_ui | wx.Colour(230,230,230) → theme.
 F6.2d | BUGFIX | WebView flash branco | background-color:white → bg_hex do tema | `ui/panel_detail.py`
 F6.2d | BUGFIX | Labels pretos na toolbar | FG não aplicado na construção | `ui/components/analysis_toolbar.py`
 F6.2d | BUGFIX | Contraste StaticBox | SetForegroundColour(fg) forçado para títulos de seção | `ui/dialog_config.py`, `ui/tab_batch.py`
+
+### Fase 7.2 — Falhas Técnicas Imediatas
+F7.2 | BUGFIX | COALESCE Invertido | Prioriza `excluded.status` para permitir persistência de 'completed' | `storage/db_handler.py`
+F7.2 | BUGFIX | Filtro de Resunção | Exclui explicitamente 'completed' do pool de retomada no boot | `core/processor.py`
+F7.2 | MOD | Persistência Síncrona | UPDATE no DB antes da notificação de UI em `_process_task` | `core/processor.py`
+F7.2 | ADD | PubSub AI Visibility | TabBatch monitora SUMMARY_COMPLETED/ERROR para fechar gauge | `ui/tab_batch.py`
+F7.2 | ADD | Handlers Globais de IA | Feedbacks em StatusBar e Log para eventos de resumo | `ui/app_window.py`
+F7.2 | RULE | Invariante Nº2 Reforçada | Persistência física OBRIGATÓRIA antes de qualquer cache de memória | Global

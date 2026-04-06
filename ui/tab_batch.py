@@ -181,6 +181,8 @@ class TabBatch(wx.Panel):
         PubSub.subscribe('TASK_ERROR', self.on_progress_signal)
         PubSub.subscribe('TASKS_CLEARED', self.on_progress_signal)
         PubSub.subscribe('ALL_TASKS_STOPPED', self.on_progress_signal)
+        PubSub.subscribe('SUMMARY_COMPLETED', self.on_progress_signal)
+        PubSub.subscribe('SUMMARY_ERROR', self.on_progress_signal)
 
     def on_grid_click(self, event):
         """

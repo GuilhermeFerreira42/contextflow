@@ -128,6 +128,8 @@ class AppWindow(wx.Frame):
         PubSub.subscribe('TASK_PROGRESS', self.on_global_progress)
         PubSub.subscribe('TASK_ERROR', self.on_global_error)
         PubSub.subscribe('TASK_QUEUED', self.on_task_queued)
+        PubSub.subscribe('SUMMARY_COMPLETED', self._on_summary_completed_global)
+        PubSub.subscribe('SUMMARY_ERROR', self._on_summary_error_global)
         
         # [QA3] Novos Sinais de Interatividade
         PubSub.subscribe('REQUEST_SIDEBAR_TOGGLE', self.on_sidebar_toggle_signal)
@@ -213,6 +215,30 @@ class AppWindow(wx.Frame):
     def on_task_queued(self, uuid, url):
         """Notifica o enfileiramento no console para auditoria [5.8]."""
         self.log_to_console(f"Vídeo enfileirado: {url} (UUID: {uuid[:8]})", "INFO")
+
+    def _on_summary_completed_global(self, video_id, **kwargs):
+        """
+        [THREAD SAFETY — REGRA FASE 6.1b] Handler global de conclusão de resumo.
+        Atualiza a StatusBar para feedback do usuário.
+        wx.CallAfter obrigatório — chamado da thread do AIExecutor.
+        """
+        wx.CallAfter(
+            self.SetStatusText, 
+            f"Resumo concluído: {video_id}", 
+            0
+        )
+
+    def _on_summary_error_global(self, video_id, error_msg="", **kwargs):
+        """
+        [THREAD SAFETY — REGRA FASE 6.1b] Handler global de erro de resumo.
+        wx.CallAfter obrigatório — chamado da thread do AIExecutor.
+        """
+        wx.CallAfter(
+            self.SetStatusText, 
+            f"Erro no resumo de {video_id}: {error_msg[:50]}", 
+            0
+        )
+        self.log_to_console(f"Erro de resumo em {video_id}: {error_msg}", "ERROR")
 
     def on_sidebar_selection(self, video_id):
         """Foca na Aba 3 e carrega os detalhes (Carga sob Demanda) [8]."""

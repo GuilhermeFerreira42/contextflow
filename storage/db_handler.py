@@ -182,7 +182,7 @@ class DatabaseHandler:
                     playlist_id=COALESCE(excluded.playlist_id, playlist_id),
                     playlist_title=COALESCE(excluded.playlist_title, playlist_title),
                     token_count=COALESCE(excluded.token_count, token_count),
-                    status=COALESCE(status, excluded.status),
+                    status=COALESCE(excluded.status, status),
                     thumbnail_path=COALESCE(excluded.thumbnail_path, thumbnail_path),
                     duration=COALESCE(excluded.duration, duration),
                     tags=COALESCE(excluded.tags, tags),

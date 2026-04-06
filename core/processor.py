@@ -78,7 +78,13 @@ class Processor:
         antes do desligamento e os devolve à fila.
         """
         all_videos = self.app_state.get_all_videos()
-        interrupted = [v for v in all_videos if v.get('status') in ['processing', 'downloading', 'queued']]
+        # [FIX CRÍTICO] Filtra APENAS status intermediários.
+        # 'completed' e 'ERROR' NÃO devem ser retomados automaticamente.
+        interrupted = [
+            v for v in all_videos 
+            if v.get('status') in ['processing', 'downloading', 'queued']
+            and v.get('status') != 'completed'  # Guarda explícita redundante
+        ]
         
         if not interrupted: return
         
@@ -354,6 +360,15 @@ class Processor:
             video_data['token_count'] = token_count
             self.app_state.promote_task_to_video(task.uuid, video_data)
             
+            # [FIX INVARIANTE Nº2] Persistência síncrona obrigatória antes de qualquer
+            # notificação de UI. Garante que o DB reflita 'completed' antes do próximo boot.
+            self.app_state.db_handler.update_video_status(
+                task.video_id, 
+                'completed', 
+                token_count=token_count
+            )
+            logger.info(f"Task {task.uuid}: status 'completed' persistido sincronamente no DB.")
+            
             # --- FINAL TELEMETRY LOG ---
             final_metrics = metrics.finalize()
             gov_data = {
@@ -406,6 +421,8 @@ class Processor:
 
             if task.video_id:
                 self.app_state.update_video_status(task.video_id, "ERROR")
+                # [FIX] Persistência síncrona do erro
+                self.app_state.db_handler.update_video_status(task.video_id, "ERROR")
                 PubSub.publish('TASK_ERROR', video_id=task.video_id, error_msg=str(e))
                 self.app_state.remove_active_task(task.uuid)
             else:

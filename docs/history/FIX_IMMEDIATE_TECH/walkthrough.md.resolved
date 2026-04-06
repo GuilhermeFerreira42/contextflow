@@ -1,0 +1,32 @@
+# WALKTHROUGH — FASE: FALHAS TÉCNICAS IMEDIATAS (RESOLVIDO)
+
+Este walkthrough detalha as correções implementadas para resolver falhas críticas de persistência e feedback na UI do ContextFlow.
+
+## Alterações Realizadas
+
+### 1. Fix de Persistência e Download (FALHA 1)
+- **`storage/db_handler.py`**: Invertida a lógica do `COALESCE` no método `add_video_entry`. Agora, o novo status (`excluded.status`) tem prioridade sobre o status existente, garantindo que mudanças para 'completed' ou 'ERROR' sejam gravadas corretamente no SQLite.
+- **`core/processor.py`**:
+    - O método `_resume_interrupted_tasks` agora filtra estritamente vídeos com status intermediários, ignorando explicitamente vídeos marcados como 'completed'.
+    - Adicionada persistência síncrona (`db_handler.update_video_status`) logo após a promoção da tarefa em `_process_task`. Isso garante a imutabilidade do estado no disco antes de qualquer sinal de UI, prevenindo o reinício de downloads caso o app seja fechado instantaneamente após a conclusão.
+
+### 2. Fix de Feedback Visual e IA (FALHA 2)
+- **`ui/tab_batch.py`**: O gauge de progresso agora se inscreve nos eventos `SUMMARY_COMPLETED` e `SUMMARY_ERROR`, garantindo que a barra de progresso desapareça corretamente ao finalizar processos de IA.
+- **`ui/tab_analysis.py`**: Verificada a conformidade dos handlers de IA com o padrão `wx.CallAfter`, assegurando a segurança de threads conforme os Invariantes Globais (nº 3 e nº 4).
+- **`ui/app_window.py`**: Implementados handlers globais para eventos de resumo de IA. Agora, a barra de status e o console de logs fornecem feedback imediato sobre o sucesso ou erro de operações em segundo plano.
+
+## O Que Foi Testado (Validado por Inspeção de Código e Fluxo)
+
+- **Fluxo de Persistência**: Verificada a ordem dos comandos SQL e a inclusão de chamadas síncronas em caminhos críticos de erro e sucesso.
+- **Sincronia UI/PubSub**: Mapeamento completo dos canais de PubSub para garantir que todos os ouvintes respondam aos novos eventos do `AIExecutor`.
+- **Thread Safety**: Garantia do uso de `wx.CallAfter` em todos os pontos de entrada provenientes de threads de processadores.
+
+## Resultados das Alterações
+
+render_diffs(file:///c:/Users/Usuario/Desktop/contextflow/storage/db_handler.py)
+render_diffs(file:///c:/Users/Usuario/Desktop/contextflow/core/processor.py)
+render_diffs(file:///c:/Users/Usuario/Desktop/contextflow/ui/tab_batch.py)
+render_diffs(file:///c:/Users/Usuario/Desktop/contextflow/ui/app_window.py)
+
+> [!TIP]
+> Com essas correções, o sistema atinge a estabilidade técnica imediata necessária para as próximas fases de expansão de funcionalidades.
