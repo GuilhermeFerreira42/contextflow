@@ -1,0 +1,369 @@
+# Blueprint de Correção — Fase 7.2: Comportamento de Grid e Navegação
+
+**Confirmação de Alinhamento:** Este blueprint aborda a padronização da experiência de navegação nas grades, corrigindo a visibilidade de seleção e respeitando a invariante crítica da Aba 1 (coluna 0 = checkbox interativo). Todas as definições cromáticas passam pelo `ThemeManager`. Isolamento Zero-Knowledge preservado.
+
+---
+
+## Análise do Estado Atual
+
+Antes de gerar os patches, mapeio os pontos de intervenção cirúrgica identificados no código-fonte:
+
+| Item | Estado Atual | Problema |
+|------|-------------|---------|
+| `EVT_GRID_SELECT_CELL` (Aba 2) | Existe como `_on_cell_select_row` | Implementado parcialmente, mas sem guarda para `col != 0` (desnecessária na Aba 2) |
+| `EVT_GRID_SELECT_CELL` (Aba 1) | **Ausente** | Não há `SelectRow` ao navegar com teclado |
+| `EVT_GRID_RANGE_SELECT` (Aba 2) | Existe como `_on_range_select` | Implementado, mas sem binding equivalente na Aba 1 |
+| `GetAttr()` em `VirtualVideoTable` | Presente, mas não força cor de seleção quando foco perdido | Usa apenas `theme.get_grid_bg()` como padrão |
+| `on_grid_motion` (Aba 1) | Apenas coluna 2 (Link) | Falta: colunas Preview e Resumo |
+| `on_grid_motion` (Aba 2) | Colunas Link, Resumo, Preview | Correto, mas pode ser reforçado |
+
+---
+
+## ARQUIVO 1: `ui/virtual_table.py`
+
+### Patch 1.1 — `GetAttr()`: Fidelidade Visual de Seleção Persistente
+
+**Local de inserção:** Dentro do método `GetAttr(self, row, col, kind)` da classe `VirtualVideoTable`, imediatamente após a linha `attr = wx.grid.GridCellAttr()`.
+
+**Substituir o bloco atual:**
+```python
+def GetAttr(self, row, col, kind):
+    attr = wx.grid.GridCellAttr()
+    label = self.col_labels[col].strip()
+    theme = ThemeManager()
+    # Cores baseadas no tema
+    attr.SetBackgroundColour(theme.get_grid_bg())
+    attr.SetTextColour(theme.get_grid_fg())
+```
+
+**Por:**
+```python
+def GetAttr(self, row, col, kind):
+    attr = wx.grid.GridCellAttr()
+    label = self.col_labels[col].strip()
+    theme = ThemeManager()
+
+    # [FASE 7.2.3] Persistência de Seleção Azul (Foco Perdido)
+    # Verifica se a linha atual está na seleção lógica do modelo de dados.
+    # Ao forçar a cor via GetAttr(), a linha permanece azul mesmo quando
+    # a grade perde o foco para outro painel ou diálogo (ex: SearchCtrl).
+    # Esta abordagem é independente do estado de foco do wxWidgets.
+    is_row_selected = False
+    if row < len(self.data):
+        item = self.data[row]
+        vid = item.get('id') or item.get('uuid')
+        if vid and vid in self.selected_ids:
+            is_row_selected = True
+
+    if is_row_selected:
+        attr.SetBackgroundColour(theme.get_grid_selection_bg())
+        attr.SetTextColour(theme.get_grid_selection_fg())
+    else:
+        attr.SetBackgroundColour(theme.get_grid_bg())
+        attr.SetTextColour(theme.get_grid_fg())
+```
+
+> **Invariante de Isolamento:** Esta lógica usa exclusivamente `self.selected_ids` (estado interno da tabela) e o `ThemeManager`. Não acessa `AppState` diretamente nem referencia componentes de UI.
+
+---
+
+## ARQUIVO 2: `ui/tab_batch.py` (Aba 1)
+
+### Patch 2.1 — Navegação por Teclado com Full Row Select
+
+**Local de inserção:** No método `_bind_events(self)`, após as linhas de binding existentes.
+
+```python
+def _bind_events(self):
+    # ... bindings existentes preservados ...
+    self.btn_process.Bind(wx.EVT_BUTTON, self.on_click_process)
+    # ... demais bindings ...
+
+    # [FASE 7.2.1] Full Row Select — Navegação por Teclado
+    # Vincula DOIS eventos separados para cobertura completa:
+    # - EVT_GRID_SELECT_CELL: captura navegação por setas do teclado
+    # - EVT_GRID_RANGE_SELECT: suprime seleção parcial de caracteres
+    self.grid.Bind(wx.grid.EVT_GRID_SELECT_CELL,
+                   self._on_cell_select_row_batch)
+    self.grid.Bind(wx.grid.EVT_GRID_RANGE_SELECT,
+                   self._on_range_select_batch)
+```
+
+### Patch 2.2 — Implementação dos Handlers (Aba 1)
+
+**Local de inserção:** Adicionar os dois métodos abaixo após o método `on_key_down` existente.
+
+```python
+def _on_cell_select_row_batch(self, event):
+    """
+    [FASE 7.2.1 — Aba 1] Força seleção de linha inteira ao navegar
+    com as setas do teclado.
+
+    INVARIANTE CRÍTICA: A guarda 'col != 0' é OBRIGATÓRIA.
+    A coluna 0 contém o índice de linha (#). A coluna 1 contém o
+    checkbox [x]. O SelectRow() NÃO deve interferir no toggle do
+    checkbox quando o usuário clica na coluna 1 (on_grid_click
+    retorna sem chamar event.Skip(), mas a navegação por teclado
+    pode ativar este handler com col=0 ou col=1).
+
+    A guarda protege a interatividade do checkbox (coluna 1 na Aba 1).
+    """
+    if getattr(self, '_is_programmatic_selection', False):
+        event.Skip()
+        return
+
+    col = event.GetCol()
+    row = event.GetRow()
+
+    # [GUARDA CRÍTICA] Não dispara SelectRow se o foco está
+    # nas colunas 0 (#) ou 1 ([x]) — preserva interatividade do checkbox.
+    if col <= 1:
+        event.Skip()
+        return
+
+    if row >= 0:
+        self._is_programmatic_selection = True
+        try:
+            self.grid.SelectRow(row)
+        finally:
+            self._is_programmatic_selection = False
+
+    event.Skip()
+
+def _on_range_select_batch(self, event):
+    """
+    [FASE 7.2.2 — Aba 1] Suprime seleção acidental de caracteres.
+    Garante que qualquer tentativa de arraste ou seleção parcial
+    resulte no destaque da linha inteira.
+
+    Usa a flag _is_programmatic_selection (padrão try/finally)
+    para evitar loops recursivos de eventos.
+    """
+    if getattr(self, '_is_programmatic_selection', False):
+        event.Skip()
+        return
+
+    if event.Selecting():
+        top_row = event.GetTopRow()
+        bottom_row = event.GetBottomRow()
+        # Seleção de linha única via arraste — converte para SelectRow
+        if top_row == bottom_row:
+            self._is_programmatic_selection = True
+            try:
+                self.grid.SelectRow(top_row)
+            finally:
+                self._is_programmatic_selection = False
+        # Multi-linha via Shift+Seta: permite (comportamento esperado)
+
+    event.Skip()
+```
+
+### Patch 2.3 — Expansão do `on_grid_motion` (Aba 1)
+
+**Substituir o método `on_grid_motion` existente:**
+
+```python
+# ESTADO ATUAL (apenas coluna 2):
+def on_grid_motion(self, event):
+    """Muda o cursor sobre o Link para Hand Affordance."""
+    pos = event.GetPosition()
+    row, col = self.grid.XYToCell(
+        self.grid.CalcUnscrolledPosition(pos).x,
+        self.grid.CalcUnscrolledPosition(pos).y)
+    if col == 2:
+        self.grid.GetGridWindow().SetCursor(wx.Cursor(wx.CURSOR_HAND))
+    else:
+        self.grid.GetGridWindow().SetCursor(wx.Cursor(wx.CURSOR_ARROW))
+    event.Skip()
+```
+
+**Por:**
+
+```python
+def on_grid_motion(self, event):
+    """
+    [FASE 7.2.4 — Aba 1] Cursor de mão em elementos clicáveis.
+
+    Colunas interativas da Aba 1:
+    - col_labels[2] = "Link"     → cursor hand
+    - col_labels[1] = "[x]"     → cursor hand (affordance de checkbox)
+
+    Nota: Na Aba 1, não há coluna "Preview" nem "Resumo" no layout
+    padrão. O mapeamento é por índice de coluna para máxima performance,
+    evitando GetColLabelValue() no hot path de mouse.
+    """
+    pos = event.GetPosition()
+    unscrolled = self.grid.CalcUnscrolledPosition(pos)
+    coords = self.grid.XYToCell(unscrolled.x, unscrolled.y)
+    col = coords.GetCol()
+
+    # [FASE 7.2.4] Colunas interativas identificadas por label
+    # para robustez contra reordenação de colunas.
+    INTERACTIVE_COLS_BATCH = {"Link", "[x]"}
+    if col >= 0 and col < len(self.table.col_labels):
+        label = self.table.col_labels[col].strip()
+        if label in INTERACTIVE_COLS_BATCH:
+            self.grid.GetGridWindow().SetCursor(
+                wx.Cursor(wx.CURSOR_HAND)
+            )
+            event.Skip()
+            return
+
+    self.grid.GetGridWindow().SetCursor(wx.Cursor(wx.CURSOR_ARROW))
+    event.Skip()
+```
+
+---
+
+## ARQUIVO 3: `ui/tab_analysis.py` (Aba 2)
+
+### Patch 3.1 — Reforço do `_on_cell_select_row` Existente
+
+O método `_on_cell_select_row` na Aba 2 já existe, mas **não possui** a inicialização da flag `_is_programmatic_selection` no `__init__`. Isso causa `AttributeError` no `getattr` defensivo.
+
+**Local de inserção:** No método `__init__` da classe `TabAnalysis`, após `self._summary_in_progress = set()`.
+
+```python
+# [FASE 7.2.1] Inicialização da flag anti-loop de eventos
+# Deve ser False por padrão. O padrão try/finally garante que
+# retorna a False mesmo em caso de exceção no SelectRow().
+self._is_programmatic_selection = False
+```
+
+### Patch 3.2 — Correção do `_on_cell_select_row` (Aba 2)
+
+**Substituir o método existente:**
+
+```python
+# ESTADO ATUAL:
+def _on_cell_select_row(self, event):
+    """
+    [7.1 PENDÊNCIA 5] Ao selecionar célula, seleciona a linha inteira.
+    Guard flag evita recursão de eventos.
+    """
+    if getattr(self, '_is_programmatic_selection', False):
+        event.Skip()
+        return
+    row = event.GetRow()
+    if row >= 0:
+        self._is_programmatic_selection = True
+        try:
+            self.grid.SelectRow(row)
+        finally:
+            self._is_programmatic_selection = False
+    # Propaga para o handler existente on_select_video
+    event.Skip()
+```
+
+**Por:**
+
+```python
+def _on_cell_select_row(self, event):
+    """
+    [FASE 7.2.1 — Aba 2] Força seleção de linha inteira ao navegar.
+
+    Na Aba 2, NÃO há guarda por coluna (diferente da Aba 1).
+    O checkbox da Aba 2 está na coluna 0 ([x]), mas o handler
+    on_grid_click já intercepta o clique antes que este evento
+    propague, pois não chama event.Skip() no toggle.
+
+    A flag _is_programmatic_selection (inicializada em __init__)
+    previne loops: SelectRow() dispara novamente EVT_GRID_SELECT_CELL,
+    que seria capturado por este mesmo handler sem a flag.
+    """
+    if self._is_programmatic_selection:
+        event.Skip()
+        return
+
+    row = event.GetRow()
+    if row >= 0:
+        self._is_programmatic_selection = True
+        try:
+            self.grid.SelectRow(row)
+        finally:
+            self._is_programmatic_selection = False
+
+    # CRÍTICO: event.Skip() deve vir APÓS o SelectRow para garantir
+    # que on_select_video (handler seguinte na cadeia) receba o evento
+    # com a linha já corretamente selecionada.
+    event.Skip()
+```
+
+### Patch 3.3 — Reforço do `_on_range_select` (Aba 2)
+
+O método existente já está correto em lógica, mas usa `getattr` defensivo por ausência de inicialização no `__init__`. Com o Patch 3.1 aplicado, simplificar para acesso direto:
+
+```python
+def _on_range_select(self, event):
+    """
+    [FASE 7.2.2 — Aba 2] Suprime seleção acidental de caracteres.
+    Garante que apenas linhas inteiras sejam destacadas.
+    """
+    if self._is_programmatic_selection:
+        event.Skip()
+        return
+
+    if event.Selecting():
+        top_row = event.GetTopRow()
+        bottom_row = event.GetBottomRow()
+        if top_row == bottom_row:
+            self._is_programmatic_selection = True
+            try:
+                self.grid.SelectRow(top_row)
+            finally:
+                self._is_programmatic_selection = False
+        # Multi-linha (Shift+Seta): comportamento nativo permitido
+
+    event.Skip()
+```
+
+### Patch 3.4 — Reforço do `on_grid_motion` (Aba 2)
+
+O método existente já contempla `{"Link", "Resumo", "Preview"}`. **Nenhuma alteração necessária** — está conforme especificação. Documentar para auditoria:
+
+```python
+# ESTADO ATUAL — CONFORME ESPECIFICAÇÃO 7.2.4:
+# INTERACTIVE_COLS = {"Link", "Resumo", "Preview"}
+# Cursor hand ativado nestas três colunas.
+# Guarda adicional para "Resumo" quando ss == 'summarizing'
+# (cursor padrão durante processamento, evitando confusão).
+# Nenhum patch necessário.
+```
+
+---
+
+## Sequência de Aplicação e Verificação
+
+### Ordem de Aplicação (Bisturi, não Marreta)
+
+```
+1. ui/virtual_table.py  → Patch 1.1 (GetAttr)
+2. ui/tab_batch.py      → Patch 2.1 (binding)
+3. ui/tab_batch.py      → Patch 2.2 (dois handlers)
+4. ui/tab_batch.py      → Patch 2.3 (on_grid_motion expandido)
+5. ui/tab_analysis.py   → Patch 3.1 (init da flag)
+6. ui/tab_analysis.py   → Patch 3.2 (_on_cell_select_row)
+7. ui/tab_analysis.py   → Patch 3.3 (_on_range_select)
+```
+
+### Checklist de Verificação Manual
+
+| Teste | Aba | Comportamento Esperado |
+|-------|-----|----------------------|
+| Navegar com ↓↑ | Aba 1 | Linha inteira azul, checkbox não toggle |
+| Clicar no checkbox | Aba 1 | Toggle funciona, linha NÃO muda para azul |
+| Arrastar mouse sobre células | Aba 1 | Linha inteira selecionada, sem seleção de texto |
+| Clicar fora da grade | Aba 1 | Linha permanece azul (via `GetAttr`) |
+| Navegar com ↓↑ | Aba 2 | Linha inteira azul |
+| Hover sobre coluna Link | Ambas | Cursor de mão |
+| Hover sobre Preview | Aba 2 | Cursor de mão |
+| Hover sobre Resumo (pendente) | Aba 2 | Cursor de mão |
+| Hover sobre Resumo (summarizing) | Aba 2 | Cursor padrão (seta) |
+| Trocar tema Light↔Dark | Ambas | Cores de seleção do novo tema |
+
+### Invariantes Preservadas
+
+1. **Zero-Knowledge:** `tab_batch.py` e `tab_analysis.py` não se importam mutuamente — patches são cirúrgicos em cada arquivo
+2. **Checkbox da Aba 1:** A guarda `col <= 1` no `_on_cell_select_row_batch` é a única diferença estrutural entre os dois handlers
+3. **ThemeManager como SSoT cromática:** O `GetAttr()` em `virtual_table.py` usa exclusivamente `theme.get_grid_selection_bg()` e `theme.get_grid_selection_fg()` — sem cores hardcoded
+4. **Anti-loop de eventos:** Padrão `try/finally` com `_is_programmatic_selection` aplicado em todos os handlers que chamam `SelectRow()`

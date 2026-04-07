@@ -1,0 +1,318 @@
+# Blueprint de Correção — Resíduos de Seleção em Colunas Customizadas
+
+## Diagnóstico Cirúrgico
+
+Após análise do código em `ui/virtual_table.py`, confirmo que o problema existe em três renderers. O `ThumbnailRenderer` já implementa o padrão Background-First corretamente (serve como modelo). Os demais precisam de correção.
+
+**Estado atual problemático identificado:**
+- `ChipTagRenderer.Draw()`: pinta o fundo, mas o `gc.Clip()` não cobre toda a célula antes dos chips
+- `SummaryStatusRenderer.Draw()`: o fundo existe mas pode deixar artefatos nas bordas laterais  
+- `LinkIconRenderer.Draw()`: já tem fundo, mas precisa de reforço na ordem de operações
+
+A análise do código real mostra que os três renderers **já possuem a limpeza inicial**, mas há um bug sutil: o `ChipTagRenderer` usa `gc.Clip()` com `rect.x, rect.y` mas pode deixar pixels sujos nas bordas quando a seleção anterior tinha cor diferente. O `_on_range_select` também precisa de reforço para não deixar bordas fantasmas.
+
+---
+
+## ARQUIVO 1: `ui/virtual_table.py`
+
+### Patch 1.1 — `ChipTagRenderer.Draw()` — Background-First Reforçado
+
+**Localizar o método `Draw` da classe `ChipTagRenderer` e substituir integralmente:**
+
+```python
+# SUBSTITUIR O MÉTODO Draw COMPLETO DA CLASSE ChipTagRenderer:
+
+def Draw(self, grid, attr, dc, rect, row, col, isSelected):
+    theme = ThemeManager()
+    
+    # [BACKGROUND-FIRST — REGRA FASE 7.3]
+    # PASSO 1 OBRIGATÓRIO: Limpa TODA a célula com a cor correta do tema
+    # antes de qualquer desenho de chip, texto ou ícone.
+    # Elimina artefatos de seleções anteriores e da grade nativa.
+    bg_color = (
+        theme.get_grid_selection_bg() if isSelected
+        else theme.get_grid_bg()
+    )
+    dc.SetBrush(wx.Brush(bg_color))
+    dc.SetPen(wx.TRANSPARENT_PEN)
+    dc.DrawRectangle(rect)  # Cobre 100% da área da célula
+
+    # PASSO 2: Recupera dados — só então começa o desenho de conteúdo
+    table = grid.GetTable()
+    if row >= len(table.data):
+        return
+
+    if not table.config.get("ui", "dynamic_grid", True):
+        raw_tags = table.data[row].get('tags', '[]')
+        if isinstance(raw_tags, str):
+            try:
+                import json
+                tags = json.loads(raw_tags)
+            except (json.JSONDecodeError, TypeError):
+                tags = []
+        elif isinstance(raw_tags, list):
+            tags = raw_tags
+        else:
+            tags = []
+        dc.SetTextForeground(
+            theme.get_grid_selection_fg() if isSelected
+            else theme.get_grid_fg()
+        )
+        dc.DrawText(", ".join(tags[:2]), rect.x + 5, rect.y + (rect.height // 2 - 7))
+        return
+
+    raw_tags = table.data[row].get('tags', '[]')
+    if isinstance(raw_tags, str):
+        try:
+            import json
+            tags = json.loads(raw_tags)
+        except (json.JSONDecodeError, TypeError):
+            tags = []
+    elif isinstance(raw_tags, list):
+        tags = raw_tags
+    else:
+        tags = []
+
+    if not tags:
+        dc.SetTextForeground(theme.get_muted_color())
+        dc.DrawText("-", rect.x + 5, rect.y + (rect.height // 2 - 7))
+        return
+
+    # PASSO 3: Chips desenhados SOBRE o fundo já pintado
+    gc = wx.GraphicsContext.Create(dc)
+    if gc:
+        dc.SetClippingRegion(rect)
+        # [CRÍTICO] Clip cobre TODA a rect, não apenas a área dos chips
+        gc.Clip(rect.x, rect.y, rect.width, rect.height)
+        x_offset = rect.x + 5
+        y_pos = rect.y + (rect.height // 2 - 10)
+
+        for tag in tags[:2]:
+            bg_chip = self._get_tag_color(tag)
+            txt_color = self._contrast_text(bg_chip)
+            txt_w, txt_h = dc.GetTextExtent(tag)
+            chip_w = txt_w + 12
+
+            gc.SetBrush(wx.Brush(bg_chip))
+            border_color = wx.Colour(
+                max(0, bg_chip.Red() - 30),
+                max(0, bg_chip.Green() - 30),
+                max(0, bg_chip.Blue() - 30)
+            )
+            gc.SetPen(wx.Pen(border_color, 1))
+            gc.DrawRoundedRectangle(x_offset, y_pos, chip_w, 20, 10)
+            gc.SetFont(
+                wx.Font(8, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL,
+                        wx.FONTWEIGHT_NORMAL),
+                txt_color
+            )
+            gc.DrawText(tag, x_offset + 6, y_pos + 4)
+            x_offset += chip_w + 4
+
+        if len(tags) > 2:
+            gc.SetFont(
+                wx.Font(8, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL,
+                        wx.FONTWEIGHT_NORMAL),
+                theme.get_grid_selection_fg() if isSelected
+                else theme.get_muted_color()
+            )
+            gc.DrawText(f"+{len(tags)-2}", x_offset, y_pos + 4)
+
+        dc.DestroyClippingRegion()
+```
+
+---
+
+### Patch 1.2 — `SummaryStatusRenderer.Draw()` — Background-First Reforçado
+
+**Localizar o método `Draw` da classe `SummaryStatusRenderer` e substituir integralmente:**
+
+```python
+# SUBSTITUIR O MÉTODO Draw COMPLETO DA CLASSE SummaryStatusRenderer:
+
+def Draw(self, grid, attr, dc, rect, row, col, isSelected):
+    theme = ThemeManager()
+
+    # [BACKGROUND-FIRST — REGRA FASE 7.3]
+    # PASSO 1 OBRIGATÓRIO: Preenche TODA a célula antes de qualquer texto.
+    # Ocorre ANTES do SetClippingRegion para garantir cobertura total,
+    # incluindo as bordas que o ClippingRegion poderia deixar de fora.
+    bg_color = (
+        theme.get_grid_selection_bg() if isSelected
+        else theme.get_grid_bg()
+    )
+    dc.SetBrush(wx.Brush(bg_color))
+    dc.SetPen(wx.TRANSPARENT_PEN)
+    dc.DrawRectangle(rect)  # Limpa 100% da área — elimina artefatos nativos
+
+    # PASSO 2: Clipping e dados — só após limpeza do fundo
+    dc.SetClippingRegion(rect)
+    table = grid.GetTable()
+    if row >= len(table.data):
+        dc.DestroyClippingRegion()
+        return
+
+    item = table.data[row]
+    ss = item.get('summary_status', '')
+
+    # PASSO 3: Determina ícone e cor do texto baseado no status
+    if ss == 'summarizing':
+        icon = "⏳"
+        color = (
+            theme.get_accent_color() if not isSelected
+            else theme.get_grid_selection_fg()
+        )
+        bold = False
+    elif ss == 'summary_error':
+        icon = "❌"
+        color = (
+            wx.Colour(220, 53, 69) if not isSelected
+            else theme.get_grid_selection_fg()
+        )
+        bold = False
+    elif ss == 'summarized':
+        icon = "✓"
+        color = (
+            wx.Colour(40, 167, 69) if not isSelected
+            else theme.get_grid_selection_fg()
+        )
+        bold = False
+    else:
+        # [7.1 PENDÊNCIA 3] CTA explícito "✦ Resumir" em destaque
+        icon = "✦ Resumir"
+        color = (
+            theme.get_accent_color() if not isSelected
+            else theme.get_grid_selection_fg()
+        )
+        bold = True
+
+    # PASSO 4: Texto desenhado SOBRE o fundo já limpo
+    dc.SetTextForeground(color)
+    weight = wx.FONTWEIGHT_BOLD if bold else wx.FONTWEIGHT_NORMAL
+    dc.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, weight))
+
+    tw, th = dc.GetTextExtent(icon)
+    x = rect.x + (rect.width - tw) // 2
+    y = rect.y + (rect.height - th) // 2
+    dc.DrawText(icon, x, y)
+    dc.DestroyClippingRegion()
+```
+
+---
+
+### Patch 1.3 — `LinkIconRenderer.Draw()` — Background-First Reforçado
+
+**Localizar o método `Draw` da classe `LinkIconRenderer` e substituir integralmente:**
+
+```python
+# SUBSTITUIR O MÉTODO Draw COMPLETO DA CLASSE LinkIconRenderer:
+
+def Draw(self, grid, attr, dc, rect, row, col, isSelected):
+    theme = ThemeManager()
+
+    # [BACKGROUND-FIRST — REGRA FASE 7.3]
+    # PASSO 1 OBRIGATÓRIO: Preenchimento completo ANTES do bitmap do ícone.
+    # Garante que o ícone de link seja desenhado sobre fundo limpo,
+    # sem vazamentos da cor de seleção de células vizinhas.
+    bg_color = (
+        theme.get_grid_selection_bg() if isSelected
+        else theme.get_grid_bg()
+    )
+    dc.SetBrush(wx.Brush(bg_color))
+    dc.SetPen(wx.TRANSPARENT_PEN)
+    dc.DrawRectangle(rect)  # Limpeza total — incluindo cantos da célula
+
+    # PASSO 2: Clipping region após a limpeza
+    dc.SetClippingRegion(rect)
+
+    # PASSO 3: Ícone desenhado SOBRE o fundo já preenchido
+    icon_color = (
+        theme.get_accent_color() if not isSelected
+        else theme.get_grid_selection_fg()
+    )
+    dc.SetTextForeground(icon_color)
+    dc.SetFont(wx.Font(
+        10, wx.FONTFAMILY_DEFAULT,
+        wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD
+    ))
+
+    txt = "🔗"
+    tw, th = dc.GetTextExtent(txt)
+    dc.DrawText(
+        txt,
+        rect.x + (rect.width - tw) // 2,
+        rect.y + (rect.height - th) // 2
+    )
+    dc.DestroyClippingRegion()
+```
+
+---
+
+## ARQUIVO 2: `ui/tab_analysis.py`
+
+### Patch 2.1 — `_on_range_select` — Supressão de Bordas Fantasmas
+
+**Localizar o método `_on_range_select` e substituir integralmente:**
+
+```python
+# SUBSTITUIR O MÉTODO _on_range_select COMPLETO:
+
+def _on_range_select(self, event):
+    """
+    [FASE 7.3 — Aba 2] Suprime seleção acidental de caracteres e
+    elimina bordas fantasmas nas células interativas (Tag, Link, Resumo).
+
+    PROBLEMA RAIZ DOS ARTEFATOS:
+    Quando EVT_GRID_RANGE_SELECT dispara nativamente antes de nossa
+    supressão, o wxWidgets pinta a seleção nativa sobre as células
+    customizadas. O ForceRefresh() forçado após o SelectRow() garante
+    que os renderers Background-First redesenhem corretamente.
+
+    INVARIANTE: Usa _is_programmatic_selection (inicializado no __init__)
+    com padrão try/finally para garantir reset mesmo em exceções.
+    """
+    if self._is_programmatic_selection:
+        event.Skip()
+        return
+
+    if event.Selecting():
+        top_row = event.GetTopRow()
+        bottom_row = event.GetBottomRow()
+
+        if top_row == bottom_row:
+            # [CORREÇÃO DE ARTEFATO] Seleção de linha única:
+            # SelectRow() + ForceRefresh() imediato elimina
+            # bordas fantasmas nas colunas Tag, Link e Resumo.
+            self._is_programmatic_selection = True
+            try:
+                self.grid.SelectRow(top_row)
+                # ForceRefresh após SelectRow garante que os renderers
+                # Background-First redesenhem sem resíduos da seleção nativa
+                self.grid.ForceRefresh()
+            finally:
+                self._is_programmatic_selection = False
+        # Multi-linha via Shift+Seta: comportamento nativo permitido
+        # (não suprime pois é intencional do usuário)
+
+    event.Skip()
+```
+
+---
+
+## Checklist de Verificação Pós-Aplicação
+
+| Teste | Arquivo Afetado | Comportamento Esperado |
+|-------|-----------------|------------------------|
+| Selecionar linha com Tags | `ChipTagRenderer` | Chips coloridos sobre fundo azul, sem resíduos brancos |
+| Selecionar linha com Link | `LinkIconRenderer` | Ícone 🔗 sobre fundo azul sem bordas da cor anterior |
+| Selecionar "✦ Resumir" | `SummaryStatusRenderer` | Texto CTA sobre fundo azul limpo |
+| Navegar com setas (↑↓) | `_on_range_select` | Sem bordas fantasmas ao mudar de linha |
+| Trocar tema Light→Dark | Todos os 3 renderers | Cores via `ThemeManager` — sem hardcode |
+| Linha selecionada, foco em SearchCtrl | `GetAttr()` (já existente) | Linha permanece azul via `selected_ids` |
+
+## Invariantes Preservados
+
+1. **ThemeManager como SSoT cromática**: todos os `bg_color` derivam de `theme.get_grid_selection_bg()` ou `theme.get_grid_bg()` — zero cores hardcoded nos renderers
+2. **Ordem de operações**: `DrawRectangle(rect)` sempre precede qualquer `SetClippingRegion`, `gc.Clip()` ou `DrawText()`
+3. **Zero-Knowledge**: nenhum renderer referencia `TabAnalysis` ou `TabBatch` diretamente
+4. **Anti-loop preservado**: o padrão `try/finally` com `_is_programmatic_selection` no `_on_range_select` mantém integridade

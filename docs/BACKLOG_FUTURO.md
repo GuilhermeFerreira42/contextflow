@@ -102,7 +102,8 @@
 - **Risco:** 🟡 Médio. Mesmo sistema de eventos do #7.2.1.
 - **Impacto:** Remove frustração na interação com a grid.
 
-### 7.2.3 — Persistência de Seleção Azul (Foco Perdido)
+### 7.2.3 — Persistência de Seleção Azul (Foco Perdido) [CONCLUÍDO - Fase 7.3b]
+- **Status:** CONCLUÍDO
 - **Problema:** A seleção azul vira cinza ao clicar fora da grid. Na aba 1, o destaque permanece só em algumas colunas.
 - **Causa raiz:** Comportamento nativo do wxWidgets para seleção em estado inativo.
 - **Arquivo:** `ui/components/virtual_table.py`
@@ -110,7 +111,8 @@
 - **Risco:** 🟡 Médio. Interação com o sistema de temas.
 - **Impacto:** Clareza visual sobre qual item está selecionado em qualquer momento.
 
-### 7.2.4 — Cursor Hand em Elementos Clicáveis
+### 7.2.4 — Cursor Hand em Elementos Clicáveis [CONCLUÍDO - Fase 7.3b]
+- **Status:** CONCLUÍDO
 - **Problema:** Falta do cursor "mãozinha" ao passar sobre ícones, links e elementos clicáveis.
 - **Causa raiz:** Renderers de ícones e links não alteram o cursor no hover.
 - **Arquivo:** `ui/components/virtual_table.py`

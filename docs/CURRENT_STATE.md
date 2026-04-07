@@ -1,5 +1,5 @@
 # CURRENT_STATE — ContextFlow
-> Última atualização: Fase 7.1-patch | 2026-04-06 (GRIDFIX-7.1 — Interatividade & Estética da Grade)
+> Última atualização: Fase 7.2 e 7.3b | 2026-04-07 (GRIDFIX-7.2/7.3b — Comportamento de Grid, Sobreposição Atômica & Supressão de Marquee)
 
 ## Arquitetura Ativa
 - **Padrão**: Fachada Singleton (`AppState`) com delegação para **Gerentes Especializados** (`core/managers/`).

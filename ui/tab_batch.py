@@ -89,6 +89,7 @@ class TabBatch(wx.Panel):
         self.grid.SetRowLabelSize(0)
         self.grid.EnableGridLines(True)
         self.grid.SetGridLineColour(self.theme.get_border_color()) # Cinza claro para contraste no branco
+        self.grid.SetCellHighlightPenWidth(0) # Supressão de marquee
         
         # [AFFORDANCE] Define larguras conforme SSoT de Usabilidade
         self.grid.SetColSize(0, 40)   # #
@@ -149,6 +150,15 @@ class TabBatch(wx.Panel):
         
         # [QA2 REFINE] Atalhos de Teclado
         self.grid.Bind(wx.EVT_KEY_DOWN, self.on_key_down)
+
+        # [FASE 7.2.1] Full Row Select — Navegação por Teclado
+        # Vincula DOIS eventos separados para cobertura completa:
+        # - EVT_GRID_SELECT_CELL: captura navegação por setas do teclado
+        # - EVT_GRID_RANGE_SELECT: suprime seleção parcial de caracteres
+        self.grid.Bind(wx.grid.EVT_GRID_SELECT_CELL,
+                       self._on_cell_select_row_batch)
+        self.grid.Bind(wx.grid.EVT_GRID_RANGE_SELECT,
+                       self._on_range_select_batch)
 
     def _load_column_widths(self):
         """[FASE 6.2] Restaura larguras das colunas do ConfigManager."""
@@ -390,15 +400,101 @@ class TabBatch(wx.Panel):
         else:
             event.Skip()
 
+    def _on_cell_select_row_batch(self, event):
+        """
+        [FASE 7.2.1 — Aba 1] Força seleção de linha inteira ao navegar
+        com as setas do teclado.
+
+        INVARIANTE CRÍTICA: A guarda 'col != 0' é OBRIGATÓRIA.
+        A coluna 0 contém o índice de linha (#). A coluna 1 contém o
+        checkbox [x]. O SelectRow() NÃO deve interferir no toggle do
+        checkbox quando o usuário clica na coluna 1 (on_grid_click
+        retorna sem chamar event.Skip(), mas a navegação por teclado
+        pode ativar este handler com col=0 ou col=1).
+
+        A guarda protege a interatividade do checkbox (coluna 1 na Aba 1).
+        """
+        if getattr(self, '_is_programmatic_selection', False):
+            event.Skip()
+            return
+
+        col = event.GetCol()
+        row = event.GetRow()
+
+        # [GUARDA CRÍTICA] Não dispara SelectRow se o foco está
+        # nas colunas 0 (#) ou 1 ([x]) — preserva interatividade do checkbox.
+        if col <= 1:
+            event.Skip()
+            return
+
+        if row >= 0:
+            self._is_programmatic_selection = True
+            try:
+                self.grid.ClearSelection()
+                self.grid.SelectRow(row)
+                self.grid.ForceRefresh()
+            finally:
+                self._is_programmatic_selection = False
+
+        event.Skip()
+
+    def _on_range_select_batch(self, event):
+        """
+        [FASE 7.2.2 — Aba 1] Suprime seleção acidental de caracteres.
+        Garante que qualquer tentativa de arraste ou seleção parcial
+        resulte no destaque da linha inteira.
+
+        Usa a flag _is_programmatic_selection (padrão try/finally)
+        para evitar loops recursivos de eventos.
+        """
+        if getattr(self, '_is_programmatic_selection', False):
+            event.Skip()
+            return
+
+        if event.Selecting():
+            top_row = event.GetTopRow()
+            bottom_row = event.GetBottomRow()
+            # Seleção de linha única via arraste — converte para SelectRow
+            if top_row == bottom_row:
+                self._is_programmatic_selection = True
+                try:
+                    self.grid.SelectRow(top_row)
+                finally:
+                    self._is_programmatic_selection = False
+            # Multi-linha via Shift+Seta: permite (comportamento esperado)
+
+        event.Skip()
+
     def on_grid_motion(self, event):
-        """Muda o cursor sobre o Link para Hand Affordance."""
+        """
+        [FASE 7.2.4 — Aba 1] Cursor de mão em elementos clicáveis.
+
+        Colunas interativas da Aba 1:
+        - col_labels[2] = "Link"     → cursor hand
+        - col_labels[1] = "[x]"     → cursor hand (affordance de checkbox)
+
+        Nota: Na Aba 1, não há coluna "Preview" nem "Resumo" no layout
+        padrão. O mapeamento é por índice de coluna para máxima performance,
+        evitando GetColLabelValue() no hot path de mouse.
+        """
         pos = event.GetPosition()
-        row, col = self.grid.XYToCell(self.grid.CalcUnscrolledPosition(pos).x, 
-                                     self.grid.CalcUnscrolledPosition(pos).y)
-        if col == 2:
-            self.grid.GetGridWindow().SetCursor(wx.Cursor(wx.CURSOR_HAND))
-        else:
-            self.grid.GetGridWindow().SetCursor(wx.Cursor(wx.CURSOR_ARROW))
+        unscrolled = self.grid.CalcUnscrolledPosition(pos)
+        coords = self.grid.XYToCell(unscrolled.x, unscrolled.y)
+        col = coords.GetCol()
+
+        # [FASE 7.2.4] Colunas interativas identificadas por label
+        # para robustez contra reordenação de colunas.
+        INTERACTIVE_COLS_BATCH = {"Link", "[x]"}
+        if col >= 0 and col < len(self.table.col_labels):
+            label = self.table.col_labels[col].strip()
+            if label in INTERACTIVE_COLS_BATCH:
+                self.grid.GetGridWindow().SetCursor(
+                    wx.Cursor(wx.CURSOR_HAND)
+                )
+                event.Skip()
+                return
+
+        self.grid.GetGridWindow().SetCursor(wx.Cursor(wx.CURSOR_ARROW))
         event.Skip()
 
     def on_state_mutation(self, event_type, data=None):

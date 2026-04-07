@@ -61,7 +61,7 @@ class ThumbnailRenderer(wx.grid.GridCellRenderer):
         theme = ThemeManager()
         bg_color = theme.get_grid_selection_bg() if isSelected else theme.get_grid_bg()
         dc.SetBrush(wx.Brush(bg_color))
-        dc.SetPen(wx.TRANSPARENT_PEN)
+        dc.SetPen(wx.Pen(bg_color))
         dc.DrawRectangle(rect)
 
         table = grid.GetTable()
@@ -134,7 +134,7 @@ class RichTitleRenderer(wx.grid.GridCellRenderer):
         txt_color = theme.get_grid_selection_fg() if isSelected else theme.get_grid_fg()
 
         dc.SetBrush(wx.Brush(bg_color))
-        dc.SetPen(wx.TRANSPARENT_PEN)
+        dc.SetPen(wx.Pen(bg_color))
         dc.DrawRectangle(rect)
         dc.SetClippingRegion(rect)
 
@@ -169,13 +169,25 @@ class ChipTagRenderer(wx.grid.GridCellRenderer):
 
     def Draw(self, grid, attr, dc, rect, row, col, isSelected):
         theme = ThemeManager()
-        bg_color = theme.get_grid_selection_bg() if isSelected else theme.get_grid_bg()
+        
+        # [7.3b — SOBREPOSIÇÃO ATÔMICA]
+        # 1. Limpeza Total e Obrigatória (Background-First)
+        bg_color = (
+            theme.get_grid_selection_bg() if isSelected
+            else theme.get_grid_bg()
+        )
         dc.SetBrush(wx.Brush(bg_color))
-        dc.SetPen(wx.TRANSPARENT_PEN)
+        dc.SetPen(wx.Pen(bg_color))
         dc.DrawRectangle(rect)
 
+        # 2. Proteção de Clipping para TODO o conteúdo
+        dc.SetClippingRegion(rect)
+
+        # 3. Lógica de Dados
         table = grid.GetTable()
-        if row >= len(table.data): return
+        if row >= len(table.data):
+            dc.DestroyClippingRegion()
+            return
 
         if not table.config.get("ui", "dynamic_grid", True):
             raw_tags = table.data[row].get('tags', '[]')
@@ -189,12 +201,16 @@ class ChipTagRenderer(wx.grid.GridCellRenderer):
                 tags = raw_tags
             else:
                 tags = []
-
-            dc.SetTextForeground(theme.get_grid_selection_fg() if isSelected else theme.get_grid_fg())
+            dc.SetTextForeground(
+                theme.get_grid_selection_fg() if isSelected
+                else theme.get_grid_fg()
+            )
             dc.DrawText(", ".join(tags[:2]), rect.x + 5, rect.y + (rect.height // 2 - 7))
+            dc.DestroyClippingRegion()
             return
 
         raw_tags = table.data[row].get('tags', '[]')
+        tags = []
         if isinstance(raw_tags, str):
             try:
                 import json
@@ -203,26 +219,23 @@ class ChipTagRenderer(wx.grid.GridCellRenderer):
                 tags = []
         elif isinstance(raw_tags, list):
             tags = raw_tags
-        else:
-            tags = []
 
         if not tags:
             dc.SetTextForeground(theme.get_muted_color())
-            dc.DrawText("-", rect.x + 5, rect.y + (rect.height//2 - 7))
+            dc.DrawText("-", rect.x + 5, rect.y + (rect.height // 2 - 7))
+            dc.DestroyClippingRegion()
             return
 
+        # 4. Desenho de Chips via GraphicsContext
         gc = wx.GraphicsContext.Create(dc)
         if gc:
-            dc.SetClippingRegion(rect)
             gc.Clip(rect.x, rect.y, rect.width, rect.height)
-
             x_offset = rect.x + 5
             y_pos = rect.y + (rect.height // 2 - 10)
 
             for tag in tags[:2]:
                 bg_chip = self._get_tag_color(tag)
                 txt_color = self._contrast_text(bg_chip)
-
                 txt_w, txt_h = dc.GetTextExtent(tag)
                 chip_w = txt_w + 12
 
@@ -234,17 +247,24 @@ class ChipTagRenderer(wx.grid.GridCellRenderer):
                 )
                 gc.SetPen(wx.Pen(border_color, 1))
                 gc.DrawRoundedRectangle(x_offset, y_pos, chip_w, 20, 10)
-
-                gc.SetFont(wx.Font(8, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL), txt_color)
+                gc.SetFont(
+                    wx.Font(8, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL,
+                            wx.FONTWEIGHT_NORMAL),
+                    txt_color
+                )
                 gc.DrawText(tag, x_offset + 6, y_pos + 4)
                 x_offset += chip_w + 4
 
             if len(tags) > 2:
-                gc.SetFont(wx.Font(8, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL),
-                           theme.get_grid_selection_fg() if isSelected else theme.get_muted_color())
+                gc.SetFont(
+                    wx.Font(8, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL,
+                            wx.FONTWEIGHT_NORMAL),
+                    theme.get_grid_selection_fg() if isSelected
+                    else theme.get_muted_color()
+                )
                 gc.DrawText(f"+{len(tags)-2}", x_offset, y_pos + 4)
 
-            dc.DestroyClippingRegion()
+        dc.DestroyClippingRegion()
 
     def GetBestSize(self, grid, attr, dc, row, col): return wx.Size(100, 45)
     def Clone(self): return ChipTagRenderer()
@@ -297,16 +317,20 @@ class SummaryStatusRenderer(wx.grid.GridCellRenderer):
     def Draw(self, grid, attr, dc, rect, row, col, isSelected):
         theme = ThemeManager()
 
-        # [PENDÊNCIA 4] Fundo de seleção ANTES do conteúdo
+        # [7.3b — SOBREPOSIÇÃO ATÔMICA]
+        # 1. Limpeza Total e Obrigatória (Background-First)
         bg_color = (
             theme.get_grid_selection_bg() if isSelected
             else theme.get_grid_bg()
         )
         dc.SetBrush(wx.Brush(bg_color))
-        dc.SetPen(wx.TRANSPARENT_PEN)
-        dc.DrawRectangle(rect)  # Sempre primeiro
+        dc.SetPen(wx.Pen(bg_color))
+        dc.DrawRectangle(rect)
+
+        # 2. Proteção de Clipping para TODO o conteúdo
         dc.SetClippingRegion(rect)
 
+        # 3. Lógica de Dados
         table = grid.GetTable()
         if row >= len(table.data):
             dc.DestroyClippingRegion()
@@ -315,6 +339,7 @@ class SummaryStatusRenderer(wx.grid.GridCellRenderer):
         item = table.data[row]
         ss = item.get('summary_status', '')
 
+        # PASSO 3: Determina ícone e cor do texto baseado no status
         if ss == 'summarizing':
             icon = "⏳"
             color = (
@@ -330,32 +355,30 @@ class SummaryStatusRenderer(wx.grid.GridCellRenderer):
             )
             bold = False
         elif ss == 'summarized':
-            icon = "✅"
+            icon = "✓"
             color = (
                 wx.Colour(40, 167, 69) if not isSelected
                 else theme.get_grid_selection_fg()
             )
             bold = False
         else:
-            # [7.1 PENDÊNCIA 3] CTA explícito em vez de "—"
             icon = "✦ Resumir"
             color = (
                 theme.get_accent_color() if not isSelected
                 else theme.get_grid_selection_fg()
             )
-            bold = True  # Destaque adicional
+            bold = True
 
+        # 4. Texto desenhado SOBRE o fundo já limpo e CLIIPADO
         dc.SetTextForeground(color)
         weight = wx.FONTWEIGHT_BOLD if bold else wx.FONTWEIGHT_NORMAL
-        dc.SetFont(wx.Font(
-            9, wx.FONTFAMILY_DEFAULT,
-            wx.FONTSTYLE_NORMAL, weight
-        ))
+        dc.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, weight))
 
         tw, th = dc.GetTextExtent(icon)
         x = rect.x + (rect.width - tw) // 2
         y = rect.y + (rect.height - th) // 2
         dc.DrawText(icon, x, y)
+        
         dc.DestroyClippingRegion()
 
     def GetBestSize(self, grid, attr, dc, row, col): return wx.Size(70, 45)
@@ -367,18 +390,20 @@ class LinkIconRenderer(wx.grid.GridCellRenderer):
     def Draw(self, grid, attr, dc, rect, row, col, isSelected):
         theme = ThemeManager()
 
-        # PASSO 1: Fundo ANTES do ícone
+        # [7.3b — SOBREPOSIÇÃO ATÔMICA]
+        # 1. Limpeza Total e Obrigatória (Background-First)
         bg_color = (
             theme.get_grid_selection_bg() if isSelected
             else theme.get_grid_bg()
         )
         dc.SetBrush(wx.Brush(bg_color))
-        dc.SetPen(wx.TRANSPARENT_PEN)
+        dc.SetPen(wx.Pen(bg_color))
         dc.DrawRectangle(rect)
 
+        # 2. Proteção de Clipping para TODO o conteúdo
         dc.SetClippingRegion(rect)
 
-        # PASSO 2: Ícone SOBRE o fundo
+        # 3. Ícone desenhado SOBRE o fundo já preenchido
         icon_color = (
             theme.get_accent_color() if not isSelected
             else theme.get_grid_selection_fg()
@@ -388,6 +413,7 @@ class LinkIconRenderer(wx.grid.GridCellRenderer):
             10, wx.FONTFAMILY_DEFAULT,
             wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD
         ))
+
         txt = "🔗"
         tw, th = dc.GetTextExtent(txt)
         dc.DrawText(
@@ -564,9 +590,17 @@ class VirtualVideoTable(wx.grid.GridTableBase):
         label = self.col_labels[col].strip()
         theme = ThemeManager()
 
-        # Cores baseadas no tema
-        attr.SetBackgroundColour(theme.get_grid_bg())
-        attr.SetTextColour(theme.get_grid_fg())
+        # [FASE 7.3b] Persistência via GetAttr (Garantidor Final)
+        if row < len(self.data):
+            item = self.data[row]
+            vid = item.get('id') or item.get('uuid')
+            
+            if vid in self.selected_ids:
+                attr.SetBackgroundColour(theme.get_grid_selection_bg())
+                attr.SetTextColour(theme.get_grid_selection_fg())
+            else:
+                attr.SetBackgroundColour(theme.get_grid_bg())
+                attr.SetTextColour(theme.get_grid_fg())
 
         # ALINHAMENTO CENTRAL (Exceto Título)
         if label != "Título":

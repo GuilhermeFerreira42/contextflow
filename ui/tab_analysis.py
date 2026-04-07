@@ -36,6 +36,10 @@ class TabAnalysis(wx.Panel):
         # [FASE 6.1b] Estado de IA
         self._ai_models_cache = []      # Cache local de modelos descobertos
         self._summary_in_progress = set()  # video_ids sendo resumidos
+        # [FASE 7.2.1] Inicialização da flag anti-loop de eventos
+        # Deve ser False por padrão. O padrão try/finally garante que
+        # retorna a False mesmo em caso de exceção no SelectRow().
+        self._is_programmatic_selection = False
         
         self._init_ui()
         self._bind_events()
@@ -72,6 +76,9 @@ class TabAnalysis(wx.Panel):
         self.grid.SetRowLabelSize(0)
         self.grid.SetDefaultRowSize(52) # Conforto para Preview 80x45
         self.grid.SetGridLineColour(self.theme.get_grid_line())  # [6.2d] era hardcoded
+        self.grid.SetCellHighlightPenWidth(0) # Supressão de marquee
+        self.grid.SetSelectionBackground(self.theme.get_grid_selection_bg())
+        self.grid.SetSelectionForeground(self.theme.get_grid_selection_fg())
         
         # Larguras Fixas
         self.grid.SetColSize(0, 40)   # [x]
@@ -838,34 +845,47 @@ class TabAnalysis(wx.Panel):
 
     def _on_range_select(self, event):
         """
-        [7.1 PENDÊNCIA 5] Suprime seleção de range parcial.
-        Garante que apenas linhas inteiras sejam selecionadas.
-        Usa flag _is_programmatic_selection para evitar loop.
+        [FASE 7.3b — Aba 2] Supressão de Marquee.
+        Bloqueia o comportamento nativo de seleção de área para evitar o
+        desenho do retângulo de foco pontilhado sobre as colunas customizadas.
         """
         if getattr(self, '_is_programmatic_selection', False):
             event.Skip()
             return
 
-        # Suprime qualquer range que não seja linha inteira
-        if event.Selecting():
-            top_row = event.GetTopRow()
-            bottom_row = event.GetBottomRow()
-            if top_row == bottom_row:
-                # Seleção de linha única — converte para SelectRow
-                self._is_programmatic_selection = True
-                try:
-                    self.grid.SelectRow(top_row)
-                finally:
-                    self._is_programmatic_selection = False
-            # Multi-linha: permite (drag de linhas)
+        self._is_programmatic_selection = True
+        try:
+            if event.Selecting():
+                top_row = event.GetTopRow()
+                bottom_row = event.GetBottomRow()
+                
+                # Força a seleção de linhas inteiras
+                # CRÍTICO: ClearSelection + SelectRow em loop suprime o indicador
+                # de foco individual (marquee) nas células interativas.
+                self.grid.ClearSelection()
+                for row in range(top_row, bottom_row + 1):
+                    self.grid.SelectRow(row, addToSelected=True)
+                
+                self.grid.ForceRefresh()
+        finally:
+            self._is_programmatic_selection = False
+        
         event.Skip()
 
     def _on_cell_select_row(self, event):
         """
-        [7.1 PENDÊNCIA 5] Ao selecionar célula, seleciona a linha inteira.
-        Guard flag evita recursão de eventos.
+        [FASE 7.2.1 — Aba 2] Força seleção de linha inteira ao navegar.
+
+        Na Aba 2, NÃO há guarda por coluna (diferente da Aba 1).
+        O checkbox da Aba 2 está na coluna 0 ([x]), mas o handler
+        on_grid_click já intercepta o clique antes que este evento
+        propague, pois não chama event.Skip() no toggle.
+
+        A flag _is_programmatic_selection (inicializada em __init__)
+        previne loops: SelectRow() dispara novamente EVT_GRID_SELECT_CELL,
+        que seria capturado por este mesmo handler sem a flag.
         """
-        if getattr(self, '_is_programmatic_selection', False):
+        if self._is_programmatic_selection:
             event.Skip()
             return
 
@@ -873,11 +893,15 @@ class TabAnalysis(wx.Panel):
         if row >= 0:
             self._is_programmatic_selection = True
             try:
+                self.grid.ClearSelection()
                 self.grid.SelectRow(row)
+                self.grid.ForceRefresh()
             finally:
                 self._is_programmatic_selection = False
 
-        # Propaga para o handler existente on_select_video
+        # CRÍTICO: event.Skip() deve vir APÓS o SelectRow para garantir
+        # que on_select_video (handler seguinte na cadeia) receba o evento
+        # com a linha já corretamente selecionada.
         event.Skip()
 
     def _show_thumbnail_dialog(self, thumb_path: str):

@@ -1,0 +1,37 @@
+# Walkthrough — Revisão de Resíduos Visuais (Fase 7.3b)
+
+A fase final de correção visual da grade analítica foi concluída, implementando o protocolo de **Sobreposição Atômica** e a **Supressão de Marquee**.
+
+## Mudanças Realizadas
+
+### 1. Protocolo de Sobreposição Atômica
+Nos renderes em `ui/virtual_table.py`, a ordem de limpeza foi alterada para garantir atomicidade. O fundo da célula é preenchido e *então* a região de clipping é definida para envolver todo o conteúdo. Isso impede que pixels das bordas vazem durante redesenhos parciais do Windows/wxWidgets.
+
+- [x] **`ChipTagRenderer`**: Clipping envolvente e limpeza total garantida.
+- [x] **`SummaryStatusRenderer`**: Proteção de clipping para texto e ícone.
+- [x] **`LinkIconRenderer`**: Fundo atômico antes do desenho do ícone.
+
+### 2. Supressão de Marquee
+Em `ui/tab_analysis.py`, o handler `_on_range_select` foi completamente reformulado para suprimir o retângulo de foco nativo (marquee).
+
+- **Supressão Nativa**: Ao não chamar `event.Skip()`, bloqueamos o desenho nativo do retângulo pontilhado do `wx.grid`, que era a causa principal das "bordas fantasmas" nas colunas customizadas.
+- **Seleção Atômica**: O método agora limpa a seleção e re-aplica `SelectRow` em loop, garantindo um realce de linha sólida constante.
+
+### 3. Persistência via GetAttr
+O método `GetAttr` em `VirtualVideoTable` foi simplificado e reforçado. Ele agora atua como o garantidor final da cor da célula baseando-se estritamente no estado lógico de seleção (`selected_ids`), eliminando oscilações visuais ao perder o foco.
+
+## Conclusão Visual
+
+- [x] **Sem Marquee**: O retângulo pontilhado não aparece mais ao clicar ou arrastar.
+- [x] **Cores Persistentes**: A linha permanece azul mesmo com o foco em outros diálogos.
+- [x] **Bordas Limpas**: As colunas de Tag, Link e Resumo não apresentam mais pixels residuais.
+
+---
+
+### Diffs Finais das Revisões
+
+#### `ui/virtual_table.py`
+render_diffs(file:///c:/Users/Usuario/Desktop/contextflow/ui/virtual_table.py)
+
+#### `ui/tab_analysis.py`
+render_diffs(file:///c:/Users/Usuario/Desktop/contextflow/ui/tab_analysis.py)

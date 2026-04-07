@@ -103,3 +103,10 @@ F7.1p | ADD | CTA "✦ Resumir" | Texto visual explícito em vez de "—" para a
 F7.1p | ADD | Thumbnail Modal | Expansão de miniatura em diálogo modal ao clicar na grid | `ui/tab_analysis.py`
 F7.1p | FIX | WebView Init Theme | Injeção de CSS no _init_ui para evitar flash branco ou contraste inválido | `ui/panel_detail.py`
 F7.1p | RULE | Background-First | Renderers DEVEM desenhar retângulo de seleção ANTES do conteúdo visual | `ui/virtual_table.py`
+
+### Fase 7.2 e 7.3b — Comportamento de Grid e Navegação Analítica
+F7.2 | MOD | Sobreposição Atômica Grid | `wx.Pen(bg_color)` no DrawRectangle substitui `wx.TRANSPARENT_PEN` na limpeza atômica p/ cobrir 1px overflow nativo C++ | `ui/virtual_table.py`
+F7.2 | BUGFIX | Supressão Marquee | `grid.SetCellHighlightPenWidth(0)` elimina a borda de navegação pontilhada | `ui/tab_analysis.py`, `ui/tab_batch.py`
+F7.3b | BUGFIX | Repintura (Redraw) Direcional | `grid.ClearSelection()` e `ForceRefresh()` injetados na navegação de célula suprimem falha do dirty flag descendente do wxGrid | `ui/tab_analysis.py`, `ui/tab_batch.py`
+F7.3b | FIX | GetAttr persistente | Controle Cromo-Dependente pelo `theme.get_grid_selection_bg()` via array logico | `ui/virtual_table.py`
+F7.3b | FIX | ChipTagRenderer Clipping | `gc.Clip` injetado via ctx após a base branca para reter contornos dos chips | `ui/virtual_table.py`
