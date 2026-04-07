@@ -36,9 +36,8 @@ class TabAnalysis(wx.Panel):
         # [FASE 6.1b] Estado de IA
         self._ai_models_cache = []      # Cache local de modelos descobertos
         self._summary_in_progress = set()  # video_ids sendo resumidos
-        # [FASE 7.2.1] Inicialização da flag anti-loop de eventos
-        # Deve ser False por padrão. O padrão try/finally garante que
-        # retorna a False mesmo em caso de exceção no SelectRow().
+        # Flag anti-loop: previne recursão de SelectRow() em handlers de seleção.
+        # Padrão False. O padrão try/finally garante reset mesmo em exceção.
         self._is_programmatic_selection = False
         
         self._init_ui()
@@ -184,7 +183,7 @@ class TabAnalysis(wx.Panel):
         # [FASE 6.0] Expansão do Cockpit via Double Click
         self.grid.Bind(wx.grid.EVT_GRID_CELL_LEFT_DCLICK, self.on_grid_dclick)
 
-        # [7.1 PENDÊNCIA 5] Bloqueio de seleção acidental
+        # Bloqueio de seleção acidental de caracteres (Full-Row Selection)
         self.grid.Bind(wx.grid.EVT_GRID_RANGE_SELECT, self._on_range_select)
         self.grid.Bind(wx.grid.EVT_GRID_SELECT_CELL, self._on_cell_select_row)
 
@@ -304,7 +303,7 @@ class TabAnalysis(wx.Panel):
 
     def on_grid_motion(self, event):
         """
-        [7.1 PENDÊNCIA 3 + original] Cursor hand em colunas interativas.
+        Cursor hand em colunas interativas.
         Colunas interativas: Link, Resumo (CTA), Preview (thumbnail).
         """
         pos = event.GetPosition()
@@ -436,7 +435,7 @@ class TabAnalysis(wx.Panel):
             if url: webbrowser.open(url)
             return
 
-        # [7.1 — PENDÊNCIA 1] Expansão de thumbnail na coluna Preview
+        # Expansão de thumbnail na coluna Preview
         if label == "Preview":
             if row >= 0 and row < len(self.table.data):
                 video_data = self.table.data[row]
@@ -845,7 +844,7 @@ class TabAnalysis(wx.Panel):
 
     def _on_range_select(self, event):
         """
-        [FASE 7.3b — Aba 2] Supressão de Marquee.
+        Supressão de Marquee (Aba 2).
         Bloqueia o comportamento nativo de seleção de área para evitar o
         desenho do retângulo de foco pontilhado sobre as colunas customizadas.
         """
@@ -874,16 +873,12 @@ class TabAnalysis(wx.Panel):
 
     def _on_cell_select_row(self, event):
         """
-        [FASE 7.2.1 — Aba 2] Força seleção de linha inteira ao navegar.
-
+        Força seleção de linha inteira ao navegar (Aba 2).
         Na Aba 2, NÃO há guarda por coluna (diferente da Aba 1).
         O checkbox da Aba 2 está na coluna 0 ([x]), mas o handler
         on_grid_click já intercepta o clique antes que este evento
         propague, pois não chama event.Skip() no toggle.
-
-        A flag _is_programmatic_selection (inicializada em __init__)
-        previne loops: SelectRow() dispara novamente EVT_GRID_SELECT_CELL,
-        que seria capturado por este mesmo handler sem a flag.
+        A flag _is_programmatic_selection previne loops recursivos.
         """
         if self._is_programmatic_selection:
             event.Skip()

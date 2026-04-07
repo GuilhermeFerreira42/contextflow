@@ -170,8 +170,8 @@ class ChipTagRenderer(wx.grid.GridCellRenderer):
     def Draw(self, grid, attr, dc, rect, row, col, isSelected):
         theme = ThemeManager()
         
-        # [7.3b — SOBREPOSIÇÃO ATÔMICA]
-        # 1. Limpeza Total e Obrigatória (Background-First)
+        # --- Invariante: Sobreposição Atômica (Regra Background-First) ---
+        # 1. Limpeza obrigatória do retângulo de fundo antes de qualquer conteúdo
         bg_color = (
             theme.get_grid_selection_bg() if isSelected
             else theme.get_grid_bg()
@@ -312,13 +312,13 @@ class BadgeStatusRenderer(wx.grid.GridCellRenderer):
     def Clone(self): return BadgeStatusRenderer()
 
 class SummaryStatusRenderer(wx.grid.GridCellRenderer):
-    """Renderiza status do resumo com CTA visual. [7.1 PENDÊNCIA 3]"""
+    """Renderizador de status de resumo com suporte a CTA visual e sobreposição atômica."""
 
     def Draw(self, grid, attr, dc, rect, row, col, isSelected):
         theme = ThemeManager()
 
-        # [7.3b — SOBREPOSIÇÃO ATÔMICA]
-        # 1. Limpeza Total e Obrigatória (Background-First)
+        # --- Invariante: Sobreposição Atômica (Regra Background-First) ---
+        # 1. Limpeza obrigatória do retângulo de fundo antes de qualquer conteúdo
         bg_color = (
             theme.get_grid_selection_bg() if isSelected
             else theme.get_grid_bg()
@@ -385,13 +385,13 @@ class SummaryStatusRenderer(wx.grid.GridCellRenderer):
     def Clone(self): return SummaryStatusRenderer()
 
 class LinkIconRenderer(wx.grid.GridCellRenderer):
-    """[7.1 PENDÊNCIA 4] Fundo de seleção corrigido."""
+    """Renderizador de ícone de link com fundo de seleção atômico e cursor interativo."""
 
     def Draw(self, grid, attr, dc, rect, row, col, isSelected):
         theme = ThemeManager()
 
-        # [7.3b — SOBREPOSIÇÃO ATÔMICA]
-        # 1. Limpeza Total e Obrigatória (Background-First)
+        # --- Invariante: Sobreposição Atômica (Regra Background-First) ---
+        # 1. Limpeza obrigatória do retângulo de fundo antes de qualquer conteúdo
         bg_color = (
             theme.get_grid_selection_bg() if isSelected
             else theme.get_grid_bg()
@@ -516,7 +516,7 @@ class VirtualVideoTable(wx.grid.GridTableBase):
             if label in mapping:
                 val = item.get(mapping[label])
                 
-                # [FASE 7.1.5] CTA de resumir (Apenas na coluna de Resumo)
+                # CTA de resumir (coluna Resumo — estado visual baseado em summary_status)
                 if (val is None or str(val).strip() == "") and label == 'Resumo':
                     ss = item.get('summary_status', '')
                     if ss == 'summarizing':

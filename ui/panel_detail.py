@@ -48,7 +48,7 @@ class DetailPanel(wx.Panel):
         if wx.html2.WebView.IsBackendAvailable(wx.html2.WebViewBackendDefault):
             self.browser = wx.html2.WebView.New(self)
 
-            # [7.1 — PENDÊNCIA 2] Inicialização com tema correto desde o frame 1
+            # Inicialização do WebView com tema correto desde o primeiro frame
             bg_hex = self.theme.get_bg_color().GetAsString(wx.C2S_HTML_SYNTAX)
             fg_hex = self.theme.get_fg_color().GetAsString(wx.C2S_HTML_SYNTAX)
             accent_hex = self.theme.get_accent_color().GetAsString(wx.C2S_HTML_SYNTAX)
@@ -192,7 +192,7 @@ class DetailPanel(wx.Panel):
         if hasattr(self, '_current_video_id') and self._current_video_id:
             self._reload_webview_content()
         elif self.browser:
-            # [7.1 PENDÊNCIA 2] Sem vídeo carregado: atualiza apenas o fundo base
+            # Sem vídeo carregado: atualiza apenas o fundo base do WebView
             bg_hex = bg.GetAsString(wx.C2S_HTML_SYNTAX)
             fg_hex = fg.GetAsString(wx.C2S_HTML_SYNTAX)
             self.browser.SetPage(

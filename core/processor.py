@@ -20,8 +20,7 @@ logger = logging.getLogger("contextflow.processor")
 
 class ProcessingTask:
     def __init__(self, url: str, playlist_id: str = None, playlist_title: str = None, **kwargs):
-        # [FIX] Suporte a argumentos extras para restauração de fila (uuid, video_id, title)
-        # Evita TypeError: got an unexpected keyword argument 'uuid'
+        # Suporte a argumentos extras para restauração de fila (uuid, video_id, title)
         self.uuid = kwargs.get('uuid') or str(uuid.uuid4())
         self.url = url
         self.status = "pending"
@@ -78,8 +77,8 @@ class Processor:
         antes do desligamento e os devolve à fila.
         """
         all_videos = self.app_state.get_all_videos()
-        # [FIX CRÍTICO] Filtra APENAS status intermediários.
-        # 'completed' e 'ERROR' NÃO devem ser retomados automaticamente.
+        # Filtra APENAS status intermediários para retomada.
+        # 'completed' e 'ERROR' são excluídos da fila de restauração.
         interrupted = [
             v for v in all_videos 
             if v.get('status') in ['processing', 'downloading', 'queued']
@@ -360,8 +359,8 @@ class Processor:
             video_data['token_count'] = token_count
             self.app_state.promote_task_to_video(task.uuid, video_data)
             
-            # [FIX INVARIANTE Nº2] Persistência síncrona obrigatória antes de qualquer
-            # notificação de UI. Garante que o DB reflita 'completed' antes do próximo boot.
+            # Invariante Nº2: Persistência síncrona obrigatória antes de notificação de UI.
+            # Garante que o DB reflita 'completed' antes do próximo boot.
             self.app_state.db_handler.update_video_status(
                 task.video_id, 
                 'completed', 
@@ -421,7 +420,7 @@ class Processor:
 
             if task.video_id:
                 self.app_state.update_video_status(task.video_id, "ERROR")
-                # [FIX] Persistência síncrona do erro
+                # Persistência síncrona do erro no DB
                 self.app_state.db_handler.update_video_status(task.video_id, "ERROR")
                 PubSub.publish('TASK_ERROR', video_id=task.video_id, error_msg=str(e))
                 self.app_state.remove_active_task(task.uuid)

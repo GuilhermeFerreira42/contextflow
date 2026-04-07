@@ -151,9 +151,9 @@ class TabBatch(wx.Panel):
         # [QA2 REFINE] Atalhos de Teclado
         self.grid.Bind(wx.EVT_KEY_DOWN, self.on_key_down)
 
-        # [FASE 7.2.1] Full Row Select — Navegação por Teclado
-        # Vincula DOIS eventos separados para cobertura completa:
-        # - EVT_GRID_SELECT_CELL: captura navegação por setas do teclado
+        # Full Row Select — Navegação por Teclado
+        # Vincula dois eventos para cobertura completa:
+        # - EVT_GRID_SELECT_CELL: captura navegação por setas
         # - EVT_GRID_RANGE_SELECT: suprime seleção parcial de caracteres
         self.grid.Bind(wx.grid.EVT_GRID_SELECT_CELL,
                        self._on_cell_select_row_batch)
@@ -402,17 +402,11 @@ class TabBatch(wx.Panel):
 
     def _on_cell_select_row_batch(self, event):
         """
-        [FASE 7.2.1 — Aba 1] Força seleção de linha inteira ao navegar
-        com as setas do teclado.
+        Força seleção de linha inteira ao navegar por teclado (Aba 1).
 
-        INVARIANTE CRÍTICA: A guarda 'col != 0' é OBRIGATÓRIA.
-        A coluna 0 contém o índice de linha (#). A coluna 1 contém o
-        checkbox [x]. O SelectRow() NÃO deve interferir no toggle do
-        checkbox quando o usuário clica na coluna 1 (on_grid_click
-        retorna sem chamar event.Skip(), mas a navegação por teclado
-        pode ativar este handler com col=0 ou col=1).
-
-        A guarda protege a interatividade do checkbox (coluna 1 na Aba 1).
+        INVARIANTE: A guarda 'col <= 1' é OBRIGATÓRIA.
+        As colunas 0 (#) e 1 ([x]) são interativas — SelectRow() não deve
+        interferir no toggle do checkbox quando o foco está nessas colunas.
         """
         if getattr(self, '_is_programmatic_selection', False):
             event.Skip()
@@ -440,10 +434,9 @@ class TabBatch(wx.Panel):
 
     def _on_range_select_batch(self, event):
         """
-        [FASE 7.2.2 — Aba 1] Suprime seleção acidental de caracteres.
+        Suprime seleção acidental de caracteres (Aba 1).
         Garante que qualquer tentativa de arraste ou seleção parcial
         resulte no destaque da linha inteira.
-
         Usa a flag _is_programmatic_selection (padrão try/finally)
         para evitar loops recursivos de eventos.
         """
@@ -467,15 +460,9 @@ class TabBatch(wx.Panel):
 
     def on_grid_motion(self, event):
         """
-        [FASE 7.2.4 — Aba 1] Cursor de mão em elementos clicáveis.
-
-        Colunas interativas da Aba 1:
-        - col_labels[2] = "Link"     → cursor hand
-        - col_labels[1] = "[x]"     → cursor hand (affordance de checkbox)
-
-        Nota: Na Aba 1, não há coluna "Preview" nem "Resumo" no layout
-        padrão. O mapeamento é por índice de coluna para máxima performance,
-        evitando GetColLabelValue() no hot path de mouse.
+        Cursor de mão em elementos clicáveis (Aba 1).
+        Colunas interativas: Link, [x] (checkbox).
+        Identificação por label para robustez contra reordenação de colunas.
         """
         pos = event.GetPosition()
         unscrolled = self.grid.CalcUnscrolledPosition(pos)
