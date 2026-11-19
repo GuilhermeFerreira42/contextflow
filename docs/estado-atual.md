@@ -7,8 +7,15 @@ abaixo. Branch `main`; HEAD de entrada **`0aebf26`**, não `7a215cc`. Inicialmen
 só havia o ZIP do usuário não rastreado; ele permanece fora dos commits.
 
 **F3 validada e corrigida no Windows com YouTube real; aceite humano pendente.**
-F1/F2 mantêm as homologações anteriores. Próxima ação autorizada: escrever a
-SPEC F4; **não implementar F4** nesta sessão.
+Correções e evidências commitadas em **`c6b7db5`**. F1/F2 mantêm as homologações
+anteriores. **SPEC F4 escrita** em `docs/specs/f4-trabalhos.md`, para revisão;
+nenhuma implementação de F4. Próxima ação: proprietário revisar a SPEC e dar
+aceite da F3; não inferir autorização de implementação.
+
+Commit documental desta entrega: `F4: especifica fila e recuperacao; contratos e
+aceites revisados, sem implementacao` (obter hash com `git log -1 --oneline`).
+Git não tinha identidade configurada; commits usam identidade técnica explícita
+`Codex <codex@localhost>` via opções do comando, sem alterar configuração global.
 
 O ZIP `ContextFlow_Pacote_Execucao_V1 (1).zip` foi lido diretamente, sem extrair
 sobre o projeto. É a base documental histórica (18/11/2026); a autorização atual
@@ -92,8 +99,9 @@ separados da biblioteca pessoal, fora do Git.
 - `manual-leitura.png`, `auto-leitura.png`, `*-biblioteca.png`: capturas reais;
   automática inspecionada visualmente. Bancos descartáveis em `dados-reais*`.
 
-Próximos gates: aceite humano da F3 (com ressalvas acima), SPEC F4 e revisão dela
-pelo proprietário antes da implementação. Não avançar para F5/IA/chat.
+Próximos gates: aceite humano da F3 (com ressalvas acima) e revisão da SPEC F4
+pelo proprietário antes da implementação. Todos os testes F4 são **não executados**:
+há somente especificação. Não avançar para F5/IA/chat.
 
 ## Histórico anterior à sessão de 19/11/2026
 
