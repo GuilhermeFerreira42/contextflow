@@ -15,7 +15,9 @@ import { lerArquivoPublico, servirEstatico } from './nucleo/estatico.ts';
 import { ServicoBiblioteca } from './modulos/biblioteca/servico.ts';
 import { RepositorioBibliotecaSqlite } from './modulos/biblioteca/repositorio-sqlite.ts';
 import { Banco } from './persistencia/banco.ts';
-import { IngestaoIndisponivel, normalizarUrlVideo } from './modulos/ingestao/servico.ts';
+import { ServicoIngestaoReal, normalizarUrlVideo } from './modulos/ingestao/servico.ts';
+import { RepositorioTranscricoesSqlite } from './persistencia/repositorio-transcricoes.ts';
+import { Ytdlp, type ExecutorYtdlp } from './integracoes/ytdlp.ts';
 import type { ServicoTrabalhos } from './modulos/trabalhos/servico.ts';
 import type { ServicoResumos } from './modulos/resumos/servico.ts';
 import type { ServicoConfiguracao } from './modulos/configuracao/servico.ts';
@@ -43,14 +45,35 @@ export interface Aplicacao {
   encerrar(): Promise<void>;
 }
 
-export function criarAplicacao(config: ConfigMotor): Aplicacao {
+export interface OpcoesAplicacao {
+  /**
+   * Injetável para teste: substitui o yt-dlp por um dublê. Em produção fica
+   * indefinido e o adaptador real é criado com o binário do PATH.
+   */
+  executorYtdlp?: ExecutorYtdlp;
+}
+
+export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}): Aplicacao {
   const registrador = criarRegistrador(config.ambiente === 'teste' ? 'erro' : 'info');
 
   // Persistência: aberta por iniciarPersistencia(), para o teste controlar o ciclo.
   const banco = Banco.abrir({ arquivo: Banco.arquivoPadrao(config.pastaDados) });
   const repositorioBiblioteca = new RepositorioBibliotecaSqlite(banco.db);
   const biblioteca = new ServicoBiblioteca(repositorioBiblioteca);
-  const ingestao = new IngestaoIndisponivel();
+
+  const repositorioTranscricoes = new RepositorioTranscricoesSqlite(banco.db);
+  const executorYtdlp =
+    opcoes.executorYtdlp ??
+    new Ytdlp({
+      registrarErro: (mensagem) =>
+        registrador.aviso('yt-dlp', { detalhe: mensagem.split('\n').at(-1) ?? mensagem }),
+    });
+  const ingestao = new ServicoIngestaoReal({
+    repositorio: repositorioBiblioteca,
+    transcricoes: repositorioTranscricoes,
+    executor: executorYtdlp,
+    idiomas: config.idiomasLegenda,
+  });
 
   const trabalhos = null as ServicoTrabalhos | null;
   const resumos = null as ServicoResumos | null;
@@ -65,7 +88,7 @@ export function criarAplicacao(config: ConfigMotor): Aplicacao {
       pastaDados: config.pastaDados,
       modulos: {
         biblioteca: 'sqlite',
-        ingestao: 'indisponivel',
+        ingestao: 'yt-dlp',
         trabalhos: trabalhos ? 'ativo' : 'pendente',
         resumos: resumos ? 'ativo' : 'pendente',
         configuracao: configuracao ? 'ativo' : 'pendente',
@@ -125,9 +148,46 @@ export function criarAplicacao(config: ConfigMotor): Aplicacao {
       if (!corpo || typeof corpo.url !== 'string') {
         return { valido: false, motivo: 'Campo "url" ausente ou não textual' };
       }
+      // Validação puramente local: forma da URL e id do vídeo. Não chama rede,
+      // para o botão responder na hora mesmo sem internet.
       const { youtubeId, url } = normalizarUrlVideo(corpo.url);
-      // A inspeção de metadados chega na F3; aqui só validamos e normalizamos.
       return { valido: true, youtubeId, urlNormalizada: url };
+    })
+    .obter('/api/ingestao/diagnostico', async () => {
+      const estado = await executorYtdlp.disponivel();
+      return {
+        ytdlp: estado,
+        idiomas: config.idiomasLegenda,
+        mensagem: estado.disponivel
+          ? `yt-dlp ${estado.versao ?? ''} pronto`
+          : 'yt-dlp não encontrado. A importação real exige o binário no PATH ou CONTEXTFLOW_YTDLP.',
+      };
+    })
+    .postar('/api/ingestao/importar', async ({ requisicao }) => {
+      const corpo = requisicao.corpo as { url?: unknown; idiomas?: unknown } | undefined;
+      if (!corpo || typeof corpo.url !== 'string') {
+        throw new ErroValidacao('Corpo obrigatório com o campo "url"');
+      }
+      const idiomas =
+        Array.isArray(corpo.idiomas) && corpo.idiomas.every((i) => typeof i === 'string')
+          ? (corpo.idiomas as string[])
+          : undefined;
+      const resultado = await ingestao.importar(corpo.url, idiomas);
+      registrador.info('ingestão concluída', {
+        youtubeId: resultado.video.youtubeId,
+        estado: resultado.video.estado,
+        origemLegenda: resultado.transcricao.origem,
+        segmentos: resultado.transcricao.quantidadeSegmentos,
+        criado: resultado.criado,
+      });
+      return resultado;
+    })
+    .obter('/api/biblioteca/:id/transcricao', async ({ requisicao }) => {
+      const partes = requisicao.caminho.split('/');
+      const id = partes.at(-2)!;
+      await biblioteca.obter(id); // 404 se o vídeo não existe
+      const transcricao = await repositorioTranscricoes.porVideo(id);
+      return transcricao ?? { videoId: id, idioma: '', origem: 'auto', estado: 'pendente', segmentos: [], motivo: 'Transcrição ainda não importada.', atualizadoEm: '' };
     });
 
   const servidorApi = criarServidorApi(roteador, registrador);

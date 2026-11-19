@@ -74,8 +74,8 @@
             <div class="vazio" id="vazio-biblioteca" hidden>
               <p class="vazio-titulo">Biblioteca vazia</p>
               <p class="vazio-texto">
-                Nenhum vídeo por aqui ainda. A importação de URLs entra na fase de ingestão —
-                nada é simulado nesta tela.
+                Nenhum vídeo por aqui ainda. Use a aba Importações para trazer um vídeo
+                do YouTube. Nada é simulado nesta tela.
               </p>
             </div>
           </div>
@@ -87,9 +87,29 @@
             <h1>Leitura</h1>
             <p class="descricao">Resumos, transcrições e ambos — em planilha, com expansão por linha.</p>
           </header>
-          <div class="aviso-fase">
-            <strong>Chega na F7.</strong> Esta tela depende de transcrições e resumos persistidos.
-            Filtros e estado de navegação serão preservados ao voltar; nada aqui é mock.
+          <div class="barra-ferramentas">
+            <span class="contador" id="contador-transcricoes">—</span>
+          </div>
+
+          <div class="lista-transcricoes" id="lista-transcricoes"></div>
+
+          <div class="vazio" id="vazio-transcricoes" hidden>
+            <p class="vazio-titulo">Nada para ler ainda</p>
+            <p class="vazio-texto">
+              As transcrições aparecem aqui depois de importar um vídeo na aba Importações.
+              Cada linha mostra o vídeo; clique para abrir os trechos com tempo.
+            </p>
+          </div>
+
+          <div class="leitor" id="leitor-transcricao" hidden>
+            <header class="leitor-cabecalho">
+              <div>
+                <h2 id="leitor-titulo"></h2>
+                <p class="leitor-meta" id="leitor-meta"></p>
+              </div>
+              <button type="button" class="botao-secundario" id="fechar-leitor">Fechar</button>
+            </header>
+            <ol class="segmentos" id="segmentos-transcricao"></ol>
           </div>
         </section>
 
@@ -105,14 +125,20 @@
               <span>URL do YouTube</span>
               <input type="url" id="url-video" name="url" placeholder="https://www.youtube.com/watch?v=…" required />
             </label>
-            <button type="submit" class="botao-primario">Validar URL</button>
+            <button type="submit" class="botao-primario" id="botao-importar">Importar vídeo</button>
           </form>
           <p class="resultado-validacao" id="resultado-validacao" role="status" aria-live="polite"></p>
 
+          <div class="diagnostico" id="diagnostico-ingestao" role="status" aria-live="polite">
+            <span class="diagnostico-rotulo">Ingestão</span>
+            <span class="diagnostico-texto" id="diagnostico-texto">Verificando…</span>
+          </div>
+
           <div class="aviso-fase">
-            <strong>Salva no banco; metadados e legendas na F3.</strong>
-            A URL é validada e o registro é persistido na biblioteca. Título, canal e
-            legenda vindos do YouTube (via yt-dlp) entram na fase de ingestão.
+            <strong>F3 — ingestão real.</strong>
+            O yt-dlp busca título, canal, duração e a legenda com tempo. Se o vídeo
+            não tiver legenda, o estado fica explícito como "sem legenda" — nada é
+            inventado para fingir conclusão.
           </div>
         </section>
 
