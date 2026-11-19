@@ -62,6 +62,13 @@ Configurações. Chat sobre o conteúdo é **V2** e está fora da V1.
 Monólito modular em **Node.js 22 + TypeScript**, sem framework HTTP e **zero
 dependência de produção**.
 
+> **Sobre caminhos:** o projeto foi desenvolvido num ambiente Linux, então
+> alguma documentação antiga usa `/home/user/...`. **No Windows do proprietário
+> nada disso existe.** O projeto está em `C:\Users\Usuario\Desktop\contextflow2\`
+> e a pasta `Continuidade de Projeto` fica ao lado, no `Desktop`. Onde você ler
+> um caminho absoluto, traduza para o lugar onde você colocou as pastas — o que
+> importa é a relação entre elas, não o prefixo.
+
 ## 2. Estrutura física
 
 ```
@@ -122,6 +129,10 @@ Branch `main`, sem remote configurado.
 | npm | o que vem com o Node |
 | yt-dlp | qualquer versão recente; `winget install yt-dlp` ou `pip install -U yt-dlp` |
 | Chrome/Edge | para o E2E; o script descobre sozinho, ou use `CHROME_BIN` |
+
+**Não é necessário:** editor específico, VS Code, servidor de IDE, Docker,
+WSL ou qualquer serviço extra. O projeto é Node.js puro rodando na máquina —
+`npm start` sobe o servidor e o navegador abre `http://127.0.0.1:4780`.
 
 Sem dependência de produção. `npm install` instala só TypeScript e `@types/node`
 (6 pacotes, ~0,4 s).

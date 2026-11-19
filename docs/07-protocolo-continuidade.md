@@ -1,17 +1,16 @@
 # Protocolo de Continuidade de Projeto (ContextFlow)
 
 > Documento operacional para **qualquer agente ou sessão** que trabalhe neste projeto.
-> Consolida as três skills do usuário — *Investigar → Especificar → Entregar*,
+> Consolida três práticas de trabalho — *Investigar → Especificar → Entregar*,
 > *Execução autônoma por fatias* e *Memória de projeto* — aplicadas a este repositório.
-> Nome amigável: **Continuidade de Projeto**. Não substitui as skills originais; é a
-> versão que aponta para os arquivos reais daqui.
+> Nome amigável: **Continuidade de Projeto**.
 
 ---
 
 ## 1. Ao abrir uma sessão (obrigatório, nesta ordem)
 
 1. Ler `docs/00-comece-aqui.md` → `docs/01-escopo-canonico.md` → `docs/estado-atual.md`.
-2. Conferir o estado real: `git -C /home/user/contextflow2 status --short --branch`,
+2. Conferir o estado real: `git status --short --branch` (dentro de `contextflow2/`),
    `git log --oneline -5`, e se `platform/` sofreu alterações locais.
 3. Se código e documentação divergirem, **investigar antes de agir** e corrigir o registro
    com os fatos confirmados. Preservar alterações locais do usuário.
@@ -24,7 +23,7 @@
 | # | Regra |
 |---|---|
 | 1 | **Autorização escalonada.** Discussão ≠ leitura ≠ SPEC ≠ implementação ≠ publicação. Implementar exige pedido explícito para aquele escopo. |
-| 2 | **O original é sagrado.** `/home/user/contextflow` (Python) nunca é alterado, movido ou deletado. É referência. |
+| 2 | **O original é sagrado.** A pasta `contextflow/` (Python) nunca é alterada, movida ou deletada. É referência. |
 | 3 | **Nada de segredo no Git.** Chaves, tokens, bancos pessoais, cookies e `config/credentials.json` do original nunca são copiados. |
 | 4 | **Fato ≠ hipótese ≠ proposta ≠ decisão.** Classificar cada afirmação; relatório antigo não é prova de execução atual. |
 | 5 | **Fonte única de verdade por dado.** Não criar mecanismo paralelo, cache duplicado ou segundo catálogo. |
@@ -72,15 +71,15 @@ Atualizar `docs/estado-atual.md` com:
 - **Próxima ação autorizada:** primeira ação executável e seu limite.
 
 Evidência volumosa (capturas, logs, saídas brutas) vai para
-`/home/user/Continuidade de Projeto/` e é **referenciada** no estado por nome,
+`Continuidade de Projeto/` e é **referenciada** no estado por nome,
 o que demonstra, revisão e como encontrar — nunca embutida no Git.
 
 ## 5. Estrutura de pastas (invariante)
 
 ```
-/home/user/contextflow/        → projeto original Python — SOMENTE LEITURA
-/home/user/contextflow2/       → repositório Git (docs/ + platform/)
-/home/user/Continuidade de Projeto/ → operacional, FORA do Git
+contextflow/        → projeto original Python — SOMENTE LEITURA
+contextflow2/       → repositório Git (docs/ + platform/)
+Continuidade de Projeto/ → operacional, FORA do Git, irmã de contextflow2
 ```
 
 Nada de código em `docs/`. Nada de documentação canônica em `platform/`.

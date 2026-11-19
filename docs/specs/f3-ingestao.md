@@ -270,9 +270,9 @@ Além disso, os **critérios canônicos A1, A2 e A3** de
 
 ## 10. Risco e limitação declarada
 
-**O ambiente desta sessão não alcança o YouTube.** Verificado em 19/11: yt-dlp
+**O ambiente Linux onde a F3 foi desenvolvida não alcança o YouTube.** Verificado em 19/11: yt-dlp
 2026.10.26 instalado, `--dump-single-json` falha com
-`TLS/SSL connection has been closed (EOF)` — o sandbox bloqueia o domínio.
+`TLS/SSL connection has been closed (EOF)` — o domínio era bloqueado naquele ambiente.
 
 Consequência: F3 será implementada e verificada com **dublês controlados** e os
 testes acima. O teste real contra o YouTube **não pode ser executado aqui** e
