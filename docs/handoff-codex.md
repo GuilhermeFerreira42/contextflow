@@ -130,9 +130,9 @@ Branch `main`, sem remote configurado.
 | yt-dlp | qualquer versão recente; `winget install yt-dlp` ou `pip install -U yt-dlp` |
 | Chrome/Edge | para o E2E; o script descobre sozinho, ou use `CHROME_BIN` |
 
-**Não é necessário:** editor específico, VS Code, servidor de IDE, Docker,
-WSL ou qualquer serviço extra. O projeto é Node.js puro rodando na máquina —
-`npm start` sobe o servidor e o navegador abre `http://127.0.0.1:4780`.
+**Não é necessário:** nenhum serviço extra, container ou servidor auxiliar.
+O projeto é Node.js puro rodando na máquina — `npm start` sobe o servidor e o
+navegador abre `http://127.0.0.1:4780`. Qualquer editor serve.
 
 Sem dependência de produção. `npm install` instala só TypeScript e `@types/node`
 (6 pacotes, ~0,4 s).
