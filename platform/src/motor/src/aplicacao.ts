@@ -1,3 +1,4 @@
+import { gravarResultadoIngestao } from './persistencia/resultado-ingestao.ts';
 /**
  * Montagem do aplicativo: única função que conhece todos os módulos.
  *
@@ -72,6 +73,7 @@ export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}
     repositorio: repositorioBiblioteca,
     transcricoes: repositorioTranscricoes,
     executor: executorYtdlp,
+    persistirResultado: (video, transcricao) => gravarResultadoIngestao(banco, video, transcricao),
     idiomas: config.idiomasLegenda,
   });
 

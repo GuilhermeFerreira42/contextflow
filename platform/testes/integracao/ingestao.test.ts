@@ -1,3 +1,4 @@
+import { gravarResultadoIngestao } from '../../src/motor/src/persistencia/resultado-ingestao.ts';
 /**
  * Ingestão real com adaptador dublê.
  *
@@ -84,6 +85,7 @@ function criarServico(cenario: Cenario = {}, idiomas?: string[]) {
     repositorio,
     transcricoes,
     executor,
+    persistirResultado: (video, transcricao) => gravarResultadoIngestao(banco, video, transcricao),
     ...(idiomas ? { idiomas } : {}),
     agora: () => '2026-11-19T15:00:00.000Z',
   });
@@ -240,6 +242,41 @@ test('vídeo que já existia sem transcrição é completado', async () => {
 
 /* ------------------------------------------------------------------ falhas -- */
 
+test('falha ao gravar segmentos não deixa vídeo pronto nem transcrição incompleta', async () => {
+  const { servico } = criarServico({ legenda: {
+    idioma: 'pt', origem: 'manual', segmentos: [
+      { inicioMs: 0, fimMs: 1000, texto: 'válido' },
+      { inicioMs: 2000, fimMs: 1000, texto: 'inválido' },
+    ],
+  } });
+  await assert.rejects(() => servico.importar(URL));
+  const video = await repositorio.porYoutubeId('runTxV0pyU8');
+  assert.ok(video);
+  assert.equal(video.estado, 'importando');
+  assert.equal(await transcricoes.porVideo(video.id), null);
+  assert.equal(banco.db.prepare('SELECT COUNT(*) AS n FROM segmentos').get()!.n, 0);
+  const retomado = await criarServico().servico.importar(URL);
+  assert.equal(retomado.video.id, video.id);
+  assert.equal(retomado.video.estado, 'pronto');
+});
+
+test('substituição inválida preserva a transcrição e os segmentos anteriores', async () => {
+  const resultado = await criarServico().servico.importar(URL);
+  const antes = await transcricoes.porVideo(resultado.video.id);
+  assert.ok(antes);
+  await assert.rejects(() => transcricoes.salvar({
+    ...antes,
+    segmentos: [{ inicioMs: 1000, fimMs: 0, texto: 'inválido' }],
+  }));
+  assert.deepEqual(await transcricoes.porVideo(resultado.video.id), antes);
+});
+
+test('indisponibilidade preserva o idioma solicitado na resposta e no banco', async () => {
+  const resultado = await criarServico({ legenda: null }, ['en-orig']).servico.importar(URL);
+  assert.equal(resultado.transcricao.idioma, 'en-orig');
+  assert.equal((await transcricoes.porVideo(resultado.video.id))?.idioma, 'en-orig');
+});
+
 test('yt-dlp ausente: 503 com orientação, e vídeo fica em erro', async () => {
   const { servico } = criarServico({
     erroInspecionar: new ErroIndisponivel(
@@ -321,6 +358,7 @@ test('transcrição sobrevive a reabertura do banco (arquivo real)', async () =>
       repositorio: repo1,
       transcricoes: trans1,
       executor: new ExecutorFalso(),
+      persistirResultado: (video, transcricao) => gravarResultadoIngestao(primeiroBanco, video, transcricao),
     });
     const criado = await servico1.importar(URL);
     primeiroBanco.fechar();

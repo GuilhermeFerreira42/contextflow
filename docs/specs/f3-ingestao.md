@@ -1,7 +1,8 @@
 # F3 — Ingestão real com yt-dlp e transcrições com tempo
 
-> Status: **implementada e verificada tecnicamente**. Homologação humana
-> pendente do teste real contra o YouTube (`docs/roteiro-teste-f3.md`).
+> Status: **implementada, corrigida e verificada no Windows com YouTube real
+> em 19/11/2026**. Aceite humano pendente. Evidências e ressalvas em
+> `docs/estado-atual.md` (inclui HTTP 429 e teste privado não executado).
 > Pré-requisito: F2 concluída e **homologada pelo proprietário em 19/11/2025**. 
 
 ## 0. Resultado da implementação (registrado após execução)
@@ -31,6 +32,36 @@
 
 
 ## 1. Objetivo
+
+### Complemento executado em 19/11/2026
+
+O quadro da seção 0 registra a entrega original. Nesta retomada, a suíte passou
+para **126 testes: 120 aprovados e 6 skips declarados no Windows**; E2E **17/17**,
+build/typecheck e fumaça executados. Manual pt-BR (403 trechos), automática
+en-orig (81 trechos) e ausência de legendas foram exercitadas em navegador real,
+com yt-dlp do PATH, sem dublê. Persistência foi conferida após matar e reiniciar
+o processo. Isso não substitui o aceite humano.
+
+Correções dentro do contrato da F3:
+
+- Scripts passam `--experimental-sqlite` para suportar o Node 22.12 instalado.
+- Testes usam URLs `file:` para imports entre processos, escrita nativa de arquivo
+  corrompido e fechamento do banco aguardado, sem depender de Bash.
+- A mensagem real `This video is unavailable` recebe tradução específica.
+- Metadados finais, estado, transcrição e segmentos passam pela unidade
+  `persistencia/resultado-ingestao.ts`, em **uma transação síncrona**, sem await.
+  O construtor interno recebe `persistirResultado(video, transcricao)`; os três
+  consumidores foram atualizados. Nenhuma mudança na API HTTP ou no schema.
+  O registro provisório continua existindo para retomada, como já previsto.
+- `RepositorioTranscricoes.salvar` usa savepoint para preservar a versão anterior
+  se qualquer segmento falhar. Há regressões executadas de rollback e retomada.
+- Transcrição indisponível persiste o idioma solicitado em vez de fixar pt-BR.
+
+O teste automático com os idiomas padrão encontrou HTTP 429 na tradução pt.
+Foi registrado como falha externa e repetido com `CONTEXTFLOW_IDIOMAS=en-orig`;
+não houve mudança silenciosa na prioridade de idiomas nem fallback novo.
+Sem link comprovadamente privado, o teste de vídeo privado é **não executado**;
+foi testado separadamente um vídeo público indisponível.
 
 Transformar o "importar URL" de hoje — que grava só o `youtubeId` com título
 provisório — em **ingestão real**: buscar metadados do YouTube, obter a legenda

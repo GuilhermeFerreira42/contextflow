@@ -17,7 +17,7 @@ if (!existsSync(entrada)) {
 }
 
 // node:sqlite emite ExperimentalWarning; suprimimos de forma explícita e visível.
-const filho = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', entrada], {
+const filho = spawn(process.execPath, ['--experimental-sqlite', '--disable-warning=ExperimentalWarning', entrada], {
   stdio: 'inherit',
   env: { ...process.env, CONTEXTFLOW_AMBIENTE: process.env.CONTEXTFLOW_AMBIENTE ?? 'producao' },
 });

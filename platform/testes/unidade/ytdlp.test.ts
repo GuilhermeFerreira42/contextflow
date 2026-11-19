@@ -80,3 +80,8 @@ test('mensagem com a palavra "age" em outro contexto não vira restrição de id
   const erro = traduzirErroYtdlp('ERROR: Unable to download webpage: HTTP Error 403');
   assert.notEqual(erro.message, 'Este vídeo tem restrição de idade.');
 });
+test('mensagem real de vídeo indisponível é traduzida sem erro genérico', () => {
+  const erro = traduzirErroYtdlp('ERROR: [youtube] BaW_jenozKc: This video is unavailable');
+  assert.equal(erro.codigo, 'video_indisponivel');
+  assert.equal(erro.message, 'Este vídeo não está mais disponível.');
+});

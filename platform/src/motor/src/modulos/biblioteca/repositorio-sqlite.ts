@@ -84,6 +84,11 @@ export class RepositorioBibliotecaSqlite implements RepositorioBiblioteca {
   }
 
   async atualizar(video: Video): Promise<void> {
+    this.atualizarSincrono(video);
+  }
+
+  /** Usado pela unidade de persistencia em transacao sincrona. */
+  atualizarSincrono(video: Video): void {
     const resultado = this.db
       .prepare(
         `UPDATE videos SET youtube_id=?, titulo=?, canal_id=?, canal_nome=?, duracao_segundos=?,

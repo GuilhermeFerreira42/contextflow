@@ -172,6 +172,7 @@ export function traduzirErroYtdlp(stderr: string): ErroDominio {
   }
   if (
     texto.includes('video unavailable') ||
+    texto.includes('this video is unavailable') ||
     texto.includes('has been removed') ||
     texto.includes('does not exist') ||
     texto.includes('no longer available')

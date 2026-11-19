@@ -15,7 +15,7 @@ const entrada = join(raiz, 'src', 'motor', 'src', 'principal.ts');
 
 const filho = spawn(
   process.execPath,
-  ['--experimental-strip-types', '--disable-warning=ExperimentalWarning', entrada],
+  ['--experimental-sqlite', '--experimental-strip-types', '--disable-warning=ExperimentalWarning', entrada],
   { stdio: 'inherit', env: { ...process.env, CONTEXTFLOW_AMBIENTE: process.env.CONTEXTFLOW_AMBIENTE ?? 'desenvolvimento' } },
 );
 

@@ -1,5 +1,104 @@
 # Estado de retomada — ContextFlow V1
 
+## Estado vigente — 19/11/2026 (São Paulo)
+
+Esta seção substitui o estado operacional anterior, preservado como histórico
+abaixo. Branch `main`; HEAD de entrada **`0aebf26`**, não `7a215cc`. Inicialmente
+só havia o ZIP do usuário não rastreado; ele permanece fora dos commits.
+
+**F3 validada e corrigida no Windows com YouTube real; aceite humano pendente.**
+F1/F2 mantêm as homologações anteriores. Próxima ação autorizada: escrever a
+SPEC F4; **não implementar F4** nesta sessão.
+
+O ZIP `ContextFlow_Pacote_Execucao_V1 (1).zip` foi lido diretamente, sem extrair
+sobre o projeto. É a base documental histórica (18/11/2026); a autorização atual
+e as decisões posteriores prevalecem sobre o antigo gate E0.
+O original `../contextflow/` não recebeu escrita. Uma consulta somente leitura
+de status mostrou alterações locais naquele repositório, inclusive credenciais;
+o conteúdo delas não foi lido nem copiado. Não presumir que o original está limpo.
+
+### Comandos realmente executados em platform/
+
+Ambiente: Windows/PowerShell, Node **v22.12.0**, yt-dlp **2026.03.17** já instalado
+no PATH, Chrome real via CDP. Nenhum login, cookie, chave ou token foi usado.
+
+| Comando | Primeira execução | Resultado final após correções |
+|---|---|---|
+| `npm install` | exit 0: `added 6 packages, and audited 10 packages in 6s`; `found 0 vulnerabilities` | instalado, zero dependências de produção |
+| `npm test` | exit 1: 56 pass, 6 fail, 6 skipped; `ERR_UNKNOWN_BUILTIN_MODULE: node:sqlite` | **exit 0: 126 tests, 120 pass, 0 fail, 6 skipped** |
+| `npm run test:e2e` | exit 1: mesmo erro SQLite | **exit 0: 17/17 cenários OK** (adaptador dublê nesta suíte) |
+| `npm run verificar` | exit 1: mesmo erro SQLite | **exit 0: TUDO OK** |
+| `npm run build` | adicional | **exit 0**, typecheck e dist |
+| scripts `dev.mjs` / `start.mjs` | adicional | ambos iniciados em processos reais, **HTTP 200** na raiz e `/api/saude`; encerrados depois |
+
+Os seis skips continuam explícitos: binários shell no Windows. Não houve prova
+por processo dos casos pulados nesta plataforma. Regressão em Linux nesta sessão:
+**não executada**, pois a máquina é Windows; evidências Linux abaixo são históricas.
+
+### Roteiro F3 — navegador real, sem dublê do yt-dlp
+
+| Cenário / URL pública | Resultado observado |
+|---|---|
+| Manual: https://www.youtube.com/watch?v=iCvmsMzlF7o | **Aprovado**. The Power of Vulnerability / Brené Brown / TED; canal TED, 20:50, **Pronto**, **403 trechos manuais pt-BR**. Biblioteca, Leitura, origem e tempos conferidos. |
+| Auto: https://www.youtube.com/watch?v=DHjqpvDnNGE | **Aprovado com idioma explícito**. JavaScript in 100 Seconds; Fireship, 2:36, **Pronto**, **81 trechos auto en-orig**. yt-dlp confirmou ausência de manual; amostra do texto sem repetição de rolagem. |
+| Sem: https://www.youtube.com/watch?v=aqz-KE-bpKQ | **Aprovado**. Big Buck Bunny 60fps 4K; Blender, 10:35, **Parcial**; `Este vídeo não tem legenda, nem manual nem automática.` Zero segmentos. |
+| Persistência | **Aprovado**. Processo morto com SIGKILL e outro iniciado; transcrições completas comparadas, tempos/origem iguais e duas linhas de Leitura reaparecem. |
+| Deduplicação manual | **Aprovado**. `Já está na biblioteca — ... · 403 trechos · legenda manual (pt-BR).` Mesmo ID, total permanece **3** antes dos testes de falha. |
+| https://vimeo.com/123 | **Aprovado**. `Domínio não suportado: use URLs do YouTube`. |
+| https://www.youtube.com/watch?v=BaW_jenozKc | **Aprovado após correção**. stderr real `This video is unavailable`; tela `Este vídeo não está mais disponível.` Não classificado como privado. |
+| Vídeo comprovadamente privado | **Não executado**: sem URL comprovadamente privada. `Private video` foi testado somente em teste automatizado. |
+| Binário inexistente | **Aprovado**. Reinício com `CONTEXTFLOW_YTDLP=C:/nao/existe/yt-dlp.exe`; tela informa ausência, orienta `pip install -U yt-dlp`; servidor continua respondendo. |
+
+**Limitação real:** a primeira tentativa automática com idiomas padrão recebeu
+`HTTP Error 429: Too Many Requests` ao baixar a tradução `pt`. O app informou
+`O YouTube não entregou os dados. Tente de novo em instantes.` e marcou **Parcial**.
+Repetido em banco de teste novo com `CONTEXTFLOW_IDIOMAS=en-orig`, passando.
+O padrão do produto não mudou; não foi adicionado fallback silencioso. Não afirmar
+que a tradução pt passou ou que o limite externo foi corrigido.
+
+### O que foi corrigido
+
+1. Scripts npm/dev/start e subprocesso de teste passam `--experimental-sqlite`,
+   necessário no Node 22.12 instalado.
+2. Testes de persistência usam imports ESM via URL `file:`, escrita de arquivo
+   corrompido com Node sem Bash e fechamento aguardado do banco (corrige `EBUSY`).
+3. Tradução reconhece a mensagem real `This video is unavailable`.
+4. **Atomicidade falsa reproduzida:** um segmento inválido deixava vídeo Pronto e
+   transcrição incompleta. Agora `persistencia/resultado-ingestao.ts` grava estado,
+   metadados finais, transcrição e segmentos em uma transação síncrona, sem await.
+   Savepoint preserva a transcrição anterior se uma substituição falhar.
+   Regressões executadas: rollback, retomada com mesmo ID e preservação anterior.
+5. Transcrição indisponível grava o idioma solicitado, em vez de fixar pt-BR.
+
+Nenhuma mudança de schema ou HTTP. Construtor interno recebe função injetada
+`persistirResultado`; os três consumidores foram atualizados. Lockfile sincronizado
+com `engines >=22.5`, que já existia no manifesto.
+
+### Evidências e localização
+
+Pasta irmã **`../Continuidade de Projeto/validacao-f3-2026-11-19/`**; revisão de
+entrada `0aebf26` e correções F3 desta sessão. Dados exclusivamente de teste,
+separados da biblioteca pessoal, fora do Git.
+
+- `npm-test-inicial.log`, `e2e-inicial.log`, `verificar-inicial.log`: falhas iniciais.
+- `npm-test-corrigido.log`: falhas intermediárias de portabilidade.
+- `npm-test-final.log`, `e2e-final.log`, `verificar-final.log`, `build-final.log`:
+  saídas finais; `dev-final.log` e `start-final.log`: inicializações.
+- `atomicidade-vermelho.log`: reprodução antes da correção, Pronto incorreto.
+- `roteiro-real.log`: tentativa bloqueada por 429; `roteiro-real-2.log`: primeira
+  rodada completa; **`roteiro-real-final.log`**: repetição completa corrigida, exit 0.
+- `roteiro-real.mjs`: driver CDP operacional; `*-resultado.json`: dados reais HTTP/UI
+  e transcrições públicas; sondagens yt-dlp comprovam disponibilidade das legendas.
+- `manual-leitura.png`, `auto-leitura.png`, `*-biblioteca.png`: capturas reais;
+  automática inspecionada visualmente. Bancos descartáveis em `dados-reais*`.
+
+Próximos gates: aceite humano da F3 (com ressalvas acima), SPEC F4 e revisão dela
+pelo proprietário antes da implementação. Não avançar para F5/IA/chat.
+
+## Histórico anterior à sessão de 19/11/2026
+
+**O conteúdo abaixo é histórico, não o estado vigente nem prova desta máquina.**
+
 > Atualizado ao fim de cada sessão. É o **primeiro** arquivo a ler (depois de
 > `00-comece-aqui.md`).
 
