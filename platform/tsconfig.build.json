@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "sourceMap": true,
+    "declaration": false,
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": ["src/motor/src/**/*.ts", "src/compartilhado/src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "testes", "src/interface"]
+}

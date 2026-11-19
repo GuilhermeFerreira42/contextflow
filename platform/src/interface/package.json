@@ -1,0 +1,7 @@
+{
+  "name": "@contextflow/interface",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Interface web local do ContextFlow (HTML/CSS/JS servidos pelo motor)"
+}

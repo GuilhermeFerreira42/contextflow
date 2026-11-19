@@ -1,0 +1,32 @@
+# Dependências
+node_modules/
+
+# Build
+dist/
+*.tsbuildinfo
+
+# Dados e artefatos do produto — NUNCA versionar
+dados/
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+*.log
+
+# Testes e evidências locais
+testes/.tmp/
+coverage/
+playwright-report/
+test-results/
+
+# Segredos e configuração local
+.env
+.env.*
+config/credentials.json
+config/local.json
+
+# Sistema
+.DS_Store
+Thumbs.db
+desktop.ini

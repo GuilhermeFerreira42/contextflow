@@ -1,0 +1,29 @@
+{
+  "name": "contextflow-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ContextFlow V1 — biblioteca local de vídeos do YouTube com transcrições e resumos (monólito modular Node.js + TypeScript)",
+  "license": "UNLICENSED",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "src/motor",
+    "src/interface",
+    "src/compartilhado"
+  ],
+  "scripts": {
+    "dev": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/dev.mjs",
+    "build": "npm run typecheck && node scripts/build.mjs",
+    "start": "node scripts/start.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --disable-warning=ExperimentalWarning --test \"testes/**/*.test.ts\"",
+    "test:e2e": "node --experimental-strip-types --disable-warning=ExperimentalWarning testes/e2e/executar.mjs",
+    "verificar": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/verificar.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  }
+}
