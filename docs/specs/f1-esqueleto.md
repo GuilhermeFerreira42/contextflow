@@ -32,7 +32,7 @@ Persistência real, yt-dlp, fila, IA, edição de configuração, exportação, 
 | **Sem framework HTTP** (`node:http` + roteador próprio) | conjunto de rotas pequeno e conhecido; menos dependência para instalar em Windows e Linux | o roteador é testado; se crescer muito, reavaliar na SPEC da fatia correspondente |
 | **Type stripping nativo do Node 22** em dev e teste | roda TypeScript sem etapa de build; ciclo curto | exige `erasableSyntaxOnly` — sem enums/namespaces/parameter properties (o compilador bloqueia) |
 | Imports escritos com extensão **`.ts`** no fonte | é o que o loader nativo resolve | `rewriteRelativeImportExtensions` reescreve para `.js` no build; há teste garantindo |
-| Interface em **HTML/CSS/JS sem framework** | V1 é local e a densidade vem de virtualização, não de framework | sem etapa de build no frontend; Playwright valida o comportamento real |
+| Interface em **HTML/CSS/JS sem framework** | V1 é local e a densidade vem de virtualização, não de framework | sem etapa de build no frontend; E2E via CDP valida o comportamento real |
 | **Dependências mínimas** (só TypeScript/@types em dev) | instalação reprodutível nos dois SOs | nada de bundler; se necessário, avaliar na fatia que precisar |
 | Bind padrão **127.0.0.1** | aplicação local; expor remoto exigiria decisão e autenticação | — |
 | Pasta de dados por SO (`%APPDATA%` / `$XDG_DATA_HOME`) | nada de caminho absoluto de máquina de dev | sobrescrevível por `CONTEXTFLOW_DADOS` |

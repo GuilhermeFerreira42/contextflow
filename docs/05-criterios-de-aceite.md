@@ -45,6 +45,14 @@ ambiente não alcança. O roteiro está em `docs/roteiro-teste-f3.md` e é a
 primeira tarefa do Codex na máquina do proprietário.
 
 **Natureza:** especificações de comportamento, **não provas já realizadas**. Cada linha
-precisa de teste unitário, de integração ou E2E (preferir **Playwright** para UI real).
+precisa de teste unitário, de integração ou E2E em **navegador real**.
 Registrar por linha: `executado / aprovado / falhou / ignorado / não executado`, e manter
 **homologação humana separada** da verificação técnica.
+
+> **Ferramenta de E2E:** o projeto usa **CDP direto** (`testes/e2e/executar.mjs`),
+> falando com o Chrome/Chromium/Edge já instalado na máquina — **sem Playwright**.
+> Isso é deliberado: o ambiente de desenvolvimento não tinha CDN acessível para
+> baixar navegador, e depender do download de um browser headless de ~150 MB
+> tornaria o teste frágil. O protocolo CDP cobre o que precisamos (DOM, clique,
+> digitação, navegação, captura). Se no futuro Playwright for adotado, precisa
+> de decisão registrada, porque muda a instalação.

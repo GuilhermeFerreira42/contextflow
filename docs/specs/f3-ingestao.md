@@ -302,7 +302,7 @@ com `reverterPara` escrito e testado, seguindo o padrão da F2.
 ## 13. Definição de concluído
 
 - Todos os critérios F3.1–F3.12 verificados com evidência executada.
-- Suíte antiga continua verde (62/62 → somados os novos).
+- Suíte antiga continua verde (62 da F2 → **122 no total** com os 60 novos da F3).
 - `docs/estado-atual.md` atualizado com commit, evidências e o que **não** foi
   verificado.
 - Roteiro de teste real do YouTube escrito para o proprietário.
