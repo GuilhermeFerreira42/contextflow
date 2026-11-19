@@ -9,7 +9,7 @@ platform/
 │   │   ├── nucleo/       # bootstrap, config, logging, erros, relógio
 │   │   ├── modulos/      # biblioteca, ingestao, trabalhos, resumos, configuracao
 │   │   ├── persistencia/ # conexão, migrações, repositórios
-│   │   └── integracoes/  # adaptadores externos (yt-dlp, provedores de IA)
+│   │   └── integracoes/  # ytdlp.ts (processo) · legendas.ts (normalização)
 │   ├── interface/        # frontend web local (servido pelo motor)
 │   │   ├── paginas/      # Biblioteca, Leitura, Importações, Configurações
 │   │   ├── componentes/  # tabela virtualizada, painel de leitura, atividade
@@ -67,15 +67,35 @@ Resumo: transcrição persistida (revisão) → job → provedor → Summary + c
 - Chaves, dados pessoais e cookies **não saem** em logs nem em pacote.
 - Servidor faz **bind local** por padrão; exposição remota exigiria decisão e autenticação.
 
-## Integração com yt-dlp (decisão)
+## Integração com yt-dlp (implementada na F3)
+
+Arquivos: `integracoes/ytdlp.ts` (processo) e `integracoes/legendas.ts` (normalização).
 
 - Executado por `spawn` com **array de argumentos** e `shell: false` — nunca concatenar
-  URL em string de shell.
-- `--skip-download` para inspeção/metadados; legendas obtidas por `--write-subs`/
-  `--write-auto-subs` em diretório temporário próprio, e removidas após normalização.
-- Timeout explícito por operação e mensagem de erro traduzida para o usuário.
-- Binário: preferir yt-dlp presente no PATH; se ausente, a aplicação informa condição e
-  falha de forma explícita (ver limitação em `04-plano-mestre.md`).
+  URL em string de shell. Há teste de injeção: uma URL com `;` e `` ` `` não executa nada.
+- `--dump-single-json --skip-download` para metadados; `--write-subs` (manual) ou
+  `--write-auto-subs` (automática) em diretório `mkdtemp` próprio, **removido no
+  `finally`** mesmo em erro. `--sub-format vtt/json3`.
+- Timeout por operação (padrão 60 s) com `SIGKILL` real no processo filho.
+- Erro do yt-dlp é traduzido para erro de domínio com código estável; o texto cru vai
+  apenas para o log. **A ordem das regras de tradução importa:** rede/TLS é avaliada
+  antes de restrição de idade — um erro de rede contém "unable to download" e a
+  palavra "page" contém "age".
+- Binário: `CONTEXTFLOW_YTDLP` → `yt-dlp` no PATH. Se ausente, `503` com instrução de
+  instalação; o app inteiro continua funcionando.
+
+### Prioridade de legenda
+
+Manual primeiro; automática só na ausência de manual. O idioma é escolhido por lista
+de preferência (`CONTEXTFLOW_IDIOMAS`, padrão `pt-BR,pt,en`), com correspondência exata
+antes de prefixo de idioma. A origem (`manual`/`auto`) é **persistida e exibida** —
+o usuário precisa saber o que está lendo.
+
+### Quando não há legenda
+
+Não é erro. A transcrição fica `indisponivel` com `motivo` legível, e o vídeo fica
+`parcial` (metadados valem, transcrição não). Nunca se marca `pronto` sem segmento
+gravado — o escopo canônico proíbe fingir conclusão.
 
 ## Portabilidade
 

@@ -5,11 +5,14 @@
 
 ## Onde estamos
 
-- **Estágio:** **F3 concluída tecnicamente** (ingestão real com yt-dlp,
-  transcrições segmentadas, leitura com tempo). **F1 e F2 homologadas** pelo
-  proprietário em 19/11/2025.
-  **Pendente da F3:** teste manual contra o YouTube — o sandbox desta sessão
-  bloqueia o domínio (TLS encerrado). Roteiro pronto para o proprietário.
+- **Estágio:** **F3 concluída tecnicamente e commitada** (`7a215cc`) — ingestão
+  real com yt-dlp, transcrições segmentadas com tempo, Leitura com leitor.
+  **F1 e F2 homologadas** pelo proprietário em 19/11/2025.
+  **Pendente da F3:** teste real contra o YouTube na máquina do proprietário
+  (este ambiente bloqueia o domínio: TLS encerrado). Roteiro em
+  `docs/roteiro-teste-f3.md`.
+- **Transferência para o Codex:** `docs/handoff-codex.md` (mensagem de
+  onboarding, ambiente, comandos e critérios de aceite).
 - **Repositório:** `contextflow2/` (Git próprio, branch `main`), independente do
   `contextflow/` original, que permanece **intacto e somente leitura**.
 - **Pasta operacional:** `/home/user/Continuidade de Projeto/` (fora do Git).
@@ -18,9 +21,9 @@
 
 | Verificação | Resultado | Evidência |
 |---|---|---|
-| Typecheck (`tsc --noEmit`) | ✅ 0 erros | executado |
-| Suíte de unidade + integração | ✅ **38/38** | `npm test` |
-| E2E em Chrome headless (navegador real) | ✅ **10/10** | `npm run test:e2e` |
+| Typecheck (`tsc --noEmit`) | ✅ 0 erros | executado na última sessão |
+| **F1** — suíte de unidade + integração | ✅ 38/38 (na época) | `npm test` |
+| **F1** — E2E em Chrome headless | ✅ 10/10 (na época) | `npm run test:e2e` |
 | Fumaça de endpoints e estáticos | ✅ TUDO OK | `npm run verificar` |
 | Build gera JS executável (imports reescritos) | ✅ | `testes/build.test.ts` |
 | Travessia de path bloqueada (cru, codificado, aninhado) | ✅ | unit. `estatico` + integração |
@@ -90,17 +93,34 @@
 
 ## O que falta (ordem executável)
 
-1. **Homologação humana da F2** — abrir a interface, importar duas URLs e confirmar que
-   o vídeo continua na Biblioteca depois de fechar e abrir o app.
-2. **SPEC de F3 — Ingestão/legendas**: adaptador yt-dlp (metadados + legenda manual/auto),
-   normalização de segmentos com timestamps, estados `indisponivel` explícitos.
-3. F4 — Fila persistente com cancelamento e retry.
+1. **Teste real da F3 no computador do proprietário** — o ambiente de
+   desenvolvimento desta sessão não alcança o YouTube. Roteiro pronto em
+   `docs/roteiro-teste-f3.md` (3 vídeos: manual, automática, sem legenda).
+   **É a única prova que falta para homologar a F3.**
+2. **Homologação humana da F3** — aceite explícito do proprietário após o teste acima.
+3. **F4 — Trabalhos e recuperação**: fila persistente com estados, concorrência
+   limitada, cancelamento cooperativo, retry idempotente e progresso por polling.
+   A SPEC de F4 **ainda não existe** e deve ser escrita antes do código.
+4. F5 em diante, conforme `docs/04-plano-mestre.md`.
+
+## Pendências técnicas conhecidas (não bloqueiam a F3)
+
+| # | Pendência | Onde | Quando resolver |
+|---|---|---|---|
+| P1 | Importação de **playlist** não existe (só vídeo unitário) | `modulos/ingestao` | F4, junto da fila |
+| P2 | Interface não tem lista de importações com progresso | `interface/publico` | F4 |
+| P3 | `Biblioteca` desenha até 100 itens, sem virtualização | `interface/publico/js` | F5 |
+| P4 | Leitura carrega transcrição por vídeo em laço N+1 | `interface/publico/js` | F5/F7 |
+| P5 | Busca por `LIKE`, sem FTS | `repositorio-sqlite` | F5, só com volume medido |
+| P6 | Configurações são somente leitura | `modulos/configuracao` | F8 |
+| P7 | Nenhum resumo por IA | `modulos/resumos` | F6 |
 
 ## Riscos e impedimentos
 
 | Risco | Impacto | Mitigação |
 |---|---|---|
-| Sem ambiente Windows | aceite cross-platform não provável aqui | registrar *não executado*, entregar roteiro; não declarar pronto |
+| Ambiente de desenvolvimento sem acesso ao YouTube | F3 não pode ser provada de verdade aqui | declarado como *não executado*; roteiro pronto para a máquina do proprietário |
+| Suíte nunca rodou em **Windows** (só o app rodou) | teste de unidade pode falhar no SO do usuário | 6 testes de binário falso já têm `skip` declarado; o resto não usa shell; **Codex deve rodar a suíte no Windows e reportar** |
 | yt-dlp depende de rede e formato externo | ingestão pode falhar | adaptador isolado, `spawn` sem shell, erro claro |
 | Dados sensíveis do original | vazamento para o novo repo | `.gitignore` + regra dura; original intocado |
 | `node:sqlite` mudar entre versões de Node (API experimental) | app deixa de subir numa atualização | versão mínima em `engines`; driver isolado em **um único arquivo** (`persistencia/banco.ts`) para troca barata |
@@ -109,8 +129,31 @@
 
 ## Campos para o próximo agente
 
-- Repositório/branch/HEAD: `contextflow2/`, `main` — ver `git log -1`
-- Mudanças locais existentes: verificar `git status` antes de agir
-- Fase em andamento e autorização: **F2 fechada tecnicamente; próxima é F3 (ingestão)**
-- Próxima ação autorizada: escrever `docs/specs/f3-ingestao.md` antes de codar
-- Como verificar o que já existe: `cd platform && npm install && npm test && npm run test:e2e && npm run verificar`
+| Campo | Valor |
+|---|---|
+| Repositório | `contextflow2/` — branch `main`, sem remote configurado |
+| HEAD | `7a215cc` (F3) · anterior: `4c02f6f` (F2) · `8009009`, `9fb9f32` (F1) |
+| Mudanças locais | verificar `git status --short` antes de agir |
+| Fase concluída tecnicamente | **F3** (ingestão real com yt-dlp) |
+| Fases homologadas | **F1** e **F2** |
+| Bloqueio de homologação | **F3** aguarda teste real do YouTube na máquina do proprietário |
+| Próxima ação autorizada | F4 — **escrever a SPEC antes de codar** |
+| Documento de transferência | `docs/handoff-codex.md` |
+
+### Comandos de verificação (a partir de `platform/`)
+
+```bash
+npm install            # zero dependência de produção; ~0,4 s
+npm run typecheck      # tsc --noEmit
+npm test               # 122 testes (unidade + integração)
+npm run test:e2e       # 17 cenários em navegador real (precisa de Chrome)
+npm run verificar      # fumaça: sobe, responde, grava, lê
+npm run build          # gera dist/
+npm start              # roda o dist/ compilado
+npm run dev            # roda o TypeScript direto (desenvolvimento)
+```
+
+**Nota sobre `npm run test:e2e`:** ele descobre sozinho o Chrome/Chromium/Edge
+instalado (Windows, Linux, macOS). Se não achar, aponte com `CHROME_BIN`.
+**6 testes** que criam um binário falso baseado em shell são **pulados no
+Windows** — isso é esperado e está declarado no próprio teste.

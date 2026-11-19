@@ -1,7 +1,13 @@
 # ContextFlow V1 — entrada única para agente executor
 
-**Status**: V1 autorizada para implementação. Base documental: pacote `ContextFlow_Pacote_Execucao_V1`
-(2026-11-18). Estado vivo em `docs/estado-atual.md`.
+**Status**: V1 em implementação. **F1 e F2 homologadas**; **F3 concluída
+tecnicamente** (aguarda teste real do YouTube). Base documental: pacote
+`ContextFlow_Pacote_Execucao_V1` (2026-11-18). Estado vivo em
+`docs/estado-atual.md`.
+
+**Se você é um agente chegando agora (Codex ou outro):** leia
+`docs/handoff-codex.md` primeiro — ele diz o que verificar, em que ordem, e o
+que **não** fazer sem autorização.
 
 ## Objetivo
 
@@ -30,6 +36,12 @@ contextflow2/       → repositório Git do novo projeto
 5. `docs/05-criterios-de-aceite.md` — matriz de cenários verificáveis.
 6. `docs/estado-atual.md` — estado de retomada (branch, HEAD, o que foi feito, próximo passo).
 7. `docs/06-continuidade-e-operacao.md` — governança documental e protocolo de sessão.
+8. `docs/07-protocolo-continuidade.md` — protocolo vinculante para qualquer agente.
+9. `docs/handoff-codex.md` — **transferência**: ambiente, comandos, o que está
+   pendente e como provar que está pronto.
+
+As SPECs de cada fatia estão em `docs/specs/` (`f1-esqueleto.md`,
+`f2-persistencia.md`, `f3-ingestao.md`). Leia só a que interessa à sua fatia.
 
 ## Regra de execução
 
