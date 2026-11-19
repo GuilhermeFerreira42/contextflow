@@ -1,0 +1,28 @@
+# Dependências
+node_modules/
+npm-debug.log*
+
+# Build
+dist/
+*.tsbuildinfo
+
+# Dados de runtime do produto (NUNCA versionar)
+dados/
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+
+# Artefatos de teste / evidência local
+testes/.tmp/
+testes/.fixtures-geradas/
+coverage/
+playwright-report/
+test-results/
+*.log
+
+# Sistema
+.DS_Store
+Thumbs.db
+desktop.ini

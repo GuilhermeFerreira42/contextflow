@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ContextFlow</title>
+    <link rel="icon" href="/icone.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/estilos/principal.css" />
+  </head>
+  <body>
+    <a class="pular-conteudo" href="#conteudo">Pular para o conteúdo</a>
+
+    <div class="aplicativo" data-tela="biblioteca">
+      <aside class="barra-lateral" aria-label="Navegação principal">
+        <div class="marca">
+          <span class="marca-simbolo" aria-hidden="true"></span>
+          <span class="marca-nome">ContextFlow</span>
+        </div>
+
+        <nav class="navegacao">
+          <button class="nav-item ativo" data-aba="biblioteca" type="button">
+            <span class="nav-icone" aria-hidden="true">▤</span> Biblioteca
+          </button>
+          <button class="nav-item" data-aba="leitura" type="button">
+            <span class="nav-icone" aria-hidden="true">▦</span> Leitura
+          </button>
+          <button class="nav-item" data-aba="importacoes" type="button">
+            <span class="nav-icone" aria-hidden="true">↧</span> Importações
+          </button>
+          <button class="nav-item" data-aba="configuracoes" type="button">
+            <span class="nav-icone" aria-hidden="true">⚙</span> Configurações
+          </button>
+        </nav>
+
+        <div class="rodape-lateral">
+          <div class="status-motor" id="status-motor" role="status" aria-live="polite">
+            <span class="ponto" data-estado="conectando"></span>
+            <span class="status-texto">Conectando…</span>
+          </div>
+          <div class="versao" id="versao"></div>
+        </div>
+      </aside>
+
+      <main class="conteudo" id="conteudo">
+        <!-- Biblioteca -->
+        <section class="tela" data-tela-nome="biblioteca">
+          <header class="cabecalho-tela">
+            <h1>Biblioteca</h1>
+            <p class="descricao">Seu catálogo local de vídeos, transcrições e resumos.</p>
+          </header>
+
+          <div class="barra-ferramentas">
+            <label class="campo-busca">
+              <span class="visualmente-oculto">Pesquisar na biblioteca</span>
+              <input type="search" id="busca" placeholder="Pesquisar por título ou canal…" autocomplete="off" />
+            </label>
+            <span class="contador" id="contador">—</span>
+          </div>
+
+          <div class="tabela-envoltorio">
+            <table class="tabela-biblioteca">
+              <thead>
+                <tr>
+                  <th scope="col" class="col-selecao"><span class="visualmente-oculto">Selecionar</span></th>
+                  <th scope="col">Vídeo</th>
+                  <th scope="col">Canal</th>
+                  <th scope="col">Duração</th>
+                  <th scope="col">Estado</th>
+                  <th scope="col">Resumo</th>
+                </tr>
+              </thead>
+              <tbody id="corpo-biblioteca"></tbody>
+            </table>
+            <div class="vazio" id="vazio-biblioteca" hidden>
+              <p class="vazio-titulo">Biblioteca vazia</p>
+              <p class="vazio-texto">
+                Nenhum vídeo por aqui ainda. A importação de URLs entra na fase de ingestão —
+                nada é simulado nesta tela.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Leitura -->
+        <section class="tela" data-tela-nome="leitura" hidden>
+          <header class="cabecalho-tela">
+            <h1>Leitura</h1>
+            <p class="descricao">Resumos, transcrições e ambos — em planilha, com expansão por linha.</p>
+          </header>
+          <div class="aviso-fase">
+            <strong>Chega na F7.</strong> Esta tela depende de transcrições e resumos persistidos.
+            Filtros e estado de navegação serão preservados ao voltar; nada aqui é mock.
+          </div>
+        </section>
+
+        <!-- Importações -->
+        <section class="tela" data-tela-nome="importacoes" hidden>
+          <header class="cabecalho-tela">
+            <h1>Importações</h1>
+            <p class="descricao">URLs individuais e playlists, com fila, progresso e retomada segura.</p>
+          </header>
+
+          <form class="formulario-importacao" id="formulario-importacao">
+            <label class="campo-url">
+              <span>URL do YouTube</span>
+              <input type="url" id="url-video" name="url" placeholder="https://www.youtube.com/watch?v=…" required />
+            </label>
+            <button type="submit" class="botao-primario">Validar URL</button>
+          </form>
+          <p class="resultado-validacao" id="resultado-validacao" role="status" aria-live="polite"></p>
+
+          <div class="aviso-fase">
+            <strong>Validação real; enfileiramento na F3/F4.</strong>
+            A URL é validada e normalizada pelo motor. A importação propriamente dita
+            (metadados e legendas via yt-dlp) ainda não está implementada.
+          </div>
+        </section>
+
+        <!-- Configurações -->
+        <section class="tela" data-tela-nome="configuracoes" hidden>
+          <header class="cabecalho-tela">
+            <h1>Configurações</h1>
+            <p class="descricao">Provedor, modelo, pasta de dados e preferências.</p>
+          </header>
+          <dl class="lista-config" id="lista-config"></dl>
+          <div class="aviso-fase">
+            <strong>Parcial (F1).</strong> Os valores abaixo vêm do motor. Edição e segredos
+            entram na F8; chaves nunca são exibidas pela API.
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="/js/aplicacao.js"></script>
+  </body>
+</html>
