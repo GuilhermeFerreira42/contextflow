@@ -4,14 +4,17 @@
  * Este é o ponto onde o monólito modular é "costurado". Nenhum módulo importa
  * outro módulo diretamente: eles recebem dependências por aqui.
  */
+import { randomUUID } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import type { Preferencias } from '@contextflow/compartilhado';
 import type { ConfigMotor } from './nucleo/configuracao.ts';
 import { criarServidorApi, Roteador } from './nucleo/http.ts';
+import { ErroValidacao } from './nucleo/erros.ts';
 import { criarRegistrador, type Registrador } from './nucleo/registro.ts';
 import { lerArquivoPublico, servirEstatico } from './nucleo/estatico.ts';
 import { ServicoBiblioteca } from './modulos/biblioteca/servico.ts';
-import { RepositorioBibliotecaMemoria } from './modulos/biblioteca/repositorio-memoria.ts';
+import { RepositorioBibliotecaSqlite } from './modulos/biblioteca/repositorio-sqlite.ts';
+import { Banco } from './persistencia/banco.ts';
 import { IngestaoIndisponivel, normalizarUrlVideo } from './modulos/ingestao/servico.ts';
 import type { ServicoTrabalhos } from './modulos/trabalhos/servico.ts';
 import type { ServicoResumos } from './modulos/resumos/servico.ts';
@@ -34,14 +37,18 @@ export interface Aplicacao {
   servidor: Server;
   config: ConfigMotor;
   registrador: Registrador;
+  banco: Banco;
+  /** Abre o banco e aplica migrações; separado do listen para testes controlarem o ciclo. */
+  iniciarPersistencia(): number;
   encerrar(): Promise<void>;
 }
 
 export function criarAplicacao(config: ConfigMotor): Aplicacao {
   const registrador = criarRegistrador(config.ambiente === 'teste' ? 'erro' : 'info');
 
-  // Dependências dos módulos — trocadas por implementações reais nas fatias seguintes.
-  const repositorioBiblioteca = new RepositorioBibliotecaMemoria();
+  // Persistência: aberta por iniciarPersistencia(), para o teste controlar o ciclo.
+  const banco = Banco.abrir({ arquivo: Banco.arquivoPadrao(config.pastaDados) });
+  const repositorioBiblioteca = new RepositorioBibliotecaSqlite(banco.db);
   const biblioteca = new ServicoBiblioteca(repositorioBiblioteca);
   const ingestao = new IngestaoIndisponivel();
 
@@ -57,7 +64,7 @@ export function criarAplicacao(config: ConfigMotor): Aplicacao {
       node: process.version,
       pastaDados: config.pastaDados,
       modulos: {
-        biblioteca: 'memoria',
+        biblioteca: 'sqlite',
         ingestao: 'indisponivel',
         trabalhos: trabalhos ? 'ativo' : 'pendente',
         resumos: resumos ? 'ativo' : 'pendente',
@@ -80,6 +87,39 @@ export function criarAplicacao(config: ConfigMotor): Aplicacao {
       return biblioteca.obter(id);
     })
     .obter('/api/configuracoes', () => preferenciasPadrao(config))
+    .postar('/api/biblioteca', async ({ requisicao }) => {
+      // Ponto de escrita da biblioteca. Na F3 quem chama é o módulo de ingestão;
+      // por enquanto permite criar um registro válido para provar persistência real.
+      const corpo = requisicao.corpo as Record<string, unknown> | undefined;
+      if (!corpo) throw new ErroValidacao('Corpo obrigatório');
+
+      const youtubeId = typeof corpo.youtubeId === 'string' ? corpo.youtubeId.trim() : '';
+      const titulo = typeof corpo.titulo === 'string' ? corpo.titulo.trim() : '';
+      if (!/^[A-Za-z0-9_-]{11}$/.test(youtubeId)) {
+        throw new ErroValidacao('youtubeId inválido: esperado 11 caracteres do YouTube');
+      }
+      if (titulo.length === 0 || titulo.length > 500) {
+        throw new ErroValidacao('titulo obrigatório (1..500 caracteres)');
+      }
+
+      const agora = new Date().toISOString();
+      const registro = {
+        id: randomUUID(),
+        youtubeId,
+        titulo,
+        canalId: typeof corpo.canalId === 'string' ? corpo.canalId : null,
+        canalNome: typeof corpo.canalNome === 'string' ? corpo.canalNome : null,
+        duracaoSegundos: typeof corpo.duracaoSegundos === 'number' ? corpo.duracaoSegundos : null,
+        url: `https://www.youtube.com/watch?v=${youtubeId}`,
+        miniaturaUrl: typeof corpo.miniaturaUrl === 'string' ? corpo.miniaturaUrl : null,
+        publicadoEm: typeof corpo.publicadoEm === 'string' ? corpo.publicadoEm : null,
+        estado: 'pronto' as const,
+        criadoEm: agora,
+        atualizadoEm: agora,
+      };
+      await repositorioBiblioteca.inserir(registro);
+      return registro;
+    })
     .postar('/api/ingestao/validar', ({ requisicao }) => {
       const corpo = requisicao.corpo as { url?: unknown } | undefined;
       if (!corpo || typeof corpo.url !== 'string') {
@@ -120,10 +160,21 @@ export function criarAplicacao(config: ConfigMotor): Aplicacao {
     servidor,
     config,
     registrador,
+    banco,
+    iniciarPersistencia: () => {
+      const aplicadas = banco.migrar();
+      registrador.info('persistência pronta', {
+        arquivo: Banco.arquivoPadrao(config.pastaDados),
+        migracoesAplicadas: aplicadas,
+        versaoSchema: banco.versaoAtual(),
+      });
+      return aplicadas;
+    },
     encerrar: () =>
       new Promise<void>((ok) => {
         servidor.close(() => ok());
         servidor.closeAllConnections?.();
+        banco.fechar();
       }),
   };
 }

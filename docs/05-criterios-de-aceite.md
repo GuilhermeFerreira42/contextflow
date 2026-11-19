@@ -18,6 +18,14 @@
 | A14 | Segurança local | Tentar URL/arquivo fora das regras | rejeição clara, sem acesso arbitrário a paths ou comandos |
 | A15 | Sistemas operacionais | Instalar e usar nos dois SOs | comandos reais documentados e testes separados Windows/Linux |
 
+## Status de execução (atualizado a cada fatia)
+
+| # | Status | Evidência |
+|---|---|---|
+| A7 (reabertura do app) | ✅ **executado e aprovado** | processo morto com SIGKILL; outro processo releu os dados |
+| A14 (segurança local) | ✅ **executado e aprovado** (parcial) | travessia de path bloqueada; falta validação de arquivos/paths na F3 |
+| A1–A6, A8–A13, A15 | ⬜ não executado | dependem de F3–F9 |
+
 **Natureza:** especificações de comportamento, **não provas já realizadas**. Cada linha
 precisa de teste unitário, de integração ou E2E (preferir **Playwright** para UI real).
 Registrar por linha: `executado / aprovado / falhou / ignorado / não executado`, e manter

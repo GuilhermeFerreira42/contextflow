@@ -13,6 +13,9 @@ export async function iniciar(args: { porta?: number; host?: string } = {}) {
   if (args.host !== undefined) config.host = args.host;
 
   const aplicacao = criarAplicacao(config);
+  // Persistência antes de aceitar conexões: a API nunca responde sobre um schema
+  // que ainda não existe.
+  aplicacao.iniciarPersistencia();
 
   await new Promise<void>((ok, falhou) => {
     aplicacao.servidor.once('error', falhou);

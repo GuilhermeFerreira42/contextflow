@@ -4,6 +4,7 @@
  * estáticos, e derruba. Serve para quem chega no projeto saber em 5 segundos
  * se o ambiente está funcional — antes de investigar qualquer coisa.
  */
+import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,6 +18,8 @@ const registrar = (nome, ok, detalhe = '') => {
   console.log(`${ok ? 'OK  ' : 'FALHA'} ${nome}${detalhe ? `  (${detalhe})` : ''}`);
 };
 
+rmSync(join(raiz, 'testes', '.tmp', 'dados-fumaca'), { recursive: true, force: true });
+
 const config = carregarConfig({
   CONTEXTFLOW_PORTA: '0',
   CONTEXTFLOW_AMBIENTE: 'teste',
@@ -24,6 +27,7 @@ const config = carregarConfig({
 });
 
 const app = criarAplicacao(config);
+app.iniciarPersistencia();
 await new Promise((ok) => app.servidor.listen(0, '127.0.0.1', ok));
 const porta = app.servidor.address().port;
 const base = `http://127.0.0.1:${porta}`;
@@ -57,6 +61,23 @@ try {
   });
   const corpoVal = await validar.json();
   registrar('validação de URL funciona', corpoVal.dados?.valido === true);
+
+  // Persistência: escrever e reler pelo HTTP — a fumaça cobre o caminho de escrita.
+  const criar = await fetch(`${base}/api/biblioteca`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ youtubeId: 'dQw4w9WgXcQ', titulo: 'Verificação de fumaça' }),
+  });
+  const criado = await criar.json();
+  const relido = await (await fetch(`${base}/api/biblioteca/${criado.dados?.id}`)).json();
+  registrar('escrita persiste no banco', criar.status === 200 && relido.dados?.titulo === 'Verificação de fumaça');
+
+  const duplicado = await fetch(`${base}/api/biblioteca`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ youtubeId: 'dQw4w9WgXcQ', titulo: 'Repetido' }),
+  });
+  registrar('deduplicação por youtubeId funciona', duplicado.status === 409);
 
   const modulos = corpoSaude.dados?.modulos ?? {};
   console.log('\nMódulos:', JSON.stringify(modulos));
