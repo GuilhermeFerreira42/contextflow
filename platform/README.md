@@ -5,8 +5,13 @@ vive aqui. A documentação canônica fica em `../docs/`.
 
 ## Requisitos
 
-- **Node.js ≥ 22** (usa `--experimental-strip-types` para rodar TypeScript direto em dev e
-  testes; nada de etapa de build obrigatória para rodar em dev).
+- **Node.js ≥ 22.5** — usa `--experimental-strip-types` (TypeScript direto em dev/testes) e
+  **`node:sqlite`** (banco nativo). Sem etapa de build obrigatória para rodar em dev.
+  A versão mínima é exigida porque `node:sqlite` só existe a partir daí.
+
+> **Zero dependências de produção.** O banco é o `node:sqlite` embutido no Node, escolhido
+> justamente para que `npm install` não precise de toolchain C++ nem compilar nada — nem no
+> Windows, nem atrás de proxy. Instalação medida: **0,38 s**.
 - **npm ≥ 10** (workspaces).
 - Linux ou Windows.
 

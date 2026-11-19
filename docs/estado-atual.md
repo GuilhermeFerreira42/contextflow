@@ -5,8 +5,9 @@
 
 ## Onde estamos
 
-- **Estágio:** **F1 concluída tecnicamente** (esqueleto modular rodando e verificado).
-  Documentação canônica instalada. **Homologação humana da F1: pendente.**
+- **Estágio:** **F2 concluída tecnicamente** (persistência real + migrações + testes).
+  **F1 homologada pelo proprietário** (preview verificado em 19/11).
+  **Homologação humana da F2: pendente.**
 - **Repositório:** `contextflow2/` (Git próprio, branch `main`), independente do
   `contextflow/` original, que permanece **intacto e somente leitura**.
 - **Pasta operacional:** `/home/user/Continuidade de Projeto/` (fora do Git).
@@ -24,7 +25,16 @@
 | Segredo redigido no log | ✅ | unit. `registro` |
 | Motor roda a partir do `dist/` | ✅ HTTP 200 na raiz e em `/api/saude` | executado manualmente |
 | Verificação em **Windows** | ❌ **não executada** — ambiente é Linux | — |
-| Homologação humana da F1 | ⏳ pendente | — |
+| Homologação humana da F1 | ✅ homologada (preview conferido pelo proprietário) | — |
+| **F2** — testes de unidade + integração | ✅ **62/62** | `npm test`, executado 2× seguidas |
+| **F2** — instalação em clone limpo | ✅ **0,38 s, zero compilação** | `git clone` + `npm install` verificado |
+| **F2** — dependências de produção | ✅ **zero** | `package.json` |
+| **F2** — E2E em navegador real | ✅ **12/12** | `npm run test:e2e` |
+| **F2** — persistência sobrevive a SIGKILL | ✅ dado relido por **outro processo** | execução manual documentada |
+| **F2** — migração idempotente | ✅ segunda abertura não reaplica | `testes/unidade/migracoes.test.ts` |
+| **F2** — banco corrompido falha sem apagar arquivo | ✅ | `testes/integracao/persistencia.test.ts` |
+| **F2** — nenhum segredo no arquivo do banco | ✅ varredura de `.db` e `-wal` | `persistencia.test.ts` |
+| Homologação humana da F2 | ⏳ pendente | — |
 | Projeto original alterado | ❌ não | `git status` limpo em `contextflow/` |
 
 ## Decisões aprovadas
@@ -34,6 +44,27 @@
 2. Banco e ORM **abertos** para a SPEC de F2.
 3. Node.js 22 + TypeScript, monólito modular, interface web local, tema grafite + azul.
 4. Organização física: código em `platform/`, documentação em `docs/`, operacional fora do Git.
+
+### Sessão 3 — banco decidido com medição (F2)
+10. **`node:sqlite` (driver nativo)** — decisão tomada após **reverter uma escolha errada**.
+    Primeiro escolhi `better-sqlite3` com base em benchmark (busca 0,28 ms vs 1,45 ms) e na
+    leitura de que ele "não compila" (vi os 8 prebuilds no pacote). **Errei**: medi em uma
+    pasta onde ele já estava instalado, então o npm nunca rodou o passo de instalação. Num
+    `git clone` limpo, `npm install` executou `sh -c node-gyp rebuild`, tentou baixar
+    headers de `nodejs.org` e **falhou** — igual em `@12` (que usa `prebuild-install`).
+    Num Windows sem Build Tools ou atrás de proxy, isso quebra a instalação.
+    **Decisão final:** `node:sqlite` — zero dependência de produção, zero compilação,
+    instalação em **0,38 s** e reproduzível em qualquer máquina. Custo aceito: API
+    experimental (versão mínima fixada em `engines`) e busca 5× mais lenta, que mesmo
+    assim é **1,45 ms** para 100 linhas — irrelevante frente a não instalar.
+    Lição registrada na SPEC: benchmark em ambiente já instalado não prova instalação.
+11. **Motor de migração próprio**, append-only, com `aplicar`/`reverter` e tabela
+    `_migracoes`. Cada migração roda em transação e é idempotente.
+12. **Cursor paginado por keyset** (`criado_em`, `id`), não `OFFSET` — ordem estável com
+    inserções concorrentes.
+13. **Endpoint `POST /api/biblioteca`** criado na F2 para provar persistência ponta a
+    ponta; na F3 quem chama é o módulo de ingestão.
+14. **Busca por `LIKE`** nesta fase; FTS só com volume medido na F5 (não antecipar).
 
 ### Sessão 2 — técnica (F1)
 5. **Sem framework HTTP**: `node:http` + roteador próprio, testado. 1 dependência de dev
@@ -47,11 +78,11 @@
 
 ## O que falta (ordem executável)
 
-1. **Homologação humana da F1** — abrir a interface e confirmar navegação/visual.
-2. **SPEC de F2 — Persistência e migração**: decidir **banco e ORM com evidência**
-   (candidatos a comparar: `node:sqlite` nativo vs. `better-sqlite3` vs. arquivo JSON;
-   a decisão precisa considerar instalação em Windows sem compilador).
-3. F3 — Ingestão/legendas com yt-dlp (adaptador com testes de contrato + teste real).
+1. **Homologação humana da F2** — abrir a interface, importar duas URLs e confirmar que
+   o vídeo continua na Biblioteca depois de fechar e abrir o app.
+2. **SPEC de F3 — Ingestão/legendas**: adaptador yt-dlp (metadados + legenda manual/auto),
+   normalização de segmentos com timestamps, estados `indisponivel` explícitos.
+3. F4 — Fila persistente com cancelamento e retry.
 
 ## Riscos e impedimentos
 
@@ -60,14 +91,14 @@
 | Sem ambiente Windows | aceite cross-platform não provável aqui | registrar *não executado*, entregar roteiro; não declarar pronto |
 | yt-dlp depende de rede e formato externo | ingestão pode falhar | adaptador isolado, `spawn` sem shell, erro claro |
 | Dados sensíveis do original | vazamento para o novo repo | `.gitignore` + regra dura; original intocado |
-| `better-sqlite3` exigir compilação no Windows | instalação difícil para o usuário | comparar com `node:sqlite` na SPEC de F2 antes de escolher |
+| `node:sqlite` mudar entre versões de Node (API experimental) | app deixa de subir numa atualização | versão mínima em `engines`; driver isolado em **um único arquivo** (`persistencia/banco.ts`) para troca barata |
+| Migração mal escrita perder dado | perda irreversível | toda migração em transação, com `reverter` testado e backup antes em produção |
 | Metas de volume (5k vs 10k) indefinidas | otimizar sem alvo | medir na F5 e registrar decisão |
 
 ## Campos para o próximo agente
 
 - Repositório/branch/HEAD: `contextflow2/`, `main` — ver `git log -1`
 - Mudanças locais existentes: verificar `git status` antes de agir
-- Fase em andamento e autorização: **F1 fechada tecnicamente; próxima é a SPEC de F2**
-- Próxima ação autorizada: escrever `docs/specs/f2-persistencia.md` (decisão de banco
-  com evidência) — **não** implementar antes da aprovação da decisão de banco
-- Como verificar o que já existe: `cd platform && npm install && npm test && npm run verificar`
+- Fase em andamento e autorização: **F2 fechada tecnicamente; próxima é F3 (ingestão)**
+- Próxima ação autorizada: escrever `docs/specs/f3-ingestao.md` antes de codar
+- Como verificar o que já existe: `cd platform && npm install && npm test && npm run test:e2e && npm run verificar`

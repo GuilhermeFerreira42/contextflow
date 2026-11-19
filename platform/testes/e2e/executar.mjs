@@ -9,7 +9,7 @@
  * Saída: PASS/FAIL por cenário, exit != 0 se qualquer cenário falhar.
  */
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { carregarConfig } from '../../src/motor/src/nucleo/configuracao.ts';
@@ -86,9 +86,13 @@ const config = carregarConfig({
   CONTEXTFLOW_AMBIENTE: 'teste',
   CONTEXTFLOW_DADOS: join(raiz, 'testes', '.tmp', 'dados-e2e'),
 });
+// Cada execução começa com banco limpo: teste de UI não pode depender de estado anterior.
+rmSync(config.pastaDados, { recursive: true, force: true });
 mkdirSync(config.pastaDados, { recursive: true });
 
 const app = criarAplicacao(config);
+// Migrações antes de escutar: sem isso a API responde sobre tabela inexistente.
+app.iniciarPersistencia();
 await new Promise((ok) => app.servidor.listen(0, '127.0.0.1', ok));
 const porta = app.servidor.address().port;
 const base = `http://127.0.0.1:${porta}`;
@@ -158,6 +162,33 @@ try {
   const rejeita = await esperar(`document.querySelector('#resultado-validacao').dataset.tipo === 'erro'`, 10000);
   const textoRejeita = await avaliar(`document.querySelector('#resultado-validacao').textContent.trim().slice(0, 70)`);
   registrar('URL inválida é rejeitada com mensagem clara', rejeita === true, textoRejeita);
+
+  // 5b. Persistência visível: recarregar a página e o vídeo continua lá.
+  await S('Page.navigate', { url: base });
+  const recarregou = await esperar(`!!document.querySelector('.aplicativo')`, 20000);
+  const linhasAposRecarregar = await esperar(
+    `document.querySelectorAll('#corpo-biblioteca tr').length === 1`, 15000,
+  );
+  const tituloNaTabela = await avaliar(`document.querySelector('#corpo-biblioteca .titulo-video')?.textContent`);
+  const contadorTexto = await avaliar(`document.querySelector('#contador')?.textContent`);
+  registrar(
+    'vídeo importado persiste após recarregar a página',
+    recarregou && linhasAposRecarregar === true && contadorTexto?.includes('1'),
+    `${tituloNaTabela} · ${contadorTexto}`,
+  );
+
+  // 5c. Deduplicação visível na UI.
+  await avaliar(`document.querySelector('[data-aba="importacoes"]').click()`);
+  await esperar(`!document.querySelector('[data-tela-nome="importacoes"]').hidden`);
+  await avaliar(`(() => {
+    document.querySelector('#url-video').value = 'https://youtu.be/dQw4w9WgXcQ';
+    document.querySelector('#formulario-importacao').requestSubmit();
+    return true;
+  })()`);
+  const avisouDuplicata = await esperar(
+    `document.querySelector('#resultado-validacao').textContent.includes('já está na biblioteca')`, 10000,
+  );
+  registrar('deduplicação é explicada ao usuário', avisouDuplicata === true);
 
   // 6. Configurações vêm do motor.
   await avaliar(`document.querySelector('[data-aba="configuracoes"]').click()`);

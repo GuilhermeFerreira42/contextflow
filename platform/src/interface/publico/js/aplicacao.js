@@ -209,20 +209,36 @@ async function validarUrl(evento) {
   saida.textContent = 'Validando…';
 
   try {
-    const resultado = await api('/api/ingestao/validar', {
+    const validacao = await api('/api/ingestao/validar', {
       method: 'POST',
       body: JSON.stringify({ url: campo.value }),
     });
-    if (resultado.valido) {
-      saida.dataset.tipo = 'ok';
-      saida.textContent = `URL válida — vídeo ${resultado.youtubeId} (normalizada: ${resultado.urlNormalizada})`;
-    } else {
+    if (!validacao.valido) {
       saida.dataset.tipo = 'erro';
-      saida.textContent = resultado.motivo ?? 'URL inválida';
+      saida.textContent = validacao.motivo ?? 'URL inválida';
+      return;
     }
+
+    // Persiste o registro na biblioteca. Metadados reais e legendas entram na F3;
+    // aqui o registro é criado com o que o usuário forneceu — sem inventar dados.
+    const titulo = campo.dataset.titulo || `Vídeo ${validacao.youtubeId}`;
+    const criado = await api('/api/biblioteca', {
+      method: 'POST',
+      body: JSON.stringify({ youtubeId: validacao.youtubeId, titulo }),
+    });
+
+    saida.dataset.tipo = 'ok';
+    saida.textContent = `Importado e salvo — ${criado.titulo} (${criado.youtubeId}). Metadados/legendas: F3.`;
+    campo.value = '';
+    delete campo.dataset.titulo;
+    await carregarBiblioteca();
   } catch (erro) {
     saida.dataset.tipo = 'erro';
-    saida.textContent = erro.message;
+    if (erro.codigo === 'video_duplicado') {
+      saida.textContent = 'Este vídeo já está na biblioteca (deduplicação por youtubeId).';
+    } else {
+      saida.textContent = erro.message;
+    }
   }
 }
 
