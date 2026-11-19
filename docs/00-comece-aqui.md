@@ -24,8 +24,15 @@ contextflow/        → projeto original (Python/wxPython). SOMENTE LEITURA. Con
 contextflow2/       → repositório Git do novo projeto
 ├── docs/           → documentação canônica (este arquivo, escopo, SPECs, decisões, estado)
 └── platform/       → TODO o projeto executável Node.js + TypeScript
-/home/user/Continuidade de Projeto/  → materiais operacionais FORA do Git
+Continuidade de Projeto/  → materiais operacionais FORA do Git
 ```
+
+> **Sobre os caminhos neste documento:** onde aparecer `/home/user/...`, leia como
+> o caminho da **máquina onde você está trabalhando**. Aquele prefixo é do
+> ambiente Linux onde o projeto foi desenvolvido; no Windows do proprietário o
+> projeto está em `C:\Users\Usuario\Desktop\contextflow2\` e a pasta
+> `Continuidade de Projeto` fica **ao lado** dele, em `Desktop`. O que importa é
+> a **relação** entre as pastas, não o prefixo.
 
 ## Ordem de leitura obrigatória
 

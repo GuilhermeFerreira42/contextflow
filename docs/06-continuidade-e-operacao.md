@@ -3,7 +3,7 @@
 **Fonte canônica**: `docs/01-escopo-canonico.md` + decisões autorizadas.
 **Estado operacional**: `docs/estado-atual.md`. **Evidências**: arquivo/teste/commit
 referenciados no estado. Logs volumosos e artefatos grandes ficam **fora do Git**
-(`/home/user/Continuidade de Projeto/`). **Nunca** criar múltiplos status contraditórios.
+(pasta `Continuidade de Projeto`, irmã do repositório). **Nunca** criar múltiplos status contraditórios.
 
 ## Onde guardar cada coisa
 
@@ -13,7 +13,7 @@ referenciados no estado. Logs volumosos e artefatos grandes ficam **fora do Git*
 | Estado de retomada (branch, HEAD, feito, próximo) | `docs/estado-atual.md` | **sim** |
 | SPEC de cada fatia | `docs/specs/` | **sim** |
 | Código, testes, scripts, configs | `platform/` | **sim** |
-| Capturas, vídeos, logs extensos, saídas brutas, cópias de recuperação | `/home/user/Continuidade de Projeto/` | **não** |
+| Capturas, vídeos, logs extensos, saídas brutas, cópias de recuperação | `Continuidade de Projeto/` | **não** |
 | Segredos, tokens, bancos pessoais, credenciais | fora de tudo; nunca em nota/commit | **nunca** |
 
 Toda evidência externa citada no estado deve dizer **nome do artefato, o que demonstra,
@@ -45,9 +45,9 @@ compreensível se o artefato desaparecer.
 ## Estrutura física do projeto
 
 ```
-/home/user/contextflow/              → projeto original (Python). Somente leitura.
-/home/user/contextflow2/             → repositório Git deste projeto
-├── docs/                            → documentação canônica
-└── platform/                        → tudo do executável Node.js + TypeScript
-/home/user/Continuidade de Projeto/  → material operacional, FORA do Git
+contextflow/              → projeto original (Python). Somente leitura.
+contextflow2/             → repositório Git deste projeto
+├── docs/                 → documentação canônica
+└── platform/             → tudo do executável Node.js + TypeScript
+Continuidade de Projeto/  → material operacional, FORA do Git (ao lado do repositório)
 ```

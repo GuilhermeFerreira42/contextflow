@@ -1,7 +1,7 @@
 # Investigação delimitada — E0
 
 **Status: E0 PARCIALMENTE CONCLUÍDA.** Base inspecionada: projeto original em
-`/home/user/contextflow` (leitura estática de código e documentos, nesta sessão).
+pasta `contextflow/` (leitura estática de código e documentos).
 **Não houve** execução do app original, nem auditoria completa de licenças,
 dependências, segurança ou compatibilidade. Nada aqui é "homologado".
 
@@ -61,7 +61,7 @@ Esses materiais **nunca** são copiados para `contextflow2` nem para
 | Achado | Evidência | Impacto |
 |---|---|---|
 | Diretório `G:\.Projetos`, caminho absoluto no original, aparece nas fontes | `-atualiza-git.bat`, `core/proxy_manager.py` | Na migração, **nenhum path absoluto**; usar pasta de dados configurável (`%APPDATA%`/`~/.local/share`) |
-| `.gitignore` do original exclui `data/`, `*.db`, `thumbs/`, `exports/` | `/home/user/contextflow/.gitignore` | Mesma política no novo projeto: dados de runtime fora do Git |
+| `.gitignore` do original exclui `data/`, `*.db`, `thumbs/`, `exports/` | `.gitignore` do projeto original | Mesma política no novo projeto: dados de runtime fora do Git |
 | Metas históricas divergentes (5k vs 10k) | `docs/history/*` do original | Não herdamos meta numérica; medir na F5 e registrar |
 | Stack original era desktop; V1 é web local | `main.py` (wx.App) | Migração de **regras**, não de UI |
 

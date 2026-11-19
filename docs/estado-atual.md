@@ -15,7 +15,7 @@
   onboarding, ambiente, comandos e critérios de aceite).
 - **Repositório:** `contextflow2/` (Git próprio, branch `main`), independente do
   `contextflow/` original, que permanece **intacto e somente leitura**.
-- **Pasta operacional:** `/home/user/Continuidade de Projeto/` (fora do Git).
+- **Pasta operacional:** `Continuidade de Projeto/` — irmã do repositório, fora do Git.
 
 ## O que foi verificado (evidência real desta sessão)
 
@@ -47,7 +47,7 @@
 | **F3** — processo real: binário falso, timeout, injeção | ✅ 10/10 | `testes/integracao/ytdlp-processo.test.ts` + `ytdlp-fake-binario.test.ts` |
 | **F3** — suíte completa | ✅ **122/122** | `npm test` |
 | **F3** — E2E em navegador real | ✅ **17/17** | `npm run test:e2e` |
-| **F3** — teste real contra o YouTube | ❌ **não executado aqui** | sandbox bloqueia o domínio: `TLS/SSL connection has been closed` |
+| **F3** — teste real contra o YouTube | ❌ **não executado** | o ambiente Linux de desenvolvimento bloqueava o domínio (`TLS/SSL connection has been closed`); executar na máquina do proprietário |
 | **F3** — homologação humana | ⏳ pendente | roteiro em `docs/roteiro-teste-f3.md` |
 | Verificação em **Windows** (execução) | ✅ **executado pelo proprietário** | `npm run dev` no PowerShell, porta 4780, log `persistência pronta` |
 | Projeto original alterado | ❌ não | `git status` limpo em `contextflow/` |
@@ -119,7 +119,7 @@
 
 | Risco | Impacto | Mitigação |
 |---|---|---|
-| Ambiente de desenvolvimento sem acesso ao YouTube | F3 não pode ser provada de verdade aqui | declarado como *não executado*; roteiro pronto para a máquina do proprietário |
+| Ambiente de desenvolvimento sem acesso ao YouTube | F3 não pôde ser provada de verdade lá | declarado como *não executado*; roteiro pronto para a máquina do proprietário |
 | Suíte nunca rodou em **Windows** (só o app rodou) | teste de unidade pode falhar no SO do usuário | 6 testes de binário falso já têm `skip` declarado; o resto não usa shell; **Codex deve rodar a suíte no Windows e reportar** |
 | yt-dlp depende de rede e formato externo | ingestão pode falhar | adaptador isolado, `spawn` sem shell, erro claro |
 | Dados sensíveis do original | vazamento para o novo repo | `.gitignore` + regra dura; original intocado |
