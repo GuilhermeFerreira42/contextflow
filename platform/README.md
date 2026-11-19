@@ -7,6 +7,7 @@ vive aqui. A documentação canônica fica em `../docs/`.
 
 - **Node.js ≥ 22.5** — usa `--experimental-strip-types` (TypeScript direto em dev/testes) e
   **`node:sqlite`** (banco nativo). Sem etapa de build obrigatória para rodar em dev.
+  Os scripts passam `--experimental-sqlite`, necessário no Node 22 anterior ao 22.13.
   A versão mínima é exigida porque `node:sqlite` só existe a partir daí.
 
 > **Zero dependências de produção.** O banco é o `node:sqlite` embutido no Node, escolhido

@@ -6,10 +6,10 @@
  */
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Banco } from '../../src/motor/src/persistencia/banco.ts';
 import { RepositorioBibliotecaSqlite } from '../../src/motor/src/modulos/biblioteca/repositorio-sqlite.ts';
 
@@ -60,14 +60,14 @@ test('dados sobrevivem a fechar e reabrir o banco (mesmo processo)', async () =>
   }
 });
 
-test('dados sobrevivem a outro PROCESSO (escrita e leitura separadas)', () => {
+test('dados sobrevivem a outro PROCESSO (escrita e leitura separadas)', async () => {
   const pasta = prepararPasta();
   const arquivo = join(pasta, 'processos.db');
 
   // Processo 1: escreve e morre.
   const scriptEscrita = `
-    import { Banco } from ${JSON.stringify(join(raiz, 'src/motor/src/persistencia/banco.ts'))};
-    import { RepositorioBibliotecaSqlite } from ${JSON.stringify(join(raiz, 'src/motor/src/modulos/biblioteca/repositorio-sqlite.ts'))};
+    import { Banco } from ${JSON.stringify(pathToFileURL(join(raiz, 'src/motor/src/persistencia/banco.ts')).href)};
+    import { RepositorioBibliotecaSqlite } from ${JSON.stringify(pathToFileURL(join(raiz, 'src/motor/src/modulos/biblioteca/repositorio-sqlite.ts')).href)};
     const banco = Banco.abrir({ arquivo: ${JSON.stringify(arquivo)} });
     banco.migrar();
     const repo = new RepositorioBibliotecaSqlite(banco.db);
@@ -78,7 +78,7 @@ test('dados sobrevivem a outro PROCESSO (escrita e leitura separadas)', () => {
   `;
   const saida = execFileSync(
     process.execPath,
-    ['--experimental-strip-types', '--disable-warning=ExperimentalWarning', '--input-type=module', '-e', scriptEscrita],
+    ['--experimental-sqlite', '--experimental-strip-types', '--disable-warning=ExperimentalWarning', '--input-type=module', '-e', scriptEscrita],
     { encoding: 'utf8' },
   );
   assert.match(saida, /escrito/);
@@ -89,13 +89,10 @@ test('dados sobrevivem a outro PROCESSO (escrita e leitura separadas)', () => {
   try {
     assert.equal(banco.versaoAtual(), 1);
     const repo = new RepositorioBibliotecaSqlite(banco.db);
-    return repo.contagem().then((n) => {
-      assert.equal(n, 2, 'outro processo não viu os dados gravados');
-      return repo.porId('vid-0').then((v) => assert.equal(v?.titulo, 'Vídeo 0'));
-    });
+    assert.equal(await repo.contagem(), 2, 'outro processo não viu os dados gravados');
+    assert.equal((await repo.porId('vid-0'))?.titulo, video(0).titulo);
   } finally {
-    // fechado no finally do teste acima via await implícito do retorno
-    setTimeout(() => banco.fechar(), 100);
+    banco.fechar();
   }
 });
 
@@ -135,7 +132,7 @@ test('nenhum segredo é gravado no arquivo do banco', async () => {
 test('arquivo corrompido falha de forma explícita, sem apagar nada', () => {
   const pasta = prepararPasta();
   const arquivo = join(pasta, 'corrompido.db');
-  execFileSync('bash', ['-c', `printf 'isto nao e um banco sqlite valido' > ${JSON.stringify(arquivo)}`]);
+  writeFileSync(arquivo, 'isto nao e um banco sqlite valido');
 
   assert.throws(() => {
     const banco = Banco.abrir({ arquivo });

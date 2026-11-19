@@ -12,7 +12,7 @@ import type { OrigemTranscricao, SegmentoTranscricao, Video } from '@contextflow
 import { ErroDominio, ErroValidacao } from '../../nucleo/erros.ts';
 import type { ExecutorYtdlp, LegendaBaixada, MetadadosYtdlp } from '../../integracoes/ytdlp.ts';
 import type { RepositorioBiblioteca } from '../biblioteca/repositorio.ts';
-import type { RepositorioTranscricoes } from '../../persistencia/repositorio-transcricoes.ts';
+import type { RepositorioTranscricoes, TranscricaoGravavel } from '../../persistencia/repositorio-transcricoes.ts';
 
 export interface ResultadoInspecao {
   youtubeId: string;
@@ -85,6 +85,7 @@ export interface OpcoesServicoIngestao {
   repositorio: RepositorioBiblioteca;
   transcricoes: RepositorioTranscricoes;
   executor: ExecutorYtdlp;
+  persistirResultado: (video: Video, transcricao: TranscricaoGravavel) => void;
   idiomas?: string[];
   agora?: () => string;
 }
@@ -95,11 +96,13 @@ export class ServicoIngestaoReal implements ServicoIngestao {
   readonly #executor: ExecutorYtdlp;
   readonly #idiomas: string[];
   readonly #agora: () => string;
+  readonly #persistirResultado: OpcoesServicoIngestao['persistirResultado'];
 
   constructor(opcoes: OpcoesServicoIngestao) {
     this.#repositorio = opcoes.repositorio;
     this.#transcricoes = opcoes.transcricoes;
     this.#executor = opcoes.executor;
+    this.#persistirResultado = opcoes.persistirResultado;
     this.#idiomas = opcoes.idiomas ?? IDIOMAS_PADRAO;
     this.#agora = opcoes.agora ?? (() => new Date().toISOString());
   }
@@ -226,8 +229,6 @@ export class ServicoIngestaoReal implements ServicoIngestao {
       atualizadoEm: agora,
     };
 
-    await this.#repositorio.atualizar(atualizado);
-
     if (legenda) {
       await this.#gravarTranscricao(atualizado, legenda, agora);
       return {
@@ -243,7 +244,7 @@ export class ServicoIngestaoReal implements ServicoIngestao {
       };
     }
 
-    await this.#gravarTranscricaoIndisponivel(atualizado, motivoLegenda!, agora);
+    await this.#gravarTranscricaoIndisponivel(atualizado, motivoLegenda!, agora, idiomas[0] ?? 'pt-BR');
     return {
       video: atualizado,
       transcricao: {
@@ -262,7 +263,7 @@ export class ServicoIngestaoReal implements ServicoIngestao {
     legenda: LegendaBaixada,
     agora: string,
   ): Promise<void> {
-    await this.#transcricoes.salvar({
+    this.#persistirResultado(video, {
       videoId: video.id,
       idioma: legenda.idioma,
       origem: legenda.origem,
@@ -277,10 +278,11 @@ export class ServicoIngestaoReal implements ServicoIngestao {
     video: Video,
     motivo: string,
     agora: string,
+    idioma: string,
   ): Promise<void> {
-    await this.#transcricoes.salvar({
+    this.#persistirResultado(video, {
       videoId: video.id,
-      idioma: 'pt-BR',
+      idioma,
       origem: 'auto',
       estado: 'indisponivel',
       motivo,

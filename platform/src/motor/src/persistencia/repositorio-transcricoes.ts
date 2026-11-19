@@ -50,6 +50,19 @@ export class RepositorioTranscricoesSqlite implements RepositorioTranscricoes {
   }
 
   async salvar(t: TranscricaoGravavel): Promise<void> {
+    this.#db.exec('SAVEPOINT salvar_transcricao');
+    try {
+      this.salvarSincrono(t);
+      this.#db.exec('RELEASE salvar_transcricao');
+    } catch (erro) {
+      this.#db.exec('ROLLBACK TO salvar_transcricao');
+      this.#db.exec('RELEASE salvar_transcricao');
+      throw erro;
+    }
+  }
+
+  /** Usado pela unidade de persistencia em transacao sincrona. */
+  salvarSincrono(t: TranscricaoGravavel): void {
     const existente = this.#db
       .prepare('SELECT id FROM transcricoes WHERE video_id = ? AND idioma = ?')
       .get(t.videoId, t.idioma) as { id: string } | undefined;
