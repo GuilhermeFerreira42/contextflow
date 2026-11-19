@@ -16,9 +16,55 @@ import { carregarConfig } from '../../src/motor/src/nucleo/configuracao.ts';
 import { criarAplicacao } from '../../src/motor/src/aplicacao.ts';
 
 const raiz = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const CHROME = process.env.CHROME_BIN ?? `${process.env.HOME}/.cache/cdp/chrome-bin`;
+const PORTA_CDP = Number(process.env.CONTEXTFLOW_CDP_PORTA ?? 9333);
+
+/**
+ * Descobre um Chrome/Chromium/Edge instalado.
+ *
+ * Ordem: CHROME_BIN explícito > caminhos conhecidos por sistema operacional >
+ * descoberta no sandbox de desenvolvimento. Sem isso, o teste E2E só rodaria
+ * na máquina onde foi escrito — e não no computador do proprietário.
+ */
+function descobrirNavegador() {
+  if (process.env.CHROME_BIN) return process.env.CHROME_BIN;
+
+  const candidatos = [];
+  const env = process.env;
+
+  if (process.platform === 'win32') {
+    const bases = [env['PROGRAMFILES'], env['PROGRAMFILES(X86)'], env['LOCALAPPDATA']].filter(Boolean);
+    for (const base of bases) {
+      candidatos.push(
+        join(base, 'Google', 'Chrome', 'Application', 'chrome.exe'),
+        join(base, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
+        join(base, 'Chromium', 'Application', 'chrome.exe'),
+      );
+    }
+  } else if (process.platform === 'darwin') {
+    candidatos.push(
+      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      '/Applications/Chromium.app/Contents/MacOS/Chromium',
+      '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+    );
+  } else {
+    candidatos.push(
+      '/usr/bin/google-chrome',
+      '/usr/bin/google-chrome-stable',
+      '/usr/bin/chromium',
+      '/usr/bin/chromium-browser',
+      '/usr/bin/microsoft-edge',
+      '/snap/bin/chromium',
+      `${env.HOME}/.cache/cdp/chrome-bin`,
+    );
+  }
+
+  return candidatos.find((caminho) => existsSync(caminho)) ?? null;
+}
+
+const CHROME = descobrirNavegador();
+// Só o Chrome empacotado do sandbox precisa de bibliotecas próprias.
 const LIBS = process.env.CHROME_LIBS ?? `${process.env.HOME}/.cache/cdp/al2023/lib`;
-const PORTA_CDP = 9333;
+const USA_LIBS_DO_SANDBOX = Boolean(process.env.CHROME_LIBS) || CHROME?.includes('.cache/cdp');
 
 const resultados = [];
 const registrar = (cenario, ok, detalhe) => {
@@ -27,8 +73,13 @@ const registrar = (cenario, ok, detalhe) => {
 };
 const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
 
-if (!existsSync(CHROME)) {
-  console.error(`Chrome ausente em ${CHROME}. Defina CHROME_BIN ou instale um Chromium.`);
+if (!CHROME) {
+  console.error(
+    'Nenhum Chrome/Chromium/Edge encontrado.\n' +
+      'Instale o Google Chrome ou aponte o executável com CHROME_BIN:\n' +
+      '  PowerShell : $env:CHROME_BIN = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"\n' +
+      '  bash       : export CHROME_BIN=/usr/bin/google-chrome',
+  );
   process.exit(2);
 }
 
@@ -66,7 +117,10 @@ async function abrirNavegador() {
       '--headless=new', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage', '--no-zygote',
       `--remote-debugging-port=${PORTA_CDP}`, '--window-size=1440,900', '--hide-scrollbars', 'about:blank',
     ],
-    { env: { ...process.env, LD_LIBRARY_PATH: LIBS }, stdio: 'ignore' },
+    {
+      env: USA_LIBS_DO_SANDBOX ? { ...process.env, LD_LIBRARY_PATH: LIBS } : { ...process.env },
+      stdio: 'ignore',
+    },
   );
 
   for (let i = 0; i < 80; i++) {

@@ -18,15 +18,41 @@ vive aqui. A documentação canônica fica em `../docs/`.
 ## Comandos
 
 ```bash
-npm install            # instala dependências (workspaces)
-npm run dev            # servidor de desenvolvimento com reload
-npm start              # executa a partir do build
+npm install            # instala dependências (6 pacotes, sem compilação)
+npm run dev            # desenvolvimento: roda o TypeScript direto
+npm start              # produção: roda dist/ (exige npm run build antes)
 npm run build          # typecheck + gera dist/
 npm run typecheck      # só checagem de tipos
-npm test               # testes de unidade e integração (node:test)
-npm run test:e2e       # testes de UI em navegador real (Playwright)
+npm test               # unidade + integração (node:test) — 122 testes
+npm run test:e2e       # UI em navegador real via CDP — 17 cenários
 npm run verificar      # fumaça: sobe o motor, checa endpoints, derruba
 ```
+
+**Primeira execução, do zero:**
+
+```bash
+npm install && npm test && npm run verificar
+```
+
+Se os três passarem, o ambiente está bom. Depois `npm run dev` e abra
+<http://127.0.0.1:4780>.
+
+### Testes E2E e o navegador
+
+O E2E usa o Chrome/Chromium/Edge **já instalado na máquina**, via protocolo de
+depuração (CDP). Ele procura sozinho em caminhos conhecidos de Windows, Linux e
+macOS. Se não encontrar, aponte manualmente:
+
+```powershell
+$env:CHROME_BIN = "C:\Program Files\Google\Chrome\Application\chrome.exe"
+```
+
+```bash
+export CHROME_BIN=/usr/bin/google-chrome
+```
+
+**6 testes são pulados no Windows** (os que criam binário falso baseado em
+shell). Ver `# skipped 6` na saída é o comportamento esperado.
 
 ## Estrutura
 
@@ -43,8 +69,45 @@ scripts/             # dev, build, start, verificação
 testes/              # unidade, integração, E2E
 ```
 
+## Ingestão: o yt-dlp precisa estar instalado
+
+A importação de vídeos usa o **yt-dlp** como processo externo. Ele não é
+dependência do npm — é binário do sistema:
+
+```powershell
+winget install yt-dlp          # Windows
+```
+
+```bash
+pip install -U yt-dlp          # Linux/macOS
+```
+
+Se não estiver no PATH, aponte com `CONTEXTFLOW_YTDLP`. A tela **Importações**
+mostra um diagnóstico em tempo real dizendo se foi encontrado e qual a versão.
+Sem ele, a importação falha explicando o que instalar — o resto do app continua
+funcionando.
+
 ## Dados
 
 O banco e os artefatos ficam em uma pasta de dados **fora do Git**, configurável por
-variável de ambiente (`CONTEXTFLOW_DADOS`) e com padrão por sistema operacional. Ver
-`docs/specs/` para o contrato vigente e `docs/estado-atual.md` para o que já está pronto.
+variável de ambiente e com padrão por sistema operacional:
+
+| SO | Pasta padrão |
+|---|---|
+| Windows | `%APPDATA%\ContextFlow` |
+| Linux | `~/.local/share/ContextFlow` |
+
+## Variáveis de ambiente
+
+| Variável | Padrão | Para quê |
+|---|---|---|
+| `CONTEXTFLOW_PORTA` | `4780` | porta HTTP |
+| `CONTEXTFLOW_HOST` | `127.0.0.1` | endereço de bind (local por padrão) |
+| `CONTEXTFLOW_DADOS` | pasta do SO acima | onde ficam banco e artefatos |
+| `CONTEXTFLOW_YTDLP` | `yt-dlp` (PATH) | caminho do binário do yt-dlp |
+| `CONTEXTFLOW_YTDLP_TIMEOUT` | `60000` | tempo máximo por operação (ms) |
+| `CONTEXTFLOW_IDIOMAS` | `pt-BR,pt,en` | ordem de preferência das legendas |
+| `CONTEXTFLOW_AMBIENTE` | `desenvolvimento` | `desenvolvimento`, `teste` ou `producao` |
+
+Ver `../docs/specs/` para o contrato de cada fatia e
+`../docs/estado-atual.md` para o que já está pronto.

@@ -8,8 +8,8 @@ globais permanecem nos documentos canônicos.
 |---|---|---|
 | **E0 — Investigação** | decisão registrada de migração/reuso, riscos, base e versões | ✅ concluída em nível suficiente (ver `02`) |
 | **F1 — Esqueleto modular** | motor Node+TS sobe localmente, serve a interface, contratos e scripts reproduzíveis | ✅ concluída + homologada |
-| **F2 — Persistência e migração** | biblioteca persiste vídeo e conteúdo; migrações versionadas | ✅ concluída tecnicamente (banco decidido por medição) |
-| **F3 — Ingestão/legendas** | URL/vídeo/playlist, metadados, legendas manual/auto segmentadas por tempo | F2; fluxo real com vídeo disponível/indisponível |
+| **F2 — Persistência e migração** | biblioteca persiste vídeo e conteúdo; migrações versionadas | ✅ concluída + **homologada** (banco decidido por medição) |
+| **F3 — Ingestão/legendas** | metadados reais, legendas manual/auto segmentadas por tempo | 🟨 **concluída tecnicamente** (`7a215cc`); homologação depende do teste real do YouTube na máquina do proprietário. **Playlist ficou para a F4.** |
 | **F4 — Trabalhos e recuperação** | fila persistente, estados, cancelamento, falhas, reexecução controlada | F3; falhas e reinício testados |
 | **F5 — Biblioteca** | grid denso/virtualizado, filtros/pesquisa, seleção, agrupamento, ações em lote | F2–4; estabilidade com volume representativo |
 | **F6 — IA para resumos** | provedores/configuração, resumos persistidos, custos/erros, múltiplas seleções | F2–5; chaves seguras e casos de falha |
@@ -29,6 +29,15 @@ globais permanecem nos documentos canônicos.
 
 `F1 → F2 → F3 → F4 → F5 → F6 → F7 → F8 → F9`, cada uma com sua SPEC.
 F2 e F3 podem ser preparadas em paralelo documental, mas F3 só roda sobre persistência real.
+
+### Ajuste de escopo registrado na F3
+
+O plano original listava "URL/vídeo/**playlist**" na F3. A implementação entregou
+**apenas vídeo unitário**: playlist exige fila, progresso por item e retomada —
+que são exatamente o escopo da F4. Importar playlist sem fila seria um laço
+bloqueante na requisição HTTP, o oposto do que o escopo canônico pede
+("não bloquear a UI"). Portanto **playlist vai junto da F4**, e isso não é
+redução de escopo, é sequenciamento.
 
 ## Definição de concluído da V1
 
