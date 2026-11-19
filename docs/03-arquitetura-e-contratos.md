@@ -15,7 +15,7 @@ platform/
 │   │   ├── componentes/  # tabela virtualizada, painel de leitura, atividade
 │   │   └── estilos/      # tema grafite escuro + azul
 │   └── compartilhado/    # tipos e contratos usados por motor e interface
-├── testes/               # unitários, integração, E2E (Playwright)
+├── testes/               # unitários, integração, E2E (CDP em navegador real)
 ├── scripts/              # dev, build, start, verificação por SO
 ├── package.json · tsconfig.json · *.config.*
 └── dados/                # runtime, FORA do Git (configurável pelo usuário)

@@ -52,7 +52,8 @@ SPEC mínima  →  implementação  →  teste real  →  correção  →  commi
 
 **Teste real** (não simulado):
 
-1. Reproduzir pelo fluxo normal; para UI web, **Playwright em navegador real**.
+1. Reproduzir pelo fluxo normal; para UI web, **navegador real**. O projeto usa
+   CDP direto (`testes/e2e/executar.mjs`), não Playwright.
 2. Provar efeito colateral: arquivo em disco, persistência após reabrir, resposta HTTP.
 3. Testar o caminho de falha correspondente (rede cai, sem legenda, chave inválida).
 4. Registrar por cenário: `aprovado / falhou / ignorado / não executado`.

@@ -211,7 +211,25 @@ assinatura, ou justifique a mudança na SPEC.
 - [ ] Nenhum arquivo de `contextflow/` alterado
 - [ ] Nenhum segredo, banco ou `node_modules` commitado
 
-## 11. Pendências técnicas já mapeadas
+## 11. Índice dos documentos (para não ler o que não importa)
+
+| Documento | Leia quando |
+|---|---|
+| `00-comece-aqui.md` | sempre, primeiro |
+| `01-escopo-canonico.md` | antes de duvidar do escopo ou propor algo novo |
+| `02-investigacao-e-reuso.md` | só se precisar entender o app Python original |
+| `03-arquitetura-e-contratos.md` | antes de tocar em arquitetura ou módulo novo |
+| `04-plano-mestre.md` | para saber onde a fatia atual se encaixa |
+| `05-criterios-de-aceite.md` | antes de dizer "está pronto" |
+| `06-continuidade-e-operacao.md` | se for mexer na estrutura de pastas |
+| `07-protocolo-continuidade.md` | sempre que for iniciar ou encerrar uma sessão |
+| `estado-atual.md` | sempre, e **atualize no fim** |
+| `handoff-codex.md` | este arquivo |
+| `roteiro-teste-f3.md` | na primeira tarefa |
+| `specs/f1..f3` | conforme a fatia que você for mexer |
+| `platform/README.md` | para comandos e variáveis de ambiente |
+
+## 12. Pendências técnicas já mapeadas
 
 | # | Pendência | Quando |
 |---|---|---|
