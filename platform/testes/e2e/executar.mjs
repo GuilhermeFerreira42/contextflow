@@ -90,7 +90,44 @@ const config = carregarConfig({
 rmSync(config.pastaDados, { recursive: true, force: true });
 mkdirSync(config.pastaDados, { recursive: true });
 
-const app = criarAplicacao(config);
+/**
+ * Executor yt-dlp falso para o E2E.
+ *
+ * O teste de navegador não pode depender do YouTube: a rede do ambiente muda e
+ * o teste ficaria intermitente. O dublê devolve um vídeo com legenda manual,
+ * que é o caminho mais completo — metadados + segmentos com tempo.
+ */
+const executorE2e = {
+  async disponivel() {
+    return { disponivel: true, versao: '2026.10.26 (dublê E2E)', caminho: 'yt-dlp' };
+  },
+  async inspecionar() {
+    return {
+      id: 'dQw4w9WgXcQ',
+      titulo: 'Vídeo de demonstração E2E',
+      canalId: 'UCe2e',
+      canalNome: 'Canal E2E',
+      duracaoSegundos: 212,
+      miniaturaUrl: null,
+      publicadoEm: '2024-07-20T00:00:00.000Z',
+      legendasManuais: ['pt'],
+      legendasAutomaticas: [],
+    };
+  },
+  async baixarLegenda() {
+    return {
+      idioma: 'pt',
+      origem: 'manual',
+      segmentos: [
+        { inicioMs: 0, fimMs: 2000, texto: 'Bem-vindo ao ContextFlow.' },
+        { inicioMs: 2000, fimMs: 5000, texto: 'Esta é a primeira fala da transcrição.' },
+        { inicioMs: 5000, fimMs: 9000, texto: 'E aqui termina a demonstração.' },
+      ],
+    };
+  },
+};
+
+const app = criarAplicacao(config, { executorYtdlp: executorE2e });
 // Migrações antes de escutar: sem isso a API responde sobre tabela inexistente.
 app.iniciarPersistencia();
 await new Promise((ok) => app.servidor.listen(0, '127.0.0.1', ok));
@@ -141,16 +178,29 @@ try {
   const hash = await avaliar(`location.hash`);
   registrar('navegação abre Importações', foiImportacoes && hash === '#importacoes', hash);
 
-  // 4. Validação de URL: caminho feliz.
+  // 3b. Diagnóstico da ingestão é real (vem do motor, não é texto fixo).
+  const diagnosticoOk = await esperar(
+    `document.querySelector('#diagnostico-texto')?.textContent.includes('2026.10.26')`, 10000,
+  );
+  const textoDiagnostico = await avaliar(`document.querySelector('#diagnostico-texto')?.textContent`);
+  registrar('diagnóstico do yt-dlp é exibido', diagnosticoOk, textoDiagnostico);
+
+  // 4. Importação real: resultado com título, canal e legenda.
   await avaliar(`(() => {
     const campo = document.querySelector('#url-video');
     campo.value = 'https://youtu.be/dQw4w9WgXcQ';
     document.querySelector('#formulario-importacao').requestSubmit();
     return true;
   })()`);
-  const valida = await esperar(`document.querySelector('#resultado-validacao').dataset.tipo === 'ok'`, 10000);
-  const textoValida = await avaliar(`document.querySelector('#resultado-validacao').textContent.trim().slice(0, 70)`);
-  registrar('URL válida é validada pelo motor real', valida === true, textoValida);
+  const importou = await esperar(`document.querySelector('#resultado-validacao').dataset.tipo === 'ok'`, 20000);
+  const textoImport = await avaliar(`document.querySelector('#resultado-validacao').textContent.trim().slice(0, 120)`);
+  const temMetadados =
+    textoImport?.includes('Vídeo de demonstração E2E') && textoImport?.includes('legenda manual');
+  registrar(
+    'importação real traz título, canal e legenda',
+    importou === true && temMetadados === true,
+    textoImport,
+  );
 
   // 5. Validação de URL: domínio externo é rejeitado com mensagem.
   await avaliar(`(() => {
@@ -170,11 +220,18 @@ try {
     `document.querySelectorAll('#corpo-biblioteca tr').length === 1`, 15000,
   );
   const tituloNaTabela = await avaliar(`document.querySelector('#corpo-biblioteca .titulo-video')?.textContent`);
+  const canalNaTabela = await avaliar(`document.querySelector('#corpo-biblioteca tr td:nth-child(3)')?.textContent`);
+  const duracaoNaTabela = await avaliar(`document.querySelector('#corpo-biblioteca tr td:nth-child(4)')?.textContent`);
   const contadorTexto = await avaliar(`document.querySelector('#contador')?.textContent`);
   registrar(
     'vídeo importado persiste após recarregar a página',
     recarregou && linhasAposRecarregar === true && contadorTexto?.includes('1'),
     `${tituloNaTabela} · ${contadorTexto}`,
+  );
+  registrar(
+    'metadados reais aparecem na Biblioteca',
+    canalNaTabela?.includes('Canal E2E') && duracaoNaTabela?.includes('3:32'),
+    `canal=${canalNaTabela} · duração=${duracaoNaTabela}`,
   );
 
   // 5c. Deduplicação visível na UI.
@@ -186,9 +243,34 @@ try {
     return true;
   })()`);
   const avisouDuplicata = await esperar(
-    `document.querySelector('#resultado-validacao').textContent.includes('já está na biblioteca')`, 10000,
+    `document.querySelector('#resultado-validacao').textContent.includes('Já está na biblioteca')`, 10000,
   );
   registrar('deduplicação é explicada ao usuário', avisouDuplicata === true);
+
+  // 5d. Leitura: transcrição com trechos e tempo.
+  await avaliar(`document.querySelector('[data-aba="leitura"]').click()`);
+  const listaPronta = await esperar(`document.querySelectorAll('.linha-leitura').length === 1`, 15000);
+  const metaLinha = await avaliar(`document.querySelector('.linha-leitura-meta')?.textContent`);
+  registrar('Leitura lista a transcrição importada', listaPronta, metaLinha);
+
+  await avaliar(`document.querySelector('.linha-leitura').click()`);
+  const segmentosVisiveis = await esperar(
+    `document.querySelectorAll('#segmentos-transcricao .segmento').length === 3`, 10000,
+  );
+  const primeiroTempo = await avaliar(`document.querySelector('.segmento-tempo')?.textContent`);
+  const primeiroTexto = await avaliar(`document.querySelector('.segmento-texto')?.textContent`);
+  registrar(
+    'leitor abre com trechos e tempo',
+    segmentosVisiveis && primeiroTempo === '0:00' && primeiroTexto?.includes('Bem-vindo'),
+    `${primeiroTempo} ${primeiroTexto}`,
+  );
+
+  const linkTempo = await avaliar(`document.querySelector('.segmento-tempo')?.href`);
+  registrar(
+    'tempo do trecho leva ao momento no YouTube',
+    typeof linkTempo === 'string' && linkTempo.includes('youtube.com/watch') && linkTempo.includes('t=0s'),
+    linkTempo?.slice(0, 60),
+  );
 
   // 6. Configurações vêm do motor.
   await avaliar(`document.querySelector('[data-aba="configuracoes"]').click()`);

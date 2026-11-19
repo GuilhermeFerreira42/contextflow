@@ -12,6 +12,8 @@ const estado = {
   selecao: new Set(),
   itens: [],
   ultimoStatus: null,
+  transcricoes: [],
+  leituraAberta: null,
 };
 
 const $ = (seletor) => document.querySelector(seletor);
@@ -81,6 +83,12 @@ function mostrarTela(nome) {
   });
   // A tela é refletida na URL para deep-link e para o teste E2E não depender de ordem.
   history.replaceState(null, '', `#${nome}`);
+
+  // Cada tela busca o que precisa ao ser aberta: a Biblioteca reflete a última
+  // importação sem exigir recarregar a página.
+  if (nome === 'biblioteca') void carregarBiblioteca();
+  if (nome === 'leitura') void carregarLeitura();
+  if (nome === 'importacoes') void carregarDiagnostico();
 }
 
 function telaDaUrl() {
@@ -201,45 +209,185 @@ async function carregarBiblioteca() {
 
 /* --------------------------------------------------------- importações ---- */
 
-async function validarUrl(evento) {
+function formatarTempo(ms) {
+  const total = Math.floor(ms / 1000);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return h > 0
+    ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+    : `${m}:${String(s).padStart(2, '0')}`;
+}
+
+async function carregarDiagnostico() {
+  const caixa = $('#diagnostico-ingestao');
+  const texto = $('#diagnostico-texto');
+  if (!caixa || !texto) return;
+
+  try {
+    const diagnostico = await api('/api/ingestao/diagnostico');
+    caixa.dataset.estado = diagnostico.ytdlp.disponivel ? 'ok' : 'erro';
+    texto.textContent = diagnostico.mensagem;
+  } catch (erro) {
+    caixa.dataset.estado = 'erro';
+    texto.textContent = erro.message;
+  }
+}
+
+async function importarVideo(evento) {
   evento.preventDefault();
   const campo = $('#url-video');
   const saida = $('#resultado-validacao');
+  const botao = $('#botao-importar');
+  const url = campo.value.trim();
+
   saida.dataset.tipo = '';
-  saida.textContent = 'Validando…';
+  if (!url) {
+    saida.dataset.tipo = 'erro';
+    saida.textContent = 'Informe uma URL do YouTube.';
+    return;
+  }
+
+  // A importação chama o yt-dlp e pode levar alguns segundos: o botão precisa
+  // dizer que algo está acontecendo, senão o usuário clica de novo.
+  botao.disabled = true;
+  botao.textContent = 'Importando…';
+  saida.dataset.tipo = 'pendente';
+  saida.textContent = 'Buscando metadados e legenda no YouTube…';
 
   try {
-    const validacao = await api('/api/ingestao/validar', {
+    const resultado = await api('/api/ingestao/importar', {
       method: 'POST',
-      body: JSON.stringify({ url: campo.value }),
+      body: JSON.stringify({ url }),
     });
-    if (!validacao.valido) {
-      saida.dataset.tipo = 'erro';
-      saida.textContent = validacao.motivo ?? 'URL inválida';
-      return;
+
+    const { video, transcricao } = resultado;
+    saida.dataset.tipo = 'ok';
+
+    if (transcricao.estado === 'pronta') {
+      const rotulo = transcricao.origem === 'manual' ? 'manual' : 'automática';
+      saida.textContent =
+        `${resultado.criado ? 'Importado' : 'Já está na biblioteca'} — ${video.titulo}` +
+        ` · ${transcricao.quantidadeSegmentos} trechos · legenda ${rotulo} (${transcricao.idioma}).`;
+    } else {
+      saida.dataset.tipo = 'aviso';
+      saida.textContent = `${video.titulo} — ${transcricao.motivo ?? 'sem legenda disponível'}`;
     }
 
-    // Persiste o registro na biblioteca. Metadados reais e legendas entram na F3;
-    // aqui o registro é criado com o que o usuário forneceu — sem inventar dados.
-    const titulo = campo.dataset.titulo || `Vídeo ${validacao.youtubeId}`;
-    const criado = await api('/api/biblioteca', {
-      method: 'POST',
-      body: JSON.stringify({ youtubeId: validacao.youtubeId, titulo }),
-    });
-
-    saida.dataset.tipo = 'ok';
-    saida.textContent = `Importado e salvo — ${criado.titulo} (${criado.youtubeId}). Metadados/legendas: F3.`;
     campo.value = '';
-    delete campo.dataset.titulo;
-    await carregarBiblioteca();
+    await Promise.all([carregarBiblioteca(), carregarLeitura()]);
   } catch (erro) {
     saida.dataset.tipo = 'erro';
     if (erro.codigo === 'video_duplicado') {
-      saida.textContent = 'Este vídeo já está na biblioteca (deduplicação por youtubeId).';
+      saida.textContent = 'Este vídeo já está na biblioteca.';
+    } else if (erro.codigo === 'ytdlp_ausente' || erro.codigo === 'indisponivel') {
+      saida.textContent = `${erro.message} (veja o diagnóstico acima)`;
+      await carregarDiagnostico();
     } else {
       saida.textContent = erro.message;
     }
+  } finally {
+    botao.disabled = false;
+    botao.textContent = 'Importar vídeo';
   }
+}
+
+/* -------------------------------------------------------------- leitura ---- */
+
+async function carregarLeitura() {
+  const lista = $('#lista-transcricoes');
+  const vazio = $('#vazio-transcricoes');
+  if (!lista) return;
+
+  try {
+    const pagina = await api('/api/biblioteca?limite=100');
+    const comTranscricao = [];
+
+    for (const video of pagina.itens) {
+      try {
+        const transcricao = await api(`/api/biblioteca/${video.id}/transcricao`);
+        if (transcricao.estado === 'pronta') {
+          comTranscricao.push({ video, transcricao });
+        }
+      } catch {
+        // Vídeo sem transcrição não entra na tela de leitura — e isso é normal.
+      }
+    }
+
+    estado.transcricoes = comTranscricao;
+    lista.replaceChildren(...comTranscricao.map(linhaDeLeitura));
+    vazio.hidden = comTranscricao.length > 0;
+    $('#contador-transcricoes').textContent =
+      `${comTranscricao.length} ${comTranscricao.length === 1 ? 'transcrição' : 'transcrições'}`;
+  } catch (erro) {
+    vazio.hidden = false;
+    vazio.querySelector('.vazio-titulo').textContent = 'Não foi possível carregar';
+    vazio.querySelector('.vazio-texto').textContent = erro.message;
+  }
+}
+
+function linhaDeLeitura({ video, transcricao }) {
+  const botao = document.createElement('button');
+  botao.type = 'button';
+  botao.className = 'linha-leitura';
+  botao.dataset.id = video.id;
+
+  const titulo = document.createElement('span');
+  titulo.className = 'linha-leitura-titulo';
+  titulo.textContent = video.titulo;
+
+  const meta = document.createElement('span');
+  meta.className = 'linha-leitura-meta';
+  const origem = transcricao.origem === 'manual' ? 'legenda manual' : 'legenda automática';
+  meta.textContent = `${video.canalNome ?? 'canal desconhecido'} · ${origem} · ${transcricao.segmentos.length} trechos`;
+
+  botao.append(titulo, meta);
+  botao.addEventListener('click', () => abrirLeitura(video.id));
+  return botao;
+}
+
+async function abrirLeitura(id) {
+  const entrada = estado.transcricoes.find((t) => t.video.id === id);
+  if (!entrada) return;
+
+  estado.leituraAberta = id;
+  const { video, transcricao } = entrada;
+
+  $('#leitor-titulo').textContent = video.titulo;
+  const origem = transcricao.origem === 'manual' ? 'legenda manual' : 'legenda automática';
+  $('#leitor-meta').textContent =
+    `${video.canalNome ?? 'canal desconhecido'} · ${origem} · idioma ${transcricao.idioma}` +
+    (video.duracaoSegundos ? ` · ${formatarDuracao(video.duracaoSegundos)}` : '');
+
+  const lista = $('#segmentos-transcricao');
+  lista.replaceChildren(
+    ...transcricao.segmentos.map((segmento) => {
+      const item = document.createElement('li');
+      item.className = 'segmento';
+
+      const tempo = document.createElement('a');
+      tempo.className = 'segmento-tempo';
+      tempo.textContent = formatarTempo(segmento.inicioMs);
+      tempo.href = `https://www.youtube.com/watch?v=${video.youtubeId}&t=${Math.floor(segmento.inicioMs / 1000)}s`;
+      tempo.target = '_blank';
+      tempo.rel = 'noopener';
+
+      const texto = document.createElement('span');
+      texto.className = 'segmento-texto';
+      texto.textContent = segmento.texto;
+
+      item.append(tempo, texto);
+      return item;
+    }),
+  );
+
+  $('#leitor-transcricao').hidden = false;
+  $('#leitor-transcricao').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function fecharLeitura() {
+  estado.leituraAberta = null;
+  $('#leitor-transcricao').hidden = true;
 }
 
 /* -------------------------------------------------------- configurações ---- */
@@ -286,7 +434,8 @@ function ligarEventos() {
     temporizador = setTimeout(carregarBiblioteca, 180);
   });
 
-  $('#formulario-importacao').addEventListener('submit', validarUrl);
+  $('#formulario-importacao').addEventListener('submit', importarVideo);
+  $('#fechar-leitor').addEventListener('click', fecharLeitura);
   window.addEventListener('hashchange', () => mostrarTela(telaDaUrl()));
 }
 
@@ -295,7 +444,7 @@ async function iniciar() {
   mostrarTela(telaDaUrl());
 
   await verificarMotor();
-  await Promise.all([carregarBiblioteca(), carregarConfiguracoes()]);
+  await Promise.all([carregarBiblioteca(), carregarConfiguracoes(), carregarDiagnostico()]);
 
   // Atividade global discreta: o status do motor se atualiza sem recarregar a tela.
   setInterval(verificarMotor, 15000);

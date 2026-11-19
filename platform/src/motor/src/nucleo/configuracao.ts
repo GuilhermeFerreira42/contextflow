@@ -18,6 +18,8 @@ export interface ConfigMotor {
   pastaDados: string;
   /** Pasta pública servida pela interface. */
   pastaInterface: string;
+  /** Idiomas de legenda em ordem de preferência (BCP-47). */
+  idiomasLegenda: string[];
   ambiente: 'desenvolvimento' | 'teste' | 'producao';
 }
 
@@ -61,11 +63,21 @@ export function carregarConfig(env: NodeJS.ProcessEnv = process.env): ConfigMoto
     throw new Error(`CONTEXTFLOW_PORTA inválida: ${env.CONTEXTFLOW_PORTA}`);
   }
 
+  const idiomasLegenda = (
+    env.CONTEXTFLOW_IDIOMAS ??
+    env.CONTEXTFLOW_IDIOMAS_LEGENDA ??
+    'pt-BR,pt,en'
+  )
+    .split(',')
+    .map((i) => i.trim())
+    .filter((i) => i.length > 0);
+
   return {
     porta,
     host: env.CONTEXTFLOW_HOST ?? '127.0.0.1',
     pastaDados: env.CONTEXTFLOW_DADOS ?? pastaDadosPadrao(),
     pastaInterface: env.CONTEXTFLOW_INTERFACE ?? pastaInterfacePadrao(),
+    idiomasLegenda: idiomasLegenda.length > 0 ? idiomasLegenda : ['pt-BR', 'pt', 'en'],
     ambiente,
   };
 }

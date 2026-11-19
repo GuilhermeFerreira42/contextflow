@@ -5,9 +5,11 @@
 
 ## Onde estamos
 
-- **Estágio:** **F2 concluída tecnicamente** (persistência real + migrações + testes).
-  **F1 homologada pelo proprietário** (preview verificado em 19/11).
-  **Homologação humana da F2: pendente.**
+- **Estágio:** **F3 concluída tecnicamente** (ingestão real com yt-dlp,
+  transcrições segmentadas, leitura com tempo). **F1 e F2 homologadas** pelo
+  proprietário em 19/11/2025.
+  **Pendente da F3:** teste manual contra o YouTube — o sandbox desta sessão
+  bloqueia o domínio (TLS encerrado). Roteiro pronto para o proprietário.
 - **Repositório:** `contextflow2/` (Git próprio, branch `main`), independente do
   `contextflow/` original, que permanece **intacto e somente leitura**.
 - **Pasta operacional:** `/home/user/Continuidade de Projeto/` (fora do Git).
@@ -34,7 +36,17 @@
 | **F2** — migração idempotente | ✅ segunda abertura não reaplica | `testes/unidade/migracoes.test.ts` |
 | **F2** — banco corrompido falha sem apagar arquivo | ✅ | `testes/integracao/persistencia.test.ts` |
 | **F2** — nenhum segredo no arquivo do banco | ✅ varredura de `.db` e `-wal` | `persistencia.test.ts` |
-| Homologação humana da F2 | ⏳ pendente | — |
+| **Homologação humana da F2** | ✅ **homologada em 19/11/2025** | Windows/PowerShell: `npm run dev`, importação de URL, item presente na Biblioteca após F5; banco em `%APPDATA%\ContextFlow\` |
+| **F3** — normalização de legenda VTT/JSON3 | ✅ 15/15 | `testes/unidade/legendas.test.ts` |
+| **F3** — tradução de erro do yt-dlp | ✅ 10/10 (inclui regressão do TLS) | `testes/unidade/ytdlp.test.ts` |
+| **F3** — regra de ingestão com dublê | ✅ 14/14 | `testes/integracao/ingestao.test.ts` |
+| **F3** — rotas HTTP (200/409/422/502/503/504) | ✅ 11/11 | `testes/integracao/rotas-ingestao.test.ts` |
+| **F3** — processo real: binário falso, timeout, injeção | ✅ 10/10 | `testes/integracao/ytdlp-processo.test.ts` + `ytdlp-fake-binario.test.ts` |
+| **F3** — suíte completa | ✅ **122/122** | `npm test` |
+| **F3** — E2E em navegador real | ✅ **17/17** | `npm run test:e2e` |
+| **F3** — teste real contra o YouTube | ❌ **não executado aqui** | sandbox bloqueia o domínio: `TLS/SSL connection has been closed` |
+| **F3** — homologação humana | ⏳ pendente | roteiro em `docs/roteiro-teste-f3.md` |
+| Verificação em **Windows** (execução) | ✅ **executado pelo proprietário** | `npm run dev` no PowerShell, porta 4780, log `persistência pronta` |
 | Projeto original alterado | ❌ não | `git status` limpo em `contextflow/` |
 
 ## Decisões aprovadas
