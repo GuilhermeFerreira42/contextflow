@@ -9,8 +9,8 @@ globais permanecem nos documentos canônicos.
 | **E0 — Investigação** | decisão registrada de migração/reuso, riscos, base e versões | ✅ concluída em nível suficiente (ver `02`) |
 | **F1 — Esqueleto modular** | motor Node+TS sobe localmente, serve a interface, contratos e scripts reproduzíveis | ✅ concluída + homologada |
 | **F2 — Persistência e migração** | biblioteca persiste vídeo e conteúdo; migrações versionadas | ✅ concluída + **homologada** (banco decidido por medição) |
-| **F3 — Ingestão/legendas** | metadados reais, legendas manual/auto segmentadas por tempo | 🟨 **concluída tecnicamente** (`7a215cc`); homologação depende do teste real do YouTube na máquina do proprietário. **Playlist ficou para a F4.** |
-| **F4 — Trabalhos e recuperação** | fila persistente, estados, cancelamento, falhas, reexecução controlada | F3; falhas e reinício testados |
+| **F3 — Ingestão/legendas** | metadados reais, legendas manual/auto segmentadas por tempo | 🟨 **validada no Windows/YouTube real** (`c6b7db5`); aceite humano pendente, ressalvas no estado atual. **Playlist ficou para a F4.** |
+| **F4 — Trabalhos e recuperação** | fila persistente, estados, cancelamento, falhas, reexecução controlada | **SPEC escrita, não implementada**; depende de revisão/autorização e aceite F3 |
 | **F5 — Biblioteca** | grid denso/virtualizado, filtros/pesquisa, seleção, agrupamento, ações em lote | F2–4; estabilidade com volume representativo |
 | **F6 — IA para resumos** | provedores/configuração, resumos persistidos, custos/erros, múltiplas seleções | F2–5; chaves seguras e casos de falha |
 | **F7 — Leitura avançada** | resumos/transcrições/ambos, expansão, leitor completo, retorno sem perda de estado | F5–6; textos longos |
@@ -46,7 +46,10 @@ Linux **ou limitação declarada**; nenhum defeito crítico conhecido impedindo 
 migração protegida; documentação de uso/execução; **aceite humano explícito**.
 Chat da V2 não condiciona o aceite da V1.
 
-## Limitações conhecidas do ambiente de desenvolvimento atual
+## Limitações históricas do ambiente de desenvolvimento original
+
+O registro abaixo descreve o ambiente anterior. A retomada de 19/11/2026 foi
+executada no Windows com YouTube real; resultados e ressalvas em `estado-atual.md`.
 
 - O ambiente desta sessão é **Linux**. A verificação em **Windows** não pode ser executada
   aqui: ela será registrada como **não executada**, com roteiro de verificação, até que

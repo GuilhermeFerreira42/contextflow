@@ -1,7 +1,8 @@
 # ContextFlow V1 — entrada única para agente executor
 
-**Status**: V1 em implementação. **F1 e F2 homologadas**; **F3 concluída
-tecnicamente** (aguarda teste real do YouTube). Base documental: pacote
+**Status**: V1 em implementação. **F1 e F2 homologadas**; **F3 validada no Windows
+com YouTube real** (19/11/2026; aceite humano e ressalvas no estado atual).
+**F4 somente especificada, sem implementação.** Base documental: pacote
 `ContextFlow_Pacote_Execucao_V1` (2026-11-18). Estado vivo em
 `docs/estado-atual.md`.
 
@@ -48,7 +49,7 @@ Continuidade de Projeto/  → materiais operacionais FORA do Git
    pendente e como provar que está pronto.
 
 As SPECs de cada fatia estão em `docs/specs/` (`f1-esqueleto.md`,
-`f2-persistencia.md`, `f3-ingestao.md`). Leia só a que interessa à sua fatia.
+`f2-persistencia.md`, `f3-ingestao.md`, `f4-trabalhos.md`). Leia só a que interessa à sua fatia.
 
 ## Regra de execução
 

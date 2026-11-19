@@ -20,6 +20,14 @@
 
 ## Status de execução (atualizado a cada fatia)
 
+Atualização de 19/11/2026, commit F3 `c6b7db5`: **A1 e A3 aprovados com vídeos
+reais; A2 aprovado com en-orig explicitamente configurado**, após HTTP 429 da
+tradução pt. A7 repetido com reinício real e comparação completa. **A15: suíte
+Windows executada** (120 pass, 0 fail, 6 skips), E2E 17/17, build/fumaça OK;
+regressão Linux desta sessão não executada. Aceite humano da F3 pendente.
+Detalhes, URLs e evidências em `estado-atual.md`. A tabela abaixo preserva a
+situação da entrega F3 original, anterior a essa validação.
+
 | # | Status | Evidência |
 |---|---|---|
 | A1 (legenda manual) | 🟨 **verificado tecnicamente; prova real pendente** | `testes/integracao/ingestao.test.ts` (dublê) + `rotas-ingestao.test.ts`; falta importar um vídeo real |

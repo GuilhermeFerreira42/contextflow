@@ -1,5 +1,12 @@
 # Handoff — transferência do ContextFlow V1 para o Codex
 
+> **Atualização de 19/11/2026:** este é o handoff original, já executado nesta
+> máquina. F3 corrigida em `c6b7db5`: 120 testes aprovados, 6 skips Windows,
+> 17 E2E, build e fumaça OK; três vídeos reais importados. HTTP 429 na tradução
+> automática pt, repetida com en-orig; privado não executado. F4 agora tem SPEC
+> (`docs/specs/f4-trabalhos.md`) e nenhuma implementação. Para retomar, vale
+> `docs/estado-atual.md`, que registra evidências, ressalvas e próximos gates.
+
 > **Para o proprietário:** este arquivo é a mensagem de onboarding. Copie a
 > seção "Mensagem para colar" e entregue ao Codex junto do repositório.
 > **Para o Codex:** leia este arquivo inteiro antes de tocar em qualquer coisa.
