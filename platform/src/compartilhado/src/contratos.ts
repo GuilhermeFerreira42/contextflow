@@ -43,6 +43,7 @@ export interface Video {
   atualizadoEm: string; // ISO-8601
   /** F5: IDs das coleções às quais o vídeo pertence. */
   colecaoIds?: string[];
+  playlistIds?: string[];
   /** F5: atalho para UI evitar join com tabela resumos. */
   temResumo?: boolean;
 }

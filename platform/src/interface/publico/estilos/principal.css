@@ -967,3 +967,29 @@ body {
 .tabela-envoltorio::-webkit-scrollbar-thumb:hover {
   background: var(--grafite-500);
 }
+
+/* Biblioteca: altura constante mantém a posição das linhas recicladas. */
+.biblioteca-viewport { height: min(58vh, 720px); min-height: 250px; overflow: auto; position: relative; }
+.biblioteca-viewport table { table-layout: fixed; width: 100%; min-width: 780px; }
+.biblioteca-viewport thead { position: sticky; top: 0; z-index: 2; background: var(--grafite-850); }
+.biblioteca-viewport thead th:nth-child(1) { width: 38px; }
+.biblioteca-viewport thead th:nth-child(2) { width: 36%; }
+.biblioteca-viewport thead th:nth-child(3) { width: 20%; }
+.biblioteca-viewport thead th:nth-child(4) { width: 80px; }
+.biblioteca-viewport thead th:nth-child(5) { width: 100px; }
+.biblioteca-viewport thead th:nth-child(6) { width: 100px; }
+.biblioteca-viewport thead th:nth-child(7) { width: 80px; }
+.biblioteca-viewport th button { border: 0; background: none; color: inherit; font: inherit; cursor: pointer; padding: 4px 0; }
+.biblioteca-viewport tbody tr[data-id] { height: 48px; }
+.biblioteca-viewport tbody tr[data-id] td { height: 48px; padding: 5px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.biblioteca-viewport .titulo-video { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.biblioteca-viewport .celula-video { min-width: 0; }
+.biblioteca-viewport .miniatura { flex: none; width: 64px; height: 36px; object-fit: cover; }
+.biblioteca-viewport tr[data-espacador] td { padding: 0; border: 0; line-height: 0; }
+#acoes-biblioteca { margin-bottom: 8px; }
+#sentinela-biblioteca { height: 1px; }
+dialog { max-width: min(540px,90vw); padding: 24px; color: var(--texto); background: var(--grafite-850); border: 1px solid var(--borda); border-radius: var(--raio); }
+dialog::backdrop { background: rgb(0 0 0 / 65%); }
+dialog h2 { margin-top: 0; font-size: 18px; color: var(--texto-forte); }
+dialog .barra-ferramentas { margin-top: 18px; margin-bottom: 0; }
+#resultado-biblioteca { min-height: 1.4em; }

@@ -2,6 +2,32 @@
 
 **Status:** rascunho para revisão. Não implementada.
 
+### Retomada de 20/11/2026 — diferenças confirmadas e correção autorizada
+
+O código de entrada é `d3b42d1`, não o HEAD antigo indicado no estado. Backend
+parcial e estilos existem; a virtualização/controles ainda não estão ligados.
+Três regressões foram reproduzidas: cursor por título retornou apenas 3 de 8
+vídeos; remover apenas marcou erro; reimportar não criou trabalho. A suíte antiga
+passa, mas não cobria esses cenários. A continuidade de implementação da V1 já
+foi autorizada pelo proprietário; corrigir esses contratos antes de ligar a UI.
+
+- Preservar migração 003 já commitada. Se necessário corrigir/backfill dos campos
+  derivados, usar migração append-only, sem reescrever histórico aplicado.
+- `colecao_videos` é a fonte de verdade dos vínculos e `resumos` é a fonte do badge.
+  Os campos denormalizados são somente projeções mantidas pelo banco; ingestão
+  não pode sobrescrevê-los com cópias antigas. Filtro por coleção usa vínculo exato,
+  não substring de JSON. SQL permanece na persistência/repositórios.
+- Cursor deve obedecer a coluna/direção selecionada e desempate estável, inclusive
+  valores nulos. A resposta inclui total filtrado, não apenas total da biblioteca.
+- Reimportar reaproveita fila F4 com grupo/lote e chave de requisição; preservar
+  transcrição pronta, retomar pendentes/falhas. Remover executa cascade real e
+  cancela importações ativas daquele vídeo para impedir reaparecimento tardio.
+- Seleção é por IDs; ações usam snapshot dos IDs confirmados, incluindo os que
+  ficaram ocultos ao filtrar. Remoção exige confirmação também para lote pequeno.
+- Virtualização limita linhas reais na viewport; paginação por cursor é separada
+  da reciclagem do DOM. Medir 5.000 itens nesta máquina; alvos de 60 fps/200 ms são
+  propostas da SPEC, não resultados executados ou limites de produto homologados.
+
 ## Objetivo
 
 A Biblioteca deixa de desenhar até 100 itens de forma ingênua e passa a suportar **milhares de vídeos** com rolagem fluida, filtros combinados, seleção múltipla e ações em lote — tudo sem bloquear a UI e com persistência real validada na F2/F4.

@@ -3,7 +3,7 @@
  * Ela existe para validar o contrato — será substituída na F2 pela persistente.
  */
 import type { IdVideo, Video } from '@contextflow/compartilhado';
-import type { FiltroBiblioteca, PaginaBiblioteca, RepositorioBiblioteca } from './repositorio.ts';
+import { compararVideos, type FiltroBiblioteca, type PaginaBiblioteca, type RepositorioBiblioteca } from './repositorio.ts';
 
 export class RepositorioBibliotecaMemoria implements RepositorioBiblioteca {
   private porIdMapa = new Map<IdVideo, Video>();
@@ -44,23 +44,9 @@ export class RepositorioBibliotecaMemoria implements RepositorioBiblioteca {
         return alvo.includes(filtro.busca.toLowerCase());
       })
       .filter((v) => (!filtro.colecaoId || (v.colecaoIds ?? []).includes(filtro.colecaoId)))
-      .filter((v) => (filtro.temResumo === undefined || v.temResumo === filtro.temResumo))
-      // Ordenação estável: criadoEm desc, id como desempate. Cursor depende disso.
-      .sort((a, b) => {
-        if (filtro.ordenacao) {
-          const dir = filtro.ordenacaoDirecao === 'asc' ? 1 : -1;
-          let cmp = 0;
-          switch (filtro.ordenacao) {
-            case 'titulo': cmp = a.titulo.localeCompare(b.titulo); break;
-            case 'canal': cmp = (a.canalNome ?? '').localeCompare(b.canalNome ?? ''); break;
-            case 'duracao': cmp = (a.duracaoSegundos ?? 0) - (b.duracaoSegundos ?? 0); break;
-            case 'estado': cmp = a.estado.localeCompare(b.estado); break;
-            default: cmp = a.criadoEm === b.criadoEm ? a.id.localeCompare(b.id) : a.criadoEm < b.criadoEm ? 1 : -1;
-          }
-          return cmp * dir;
-        }
-        return a.criadoEm === b.criadoEm ? a.id.localeCompare(b.id) : a.criadoEm < b.criadoEm ? 1 : -1;
-      });
+      .filter((v) => (!filtro.playlistId || (v.playlistIds ?? []).includes(filtro.playlistId)))
+      .filter((v) => (filtro.temResumo === undefined || Boolean(v.temResumo) === filtro.temResumo))
+      .sort((a,b) => compararVideos(a,b,filtro));
 
     let inicio = 0;
     if (cursor) {
@@ -72,8 +58,10 @@ export class RepositorioBibliotecaMemoria implements RepositorioBiblioteca {
     const itens = todos.slice(inicio, inicio + limite);
     const ultimo = itens.at(-1);
     const temMais = inicio + limite < todos.length;
-    return { itens, proximoCursor: temMais && ultimo ? ultimo.id : null };
+    return { itens, total: todos.length, proximoCursor: temMais && ultimo ? ultimo.id : null };
   }
+
+  async remover(id: IdVideo): Promise<void> { this.porIdMapa.delete(id); }
 
   async contagem(): Promise<number> {
     return this.porIdMapa.size;

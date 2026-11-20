@@ -30,6 +30,12 @@ const terminais = new Set(['concluido', 'falhou', 'cancelado']);
 export class RepositorioTrabalhos {
     readonly banco: Banco;
     constructor(banco: Banco) { this.banco = banco; }
+    tituloPlaylist(id: string, titulo: string): void {
+        this.banco.db.prepare("UPDATE trabalhos SET escopo=json_set(escopo,'$.titulo',?) WHERE id=?").run(titulo,id);
+    }
+    ativosDoVideo(youtubeId: string): string[] {
+        return (this.banco.db.prepare("SELECT id FROM trabalhos WHERE youtube_id=? AND estado IN ('na-fila','executando')").all(youtubeId) as unknown as {id:string}[]).map(r => r.id);
+    }
     ativos(): number {
         return Number(this.banco.db.prepare("SELECT COUNT(*) n FROM trabalhos WHERE pai_id IS NULL AND estado IN ('na-fila','executando')").get()!.n);
     }

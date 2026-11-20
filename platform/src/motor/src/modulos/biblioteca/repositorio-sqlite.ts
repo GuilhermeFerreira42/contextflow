@@ -7,7 +7,7 @@
 import type { IdVideo, Video } from '@contextflow/compartilhado';
 import { ErroDominio } from '../../nucleo/erros.ts';
 import type { Driver } from '../../persistencia/banco.ts';
-import type { FiltroBiblioteca, PaginaBiblioteca, RepositorioBiblioteca } from './repositorio.ts';
+import { ordemBiblioteca, type FiltroBiblioteca, type PaginaBiblioteca, type RepositorioBiblioteca } from './repositorio.ts';
 
 interface LinhaVideo {
   id: string;
@@ -62,7 +62,7 @@ export class RepositorioBibliotecaSqlite implements RepositorioBiblioteca {
     try {
       this.db
         .prepare(
-          `INSERT INTO videos (${COLUNAS}) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          `INSERT INTO videos (id,youtube_id,titulo,canal_id,canal_nome,duracao_segundos,url,miniatura_url,publicado_em,estado,criado_em,atualizado_em) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
         )
         .run(
           video.id,
@@ -77,8 +77,6 @@ export class RepositorioBibliotecaSqlite implements RepositorioBiblioteca {
           video.estado,
           video.criadoEm,
           video.atualizadoEm,
-          video.temResumo ? 1 : 0,
-          JSON.stringify(video.colecaoIds ?? []),
         );
     } catch (erro) {
       const mensagem = erro instanceof Error ? erro.message : String(erro);
@@ -101,8 +99,7 @@ export class RepositorioBibliotecaSqlite implements RepositorioBiblioteca {
     const resultado = this.db
       .prepare(
         `UPDATE videos SET youtube_id=?, titulo=?, canal_id=?, canal_nome=?, duracao_segundos=?,
-          url=?, miniatura_url=?, publicado_em=?, estado=?, atualizado_em=?,
-          tem_resumo=?, colecao_ids=? WHERE id=?`,
+          url=?, miniatura_url=?, publicado_em=?, estado=?, atualizado_em=? WHERE id=?`,
       )
       .run(
         video.youtubeId,
@@ -115,8 +112,6 @@ export class RepositorioBibliotecaSqlite implements RepositorioBiblioteca {
         video.publicadoEm,
         video.estado,
         video.atualizadoEm,
-        video.temResumo ? 1 : 0,
-        JSON.stringify(video.colecaoIds ?? []),
         video.id,
       );
     if (resultado.changes === 0) throw new ErroDominio('nao_encontrado', `Vídeo inexistente: ${video.id}`, 404);
@@ -162,45 +157,41 @@ export class RepositorioBibliotecaSqlite implements RepositorioBiblioteca {
       params.push(alvo, alvo);
     }
     if (filtro.colecaoId) {
-      condicoes.push("colecao_ids LIKE ?");
-      params.push(`%${filtro.colecaoId}%`);
+      condicoes.push('EXISTS(SELECT 1 FROM colecao_videos cv WHERE cv.video_id=videos.id AND cv.colecao_id=?)');
+      params.push(filtro.colecaoId);
+    }
+    if (filtro.playlistId) {
+      condicoes.push(`EXISTS(SELECT 1 FROM trabalhos filho JOIN trabalhos pai ON filho.pai_id=pai.id
+        WHERE filho.youtube_id=videos.youtube_id AND pai.tipo='importar-playlist' AND json_extract(pai.escopo,'$.url')=?)`);
+      params.push(`https://www.youtube.com/playlist?list=${filtro.playlistId}`);
     }
     if (filtro.temResumo !== undefined) {
       condicoes.push('tem_resumo = ?');
       params.push(filtro.temResumo ? 1 : 0);
     }
 
+    const total = Number(this.db.prepare(`SELECT COUNT(*) n FROM videos ${condicoes.length ? 'WHERE '+condicoes.join(' AND ') : ''}`).get(...params as never[])!.n);
+    const { campo, direcao } = ordemBiblioteca(filtro);
+    const expressoes = { criado_em: 'criado_em', titulo: 'titulo COLLATE NOCASE',
+      canal: "COALESCE(canal_nome,'') COLLATE NOCASE", duracao: 'COALESCE(duracao_segundos,-1)', estado: 'estado COLLATE NOCASE' };
+    const expressao = expressoes[campo];
+    if (!expressao) throw new ErroDominio('validacao', 'Ordenação inválida.', 422);
+    const direcaoSql = direcao === 'asc' ? 'ASC' : 'DESC';
+    const comparador = direcao === 'asc' ? '>' : '<';
     if (cursor) {
-      const referencia = this.db
-        .prepare('SELECT criado_em, id FROM videos WHERE id = ?')
-        .get(cursor) as unknown as { criado_em: string; id: string } | undefined;
-      if (!referencia) throw new ErroDominio('cursor_invalido', `Cursor inválido: ${cursor}`, 422);
-      condicoes.push('(criado_em < ? OR (criado_em = ? AND id > ?))');
-      params.push(referencia.criado_em, referencia.criado_em, referencia.id);
-    }
-
-    const onde = condicoes.length ? `WHERE ${condicoes.join(' AND ')}` : '';
-
-    let ordenacao = 'criado_em DESC, id ASC';
-    if (filtro.ordenacao) {
-      const dir = filtro.ordenacaoDirecao === 'asc' ? 'ASC' : 'DESC';
-      switch (filtro.ordenacao) {
-        case 'titulo':
-          ordenacao = `titulo ${dir}, criado_em DESC, id ASC`;
-          break;
-        case 'canal':
-          ordenacao = `canal_nome ${dir}, criado_em DESC, id ASC`;
-          break;
-        case 'duracao':
-          ordenacao = `duracao_segundos ${dir}, criado_em DESC, id ASC`;
-          break;
-        case 'estado':
-          ordenacao = `estado ${dir}, criado_em DESC, id ASC`;
-          break;
-        default:
-          ordenacao = 'criado_em DESC, id ASC';
+      const referencia = this.db.prepare(`SELECT id,criado_em,${expressao} AS valor FROM videos WHERE id=?`).get(cursor) as
+        {id:string;criado_em:string;valor:string|number}|undefined;
+      if (!referencia) throw new ErroDominio('cursor_invalido', 'Cursor inválido. Recarregue a consulta.', 422);
+      if (campo === 'criado_em') {
+        condicoes.push(`(criado_em ${comparador} ? OR (criado_em=? AND id>?))`);
+        params.push(referencia.criado_em,referencia.criado_em,referencia.id);
+      } else {
+        condicoes.push(`((${expressao}) ${comparador} ? OR ((${expressao})=? AND (criado_em<? OR (criado_em=? AND id>?))))`);
+        params.push(referencia.valor,referencia.valor,referencia.criado_em,referencia.criado_em,referencia.id);
       }
     }
+    const onde = condicoes.length ? `WHERE ${condicoes.join(' AND ')}` : '';
+    const ordenacao = `${expressao} ${direcaoSql}, ${campo === 'criado_em' ? '' : 'criado_em DESC, '}id ASC`;
 
     // Pede limite+1 para saber se existe próxima página sem consulta extra.
     const linhas = this.db
@@ -209,8 +200,10 @@ export class RepositorioBibliotecaSqlite implements RepositorioBiblioteca {
 
     const temMais = linhas.length > limite;
     const itens = linhas.slice(0, limite).map(paraVideo);
-    return { itens, proximoCursor: temMais ? (itens.at(-1)?.id ?? null) : null };
+    return { itens, total, proximoCursor: temMais ? (itens.at(-1)?.id ?? null) : null };
   }
+
+  async remover(id: IdVideo): Promise<void> { this.db.prepare('DELETE FROM videos WHERE id=?').run(id); }
 
   async contagem(): Promise<number> {
     const linha = this.db.prepare('SELECT COUNT(*) AS n FROM videos').get() as unknown as { n: number };

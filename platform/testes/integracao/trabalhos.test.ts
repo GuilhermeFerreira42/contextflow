@@ -357,14 +357,14 @@ test('migração F3 → F4 → F3 → F4 → F5 preserva dados existentes e hist
           associacoes: banco.db.prepare('SELECT * FROM colecao_videos').all(),
         });
         const antes = conteudo();
-        assert.equal(banco.migrar(), 2); // F4 + F5
+        assert.equal(banco.migrar(), MIGRACOES.length - 1); // migrações posteriores à F3
         assert.equal(banco.migrar(), 0);
         assert.deepEqual(conteudo(), antes);
         banco.reverterPara(1);
         assert.equal(banco.versaoAtual(), 1);
         assert.deepEqual(conteudo(), antes);
         assert.equal(banco.db.prepare('SELECT titulo FROM colecoes').get()!.titulo, 'Coleção existente');
-        assert.equal(banco.migrar(), 2); // F4 + F5
+        assert.equal(banco.migrar(), MIGRACOES.length - 1); // migrações posteriores à F3
         assert.deepEqual(conteudo(), antes);
         assert.equal(banco.db.prepare('SELECT COUNT(*) n FROM trabalhos').get()!.n, 0);
     }
