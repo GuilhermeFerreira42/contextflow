@@ -63,7 +63,7 @@ export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}
   // Persistência: aberta por iniciarPersistencia(), para o teste controlar o ciclo.
   const banco = Banco.abrir({ arquivo: Banco.arquivoPadrao(config.pastaDados) });
   const repositorioBiblioteca = new RepositorioBibliotecaSqlite(banco.db);
-  const biblioteca = new ServicoBiblioteca(repositorioBiblioteca);
+  const biblioteca = new ServicoBiblioteca(repositorioBiblioteca, banco.db);
 
   const repositorioTranscricoes = new RepositorioTranscricoesSqlite(banco.db);
   const executorYtdlp =
@@ -127,6 +127,10 @@ export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}
         busca: consulta.get('busca') ?? undefined,
         estado: consulta.get('estado') ?? undefined,
         canalId: consulta.get('canalId') ?? undefined,
+        colecaoId: consulta.get('colecaoId') ?? undefined,
+        temResumo: consulta.get('temResumo') === '1' ? true : consulta.get('temResumo') === '0' ? false : undefined,
+        ordenacao: consulta.get('ordenacao') ?? undefined,
+        ordenacaoDirecao: consulta.get('ordenacaoDirecao') ?? undefined,
         cursor: consulta.get('cursor') ?? undefined,
         limite: consulta.get('limite') ?? undefined,
       });
@@ -135,6 +139,43 @@ export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}
     .obter('/api/biblioteca/:id', async ({ requisicao }) => {
       const id = requisicao.caminho.split('/').at(-1)!;
       return biblioteca.obter(id);
+    })
+    .postar('/api/biblioteca/lote', async ({ requisicao }) => {
+      const corpo = requisicao.corpo as { acao: import('@contextflow/compartilhado').AcaoLote; ids: string[]; colecaoId?: string } | undefined;
+      if (!corpo || !corpo.acao || !Array.isArray(corpo.ids) || corpo.ids.length === 0) {
+        throw new ErroValidacao('Informe acao e ids (array não vazio).');
+      }
+      if (!['reimportar', 'remover', 'colecao'].includes(corpo.acao)) {
+        throw new ErroValidacao('Ação inválida: reimportar, remover ou colecao.');
+      }
+      if (corpo.acao === 'colecao' && !corpo.colecaoId) {
+        throw new ErroValidacao('colecaoId obrigatório para ação "colecao".');
+      }
+      return biblioteca.acaoLote(corpo.acao, corpo.ids, corpo.colecaoId);
+    })
+    .obter('/api/colecoes', async () => {
+      return biblioteca.listarColecoes();
+    })
+    .postar('/api/colecoes', async ({ requisicao }) => {
+      const corpo = requisicao.corpo as { titulo?: unknown } | undefined;
+      if (!corpo || typeof corpo.titulo !== 'string' || corpo.titulo.trim().length === 0) {
+        throw new ErroValidacao('Título da coleção obrigatório.');
+      }
+      return biblioteca.criarColecao(corpo.titulo.trim());
+    })
+    .postar('/api/colecoes/:id/videos', async ({ requisicao }) => {
+      const id = requisicao.caminho.split('/')[3]!;
+      const corpo = requisicao.corpo as { videoIds?: unknown } | undefined;
+      if (!corpo || !Array.isArray(corpo.videoIds) || corpo.videoIds.length === 0) {
+        throw new ErroValidacao('Informe videoIds (array não vazio).');
+      }
+      return biblioteca.adicionarVideosColecao(id, corpo.videoIds as string[]);
+    })
+    .remover('/api/colecoes/:id/videos/:videoId', async ({ requisicao }) => {
+      const partes = requisicao.caminho.split('/');
+      const id = partes[3]!;
+      const videoId = partes[5]!;
+      return biblioteca.removerVideoColecao(id, videoId);
     })
     .obter('/api/configuracoes', () => preferenciasPadrao(config))
     .postar('/api/biblioteca', async ({ requisicao }) => {

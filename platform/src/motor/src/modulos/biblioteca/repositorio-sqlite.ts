@@ -22,6 +22,8 @@ interface LinhaVideo {
   estado: Video['estado'];
   criado_em: string;
   atualizado_em: string;
+  tem_resumo: number;
+  colecao_ids: string;
 }
 
 function paraVideo(linha: LinhaVideo): Video {
@@ -38,11 +40,14 @@ function paraVideo(linha: LinhaVideo): Video {
     estado: linha.estado,
     criadoEm: linha.criado_em,
     atualizadoEm: linha.atualizado_em,
+    temResumo: Boolean(linha.tem_resumo),
+    colecaoIds: linha.colecao_ids ? JSON.parse(linha.colecao_ids) : [],
   };
 }
 
 const COLUNAS = `id, youtube_id, titulo, canal_id, canal_nome, duracao_segundos, url,
-                 miniatura_url, publicado_em, estado, criado_em, atualizado_em`;
+                 miniatura_url, publicado_em, estado, criado_em, atualizado_em,
+                 tem_resumo, colecao_ids`;
 
 export class RepositorioBibliotecaSqlite implements RepositorioBiblioteca {
   private readonly db: Driver;
@@ -57,7 +62,7 @@ export class RepositorioBibliotecaSqlite implements RepositorioBiblioteca {
     try {
       this.db
         .prepare(
-          `INSERT INTO videos (${COLUNAS}) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+          `INSERT INTO videos (${COLUNAS}) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         )
         .run(
           video.id,
@@ -72,6 +77,8 @@ export class RepositorioBibliotecaSqlite implements RepositorioBiblioteca {
           video.estado,
           video.criadoEm,
           video.atualizadoEm,
+          video.temResumo ? 1 : 0,
+          JSON.stringify(video.colecaoIds ?? []),
         );
     } catch (erro) {
       const mensagem = erro instanceof Error ? erro.message : String(erro);
@@ -94,7 +101,8 @@ export class RepositorioBibliotecaSqlite implements RepositorioBiblioteca {
     const resultado = this.db
       .prepare(
         `UPDATE videos SET youtube_id=?, titulo=?, canal_id=?, canal_nome=?, duracao_segundos=?,
-         url=?, miniatura_url=?, publicado_em=?, estado=?, atualizado_em=? WHERE id=?`,
+          url=?, miniatura_url=?, publicado_em=?, estado=?, atualizado_em=?,
+          tem_resumo=?, colecao_ids=? WHERE id=?`,
       )
       .run(
         video.youtubeId,
@@ -107,6 +115,8 @@ export class RepositorioBibliotecaSqlite implements RepositorioBiblioteca {
         video.publicadoEm,
         video.estado,
         video.atualizadoEm,
+        video.temResumo ? 1 : 0,
+        JSON.stringify(video.colecaoIds ?? []),
         video.id,
       );
     if (resultado.changes === 0) throw new ErroDominio('nao_encontrado', `Vídeo inexistente: ${video.id}`, 404);
@@ -151,6 +161,14 @@ export class RepositorioBibliotecaSqlite implements RepositorioBiblioteca {
       const alvo = `%${filtro.busca}%`;
       params.push(alvo, alvo);
     }
+    if (filtro.colecaoId) {
+      condicoes.push("colecao_ids LIKE ?");
+      params.push(`%${filtro.colecaoId}%`);
+    }
+    if (filtro.temResumo !== undefined) {
+      condicoes.push('tem_resumo = ?');
+      params.push(filtro.temResumo ? 1 : 0);
+    }
 
     if (cursor) {
       const referencia = this.db
@@ -162,9 +180,31 @@ export class RepositorioBibliotecaSqlite implements RepositorioBiblioteca {
     }
 
     const onde = condicoes.length ? `WHERE ${condicoes.join(' AND ')}` : '';
+
+    let ordenacao = 'criado_em DESC, id ASC';
+    if (filtro.ordenacao) {
+      const dir = filtro.ordenacaoDirecao === 'asc' ? 'ASC' : 'DESC';
+      switch (filtro.ordenacao) {
+        case 'titulo':
+          ordenacao = `titulo ${dir}, criado_em DESC, id ASC`;
+          break;
+        case 'canal':
+          ordenacao = `canal_nome ${dir}, criado_em DESC, id ASC`;
+          break;
+        case 'duracao':
+          ordenacao = `duracao_segundos ${dir}, criado_em DESC, id ASC`;
+          break;
+        case 'estado':
+          ordenacao = `estado ${dir}, criado_em DESC, id ASC`;
+          break;
+        default:
+          ordenacao = 'criado_em DESC, id ASC';
+      }
+    }
+
     // Pede limite+1 para saber se existe próxima página sem consulta extra.
     const linhas = this.db
-      .prepare(`SELECT ${COLUNAS} FROM videos ${onde} ORDER BY criado_em DESC, id ASC LIMIT ?`)
+      .prepare(`SELECT ${COLUNAS} FROM videos ${onde} ORDER BY ${ordenacao} LIMIT ?`)
       .all(...(params as never[]), limite + 1) as unknown as LinhaVideo[];
 
     const temMais = linhas.length > limite;

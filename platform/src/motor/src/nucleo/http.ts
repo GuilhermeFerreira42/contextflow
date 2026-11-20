@@ -59,6 +59,10 @@ export class Roteador {
     return this.adicionar('POST', caminho, manipulador);
   }
 
+  remover(caminho: string, manipulador: Manipulador): this {
+    return this.adicionar('DELETE', caminho, manipulador);
+  }
+
   /** Casa `:param` com qualquer segmento e devolve os parâmetros capturados. */
   casar(metodo: string, caminho: string): { manipulador: Manipulador; params: Record<string, string> } | null {
     const partes = caminho.split('/').filter(Boolean);

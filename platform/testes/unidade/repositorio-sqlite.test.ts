@@ -25,6 +25,8 @@ function video(parcial: Partial<Video> & { id: string; youtubeId: string }): Vid
     estado: 'pronto',
     criadoEm: agora,
     atualizadoEm: agora,
+    colecaoIds: [],
+    temResumo: false,
     ...parcial,
   };
 }

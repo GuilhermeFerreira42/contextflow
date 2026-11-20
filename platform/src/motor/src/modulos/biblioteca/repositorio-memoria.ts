@@ -43,8 +43,24 @@ export class RepositorioBibliotecaMemoria implements RepositorioBiblioteca {
         const alvo = `${v.titulo} ${v.canalNome ?? ''}`.toLowerCase();
         return alvo.includes(filtro.busca.toLowerCase());
       })
+      .filter((v) => (!filtro.colecaoId || (v.colecaoIds ?? []).includes(filtro.colecaoId)))
+      .filter((v) => (filtro.temResumo === undefined || v.temResumo === filtro.temResumo))
       // Ordenação estável: criadoEm desc, id como desempate. Cursor depende disso.
-      .sort((a, b) => (a.criadoEm === b.criadoEm ? a.id.localeCompare(b.id) : a.criadoEm < b.criadoEm ? 1 : -1));
+      .sort((a, b) => {
+        if (filtro.ordenacao) {
+          const dir = filtro.ordenacaoDirecao === 'asc' ? 1 : -1;
+          let cmp = 0;
+          switch (filtro.ordenacao) {
+            case 'titulo': cmp = a.titulo.localeCompare(b.titulo); break;
+            case 'canal': cmp = (a.canalNome ?? '').localeCompare(b.canalNome ?? ''); break;
+            case 'duracao': cmp = (a.duracaoSegundos ?? 0) - (b.duracaoSegundos ?? 0); break;
+            case 'estado': cmp = a.estado.localeCompare(b.estado); break;
+            default: cmp = a.criadoEm === b.criadoEm ? a.id.localeCompare(b.id) : a.criadoEm < b.criadoEm ? 1 : -1;
+          }
+          return cmp * dir;
+        }
+        return a.criadoEm === b.criadoEm ? a.id.localeCompare(b.id) : a.criadoEm < b.criadoEm ? 1 : -1;
+      });
 
     let inicio = 0;
     if (cursor) {
