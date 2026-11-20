@@ -38,6 +38,7 @@
             <span class="status-texto">Conectando…</span>
           </div>
           <div class="versao" id="versao"></div>
+          <div class="versao" id="atividade-global" role="status"></div>
         </div>
       </aside>
 
@@ -121,6 +122,12 @@
           </header>
 
           <form class="formulario-importacao" id="formulario-importacao">
+            <label class="campo-url"><span>Importar</span>
+              <select id="tipo-importacao" aria-label="Tipo de importação">
+                <option value="importar-video">Vídeo</option>
+                <option value="importar-playlist">Playlist</option>
+              </select>
+            </label>
             <label class="campo-url">
               <span>URL do YouTube</span>
               <input type="url" id="url-video" name="url" placeholder="https://www.youtube.com/watch?v=…" required />
@@ -129,17 +136,27 @@
           </form>
           <p class="resultado-validacao" id="resultado-validacao" role="status" aria-live="polite"></p>
 
+          <details class="importar-lote">
+            <summary>Importar vários vídeos</summary>
+            <form id="formulario-lote">
+              <label class="campo-url"><span>Uma URL de vídeo por linha</span>
+                <textarea id="urls-lote" rows="4" required placeholder="https://www.youtube.com/watch?v=…"></textarea>
+              </label>
+              <button type="submit" class="botao-secundario">Adicionar à fila</button>
+            </form>
+          </details>
+
           <div class="diagnostico" id="diagnostico-ingestao" role="status" aria-live="polite">
             <span class="diagnostico-rotulo">Ingestão</span>
             <span class="diagnostico-texto" id="diagnostico-texto">Verificando…</span>
           </div>
 
-          <div class="aviso-fase">
-            <strong>F3 — ingestão real.</strong>
-            O yt-dlp busca título, canal, duração e a legenda com tempo. Se o vídeo
-            não tiver legenda, o estado fica explícito como "sem legenda" — nada é
-            inventado para fingir conclusão.
+          <div class="barra-ferramentas"><h2>Trabalhos</h2>
+            <span id="atividade-importacoes" role="status"></span>
           </div>
+          <p id="erro-trabalhos" role="status"></p>
+          <div id="lista-trabalhos" class="lista-trabalhos"></div>
+          <button id="mais-trabalhos" class="botao-secundario" type="button" hidden>Carregar mais</button>
         </section>
 
         <!-- Configurações -->

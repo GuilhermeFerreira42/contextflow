@@ -10,7 +10,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { Banco } from '../../src/motor/src/persistencia/banco.ts';
+import { Banco, MIGRACOES } from '../../src/motor/src/persistencia/banco.ts';
 import { RepositorioBibliotecaSqlite } from '../../src/motor/src/modulos/biblioteca/repositorio-sqlite.ts';
 
 const raiz = fileURLToPath(new URL('../..', import.meta.url));
@@ -50,7 +50,7 @@ test('dados sobrevivem a fechar e reabrir o banco (mesmo processo)', async () =>
   // Reabre do zero: nova conexão, novo estado em memória.
   const banco2 = Banco.abrir({ arquivo });
   try {
-    assert.equal(banco2.versaoAtual(), 1, 'schema não persistiu');
+    assert.equal(banco2.versaoAtual(), MIGRACOES.at(-1)!.versao, 'schema não persistiu');
     const repo2 = new RepositorioBibliotecaSqlite(banco2.db);
     assert.equal(await repo2.contagem(), 3);
     const lido = await repo2.porId('vid-1');
@@ -66,7 +66,7 @@ test('dados sobrevivem a outro PROCESSO (escrita e leitura separadas)', async ()
 
   // Processo 1: escreve e morre.
   const scriptEscrita = `
-    import { Banco } from ${JSON.stringify(pathToFileURL(join(raiz, 'src/motor/src/persistencia/banco.ts')).href)};
+    import { Banco, MIGRACOES } from ${JSON.stringify(pathToFileURL(join(raiz, 'src/motor/src/persistencia/banco.ts')).href)};
     import { RepositorioBibliotecaSqlite } from ${JSON.stringify(pathToFileURL(join(raiz, 'src/motor/src/modulos/biblioteca/repositorio-sqlite.ts')).href)};
     const banco = Banco.abrir({ arquivo: ${JSON.stringify(arquivo)} });
     banco.migrar();
@@ -87,7 +87,7 @@ test('dados sobrevivem a outro PROCESSO (escrita e leitura separadas)', async ()
   // Processo 2 (este): abre o arquivo e confere.
   const banco = Banco.abrir({ arquivo });
   try {
-    assert.equal(banco.versaoAtual(), 1);
+    assert.equal(banco.versaoAtual(), MIGRACOES.at(-1)!.versao);
     const repo = new RepositorioBibliotecaSqlite(banco.db);
     assert.equal(await repo.contagem(), 2, 'outro processo não viu os dados gravados');
     assert.equal((await repo.porId('vid-0'))?.titulo, video(0).titulo);

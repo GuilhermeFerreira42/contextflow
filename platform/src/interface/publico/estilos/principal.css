@@ -655,3 +655,17 @@ body {
 .segmento-texto {
   color: var(--texto);
 }
+
+.campo-url select, .campo-url textarea {
+  font: inherit; color: var(--texto); background: var(--grafite-900);
+  border: 1px solid var(--borda); border-radius: var(--raio); padding: 9px; width: 100%;
+}
+.campo-url textarea { resize: vertical; }
+.importar-lote { margin: 16px 0; max-width: 850px; }
+.importar-lote summary, .trabalho summary { cursor: pointer; padding: 8px 0; }
+.lista-trabalhos { display: grid; gap: 8px; }
+.trabalho { border: 1px solid var(--borda); border-radius: var(--raio); padding: 12px; background: var(--grafite-900); }
+.trabalho p { margin: 5px 0; color: var(--texto-fraco); font-size: 12px; }
+.trabalho progress { display: block; width: 100%; max-width: 400px; margin: 8px 0; accent-color: var(--azul-forte); }
+.trabalho .erro-trabalho, #erro-trabalhos { color: var(--aviso); }
+.trabalho .trabalho { margin-top: 8px; }

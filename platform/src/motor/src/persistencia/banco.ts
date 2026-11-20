@@ -7,6 +7,8 @@
 import { DatabaseSync } from 'node:sqlite';
 import { existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { MIGRACAO_TRABALHOS } from './migracao-trabalhos.ts';
 
 /**
  * Tipo mínimo do driver, para os repositórios não dependerem do pacote do Node.
@@ -110,7 +112,7 @@ const MIGRACAO_1: Migracao = {
   },
 };
 
-export const MIGRACOES: readonly Migracao[] = [MIGRACAO_1];
+export const MIGRACOES: readonly Migracao[] = [MIGRACAO_1, MIGRACAO_TRABALHOS];
 
 export interface OpcoesBanco {
   /** Caminho do arquivo. `:memory:` é aceito para testes. */
@@ -119,9 +121,11 @@ export interface OpcoesBanco {
 
 export class Banco {
   readonly db: Driver;
+  readonly #arquivo: string;
 
-  private constructor(db: Driver) {
+  private constructor(db: Driver, arquivo: string) {
     this.db = db;
+    this.#arquivo = arquivo;
   }
 
   static abrir(opcoes: OpcoesBanco): Banco {
@@ -138,7 +142,7 @@ export class Banco {
     db.exec('PRAGMA foreign_keys = ON');
     db.exec('PRAGMA busy_timeout = 5000');
 
-    return new Banco(db);
+    return new Banco(db, opcoes.arquivo);
   }
 
   /** Caminho padrão do banco dentro da pasta de dados. */
@@ -159,16 +163,27 @@ export class Banco {
     const atual = this.versaoAtual();
     const pendentes = [...migracoes].filter((m) => m.versao > atual).sort((a, b) => a.versao - b.versao);
 
+    // Snapshot consistente pelo próprio SQLite, incluindo o WAL, antes de alterar uma base existente.
+    // Se o backup falhar, não iniciar nenhuma migração. Banco novo/em memória não precisa de cópia.
+    if (atual > 0 && pendentes.length > 0 && this.#arquivo !== ':memory:') {
+      const pasta = join(dirname(this.#arquivo), 'backups');
+      mkdirSync(pasta, { recursive: true, mode: 0o700 });
+      const destino = join(pasta, `schema-${atual}-${randomUUID()}.db`);
+      this.db.prepare('VACUUM INTO ?').run(destino);
+    }
+
     let aplicadas = 0;
     for (const migracao of pendentes) {
       // Cada migração é atômica: schema + registro na mesma transação.
-      this.executarTransacao(() => {
+      const aplicada = this.executarTransacao(() => {
+        if (this.versaoAtual() >= migracao.versao) return false;
         migracao.aplicar(this.db);
         this.db
           .prepare('INSERT INTO _migracoes (versao, descricao, aplicada_em) VALUES (?, ?, ?)')
           .run(migracao.versao, migracao.descricao, new Date().toISOString());
+        return true;
       });
-      aplicadas++;
+      if (aplicada) aplicadas++;
     }
     return aplicadas;
   }
@@ -195,7 +210,7 @@ export class Banco {
 
   /** Transação explícita — o driver nativo não tem helper, então controlamos aqui. */
   executarTransacao<T>(fn: () => T): T {
-    this.db.exec('BEGIN');
+    this.db.exec('BEGIN IMMEDIATE');
     try {
       const resultado = fn();
       this.db.exec('COMMIT');

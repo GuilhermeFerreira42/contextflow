@@ -85,3 +85,10 @@ test('mensagem real de vídeo indisponível é traduzida sem erro genérico', ()
   assert.equal(erro.codigo, 'video_indisponivel');
   assert.equal(erro.message, 'Este vídeo não está mais disponível.');
 });
+
+test('HTTP 429 conserva código próprio para retry sem fingir ausência de legenda', () => {
+  const erro = traduzirErroYtdlp("ERROR: Unable to download video subtitles for 'pt': HTTP Error 429: Too Many Requests");
+  assert.equal(erro.codigo, 'limite_youtube');
+  assert.equal(erro.statusHttp, 503);
+  assert.match(erro.message, /Aguarde/);
+});

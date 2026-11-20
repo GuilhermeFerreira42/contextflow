@@ -26,6 +26,15 @@ export interface ContextoRequisicao {
 
 export type Manipulador = (ctx: ContextoRequisicao) => Promise<unknown> | unknown;
 
+export class ResultadoHttp {
+  dados: unknown;
+  status: number;
+  cabecalhos: Record<string, string>;
+  constructor(dados: unknown, status=200, cabecalhos: Record<string,string>={}) {
+    this.dados=dados; this.status=status; this.cabecalhos=cabecalhos;
+  }
+}
+
 interface Rota {
   metodo: Metodo;
   segmentos: string[];
@@ -127,7 +136,10 @@ export function criarServidorApi(roteador: Roteador, registrador: Registrador): 
           corpo: await lerCorpo(req),
         };
         const dados = await resultado.manipulador({ requisicao, registrador });
-        responder(res, 200, { ok: true, dados });
+        if (dados instanceof ResultadoHttp) {
+          for (const [nome, valor] of Object.entries(dados.cabecalhos)) res.setHeader(nome, valor);
+          responder(res, dados.status, { ok: true, dados: dados.dados });
+        } else responder(res, 200, { ok: true, dados });
         return;
       }
 

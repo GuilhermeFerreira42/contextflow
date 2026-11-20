@@ -151,14 +151,21 @@ mkdirSync(config.pastaDados, { recursive: true });
  * o teste ficaria intermitente. O dublê devolve um vídeo com legenda manual,
  * que é o caminho mais completo — metadados + segmentos com tempo.
  */
+const bloqueadosE2e = new Set();
+const falhasE2e = new Set();
 const executorE2e = {
   async disponivel() {
     return { disponivel: true, versao: '2026.10.26 (dublê E2E)', caminho: 'yt-dlp' };
   },
-  async inspecionar() {
+  async inspecionar(url, sinal) {
+    const id = new URL(url).searchParams.get('v');
+    while (bloqueadosE2e.has(id)) {
+      if (sinal?.aborted) throw new Error('Operação abortada pelo teste.');
+      await dormir(20);
+    }
     return {
       id: 'dQw4w9WgXcQ',
-      titulo: 'Vídeo de demonstração E2E',
+      titulo: id === 'dQw4w9WgXcQ' ? 'Vídeo de demonstração E2E' : `Vídeo E2E ${id}`,
       canalId: 'UCe2e',
       canalNome: 'Canal E2E',
       duracaoSegundos: 212,
@@ -168,7 +175,10 @@ const executorE2e = {
       legendasAutomaticas: [],
     };
   },
-  async baixarLegenda() {
+  async baixarLegenda(url) {
+    const id = new URL(url).searchParams.get('v');
+    if (id === 'bbbbbbbbbbb') return null;
+    if (falhasE2e.delete(id)) throw new Error('Falha temporária controlada.');
     return {
       idioma: 'pt',
       origem: 'manual',
@@ -178,6 +188,10 @@ const executorE2e = {
         { inicioMs: 5000, fimMs: 9000, texto: 'E aqui termina a demonstração.' },
       ],
     };
+  },
+  async descobrirPlaylist(_url, aoItem) {
+    aoItem({ youtubeId: 'aaaaaaaaaaa', titulo: 'Primeiro da playlist', posicao: 0 });
+    aoItem({ youtubeId: 'bbbbbbbbbbb', titulo: 'Sem legenda na playlist', posicao: 1 });
   },
 };
 
@@ -350,6 +364,46 @@ try {
   const arquivo = join(pastaEvidencia, 'interface-biblioteca.png');
   writeFileSync(arquivo, Buffer.from(captura.data, 'base64'));
   registrar('captura de evidência gerada', existsSync(arquivo), arquivo);
+  // F4: exercer ações pelo DOM, mantendo as respostas externas controladas.
+  await avaliar(`document.querySelector('[data-aba="importacoes"]').click()`);
+  bloqueadosE2e.add('aaaaaaaaaaa');
+  await avaliar(`document.querySelector('#url-video').value='https://youtu.be/aaaaaaaaaaa';document.querySelector('#formulario-importacao').requestSubmit()`);
+  const aceitouFila = await esperar(`document.querySelector('#resultado-validacao').textContent.includes('Adicionado à fila') && !document.querySelector('#botao-importar').disabled`);
+  const pausado = await avaliar(`fetch('/api/trabalhos?raizes=1&limite=1').then(r=>r.json()).then(r=>r.dados.itens[0].id)`);
+  const faseReal = await esperar(`document.querySelector('.trabalho[data-id="${pausado}"]')?.textContent.includes('Buscando metadados')`);
+  registrar('fila aceita sem esperar a rede e exibe fase real', aceitouFila && faseReal);
+  await avaliar(`document.querySelector('[data-aba="biblioteca"]').click()`);
+  registrar('Biblioteca continua navegável durante trabalho bloqueado', await avaliar(`!document.querySelector('[data-tela-nome="biblioteca"]').hidden`));
+  await S('Page.navigate', { url: base + '/#importacoes' });
+  const sobreviveReload = await esperar(`document.querySelector('.trabalho[data-id="${pausado}"]')?.textContent.includes('Executando')`);
+  registrar('trabalho ativo reaparece depois de recarregar a interface', sobreviveReload);
+  await avaliar(`document.querySelector('.trabalho[data-id="${pausado}"] [data-acao="cancelar"]').click()`);
+  registrar('Cancelar pela interface encerra o trabalho', await esperar(`document.querySelector('.trabalho[data-id="${pausado}"]')?.textContent.includes('Cancelado')`));
+  bloqueadosE2e.delete('aaaaaaaaaaa');
+  await avaliar(`document.querySelector('.trabalho[data-id="${pausado}"] [data-acao="repetir"]').click()`);
+  const repetiu = await esperar(`document.querySelector('.trabalho[data-id="${pausado}"]')?.textContent.includes('Concluído') && document.querySelector('.trabalho[data-id="${pausado}"]')?.textContent.includes('tentativa 2')`);
+  registrar('Repetir pela interface usa o mesmo trabalho e nova tentativa', repetiu);
+
+  await avaliar(`document.querySelector('#tipo-importacao').value='importar-playlist';document.querySelector('#url-video').value='https://youtube.com/playlist?list=PLteste';document.querySelector('#formulario-importacao').requestSubmit()`);
+  await esperar(`document.querySelector('#resultado-validacao').textContent.includes('Importação concluída: 2 itens')`);
+  const playlistId = await avaliar(`fetch('/api/trabalhos?raizes=1&limite=1').then(r=>r.json()).then(r=>r.dados.itens[0].id)`);
+  const contou = await esperar(`document.querySelector('.trabalho[data-id="${playlistId}"]')?.textContent.includes('1 sem legenda')`);
+  await avaliar(`document.querySelector('.trabalho[data-id="${playlistId}"] details').open=true`);
+  const filhos = await esperar(`document.querySelectorAll('.trabalho[data-id="${playlistId}"] .trabalho').length===2`);
+  registrar('playlist exibe filhos e ausência explícita de legenda', contou && filhos);
+
+  falhasE2e.add('ccccccccccc');
+  await avaliar(`document.querySelector('#tipo-importacao').value='importar-video';document.querySelector('#url-video').value='https://youtu.be/ccccccccccc';document.querySelector('#formulario-importacao').requestSubmit()`);
+  await esperar(`document.querySelector('#resultado-validacao').dataset.tipo==='erro'`);
+  const falhoId = await avaliar(`fetch('/api/trabalhos?raizes=1&limite=1').then(r=>r.json()).then(r=>r.dados.itens[0].id)`);
+  registrar('falha de legenda aparece como falha recuperável na fila', await esperar(`document.querySelector('.trabalho[data-id="${falhoId}"]')?.textContent.includes('Falhou')`));
+  await avaliar(`document.querySelector('.trabalho[data-id="${falhoId}"] [data-acao="repetir"]').click()`);
+  registrar('retry após erro termina sem duplicar vídeo', await esperar(`document.querySelector('.trabalho[data-id="${falhoId}"]')?.textContent.includes('Concluído') && document.querySelector('.trabalho[data-id="${falhoId}"]')?.textContent.includes('tentativa 2')`));
+  const totalFinal = await avaliar(`fetch('/api/biblioteca').then(r=>r.json()).then(r=>r.dados.total)`);
+  registrar('biblioteca tem somente os quatro vídeos únicos', totalFinal === 4, String(totalFinal));
+  const capturaF4 = await S('Page.captureScreenshot', { format: 'png' });
+  writeFileSync(join(raiz,'testes','.tmp','interface-fila.png'),Buffer.from(capturaF4.data,'base64'));
+
 } catch (erro) {
   registrar('execução E2E sem exceção', false, erro.message);
 } finally {

@@ -6,6 +6,12 @@
 > autorização posterior do proprietário. Políticas novas abaixo são propostas
 > técnicas para revisão, não decisões de produto já homologadas.
 
+**Autorização posterior, 19/11/2026:** o proprietário pediu explicitamente para
+implementar F4 e continuar pelas fatias até completar a V1, validando e mantendo
+memória/documentação a cada incremento. Defaults técnicos desta SPEC serão usados
+como ponto de partida. Permanecem os limites canônicos e o registro honesto de
+testes não executados; cada fatia seguinte terá SPEC antes do código.
+
 ## 1. Objetivo, escopo e exclusões
 
 Importar vídeo, lote de URLs e playlist sem manter a UI esperando a requisição

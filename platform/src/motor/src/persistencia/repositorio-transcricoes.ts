@@ -15,6 +15,7 @@ interface LinhaTranscricao {
   origem: Transcricao['origem'];
   estado: Transcricao['estado'];
   motivo: string | null;
+  codigo_motivo: string | null;
   atualizado_em: string;
 }
 
@@ -31,6 +32,7 @@ export interface TranscricaoGravavel {
   origem: Transcricao['origem'];
   estado: Transcricao['estado'];
   motivo?: string | null;
+  codigoMotivo?: string | null;
   segmentos: Transcricao['segmentos'];
   atualizadoEm: string;
 }
@@ -73,20 +75,20 @@ export class RepositorioTranscricoesSqlite implements RepositorioTranscricoes {
       this.#db
         .prepare(
           `UPDATE transcricoes
-             SET origem = ?, estado = ?, motivo = ?, atualizado_em = ?
+             SET origem = ?, estado = ?, motivo = ?, atualizado_em = ?, codigo_motivo = ?
            WHERE id = ?`,
         )
-        .run(t.origem, t.estado, t.motivo ?? null, t.atualizadoEm, id);
+        .run(t.origem, t.estado, t.motivo ?? null, t.atualizadoEm, t.codigoMotivo ?? null, id);
       // Reescrita completa dos segmentos: uma legenda nova substitui a antiga
       // por inteiro, senão sobrariam tempos de uma versão anterior.
       this.#db.prepare('DELETE FROM segmentos WHERE transcricao_id = ?').run(id);
     } else {
       this.#db
         .prepare(
-          `INSERT INTO transcricoes (id, video_id, idioma, origem, estado, motivo, atualizado_em)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO transcricoes (id, video_id, idioma, origem, estado, motivo, atualizado_em, codigo_motivo)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         )
-        .run(id, t.videoId, t.idioma, t.origem, t.estado, t.motivo ?? null, t.atualizadoEm);
+        .run(id, t.videoId, t.idioma, t.origem, t.estado, t.motivo ?? null, t.atualizadoEm, t.codigoMotivo ?? null);
     }
 
     if (t.segmentos.length > 0) {
@@ -105,13 +107,13 @@ export class RepositorioTranscricoesSqlite implements RepositorioTranscricoes {
       idioma
         ? this.#db
             .prepare(
-              `SELECT id, video_id, idioma, origem, estado, motivo, atualizado_em
+              `SELECT id, video_id, idioma, origem, estado, motivo, atualizado_em, codigo_motivo
                  FROM transcricoes WHERE video_id = ? AND idioma = ?`,
             )
             .get(videoId, idioma)
         : this.#db
             .prepare(
-              `SELECT id, video_id, idioma, origem, estado, motivo, atualizado_em
+              `SELECT id, video_id, idioma, origem, estado, motivo, atualizado_em, codigo_motivo
                  FROM transcricoes WHERE video_id = ?
                  ORDER BY CASE estado WHEN 'pronta' THEN 0 ELSE 1 END,
                           CASE origem WHEN 'manual' THEN 0 WHEN 'auto' THEN 1 ELSE 2 END
@@ -145,6 +147,7 @@ export class RepositorioTranscricoesSqlite implements RepositorioTranscricoes {
       estado: linha.estado,
       segmentos,
       motivo: linha.motivo,
+      ...(linha.codigo_motivo ? { codigoMotivo: linha.codigo_motivo } : {}),
       atualizadoEm: linha.atualizado_em,
     };
   }
@@ -167,6 +170,7 @@ export class RepositorioTranscricoesMemoria implements RepositorioTranscricoes {
       estado: t.estado,
       segmentos: t.segmentos.map((s) => ({ ...s })),
       motivo: t.motivo ?? null,
+      ...(t.codigoMotivo ? { codigoMotivo: t.codigoMotivo } : {}),
       atualizadoEm: t.atualizadoEm,
     });
   }
