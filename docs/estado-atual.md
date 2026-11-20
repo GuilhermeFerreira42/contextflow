@@ -2,7 +2,9 @@
 
 ## Estado vigente — 20/11/2026 (São Paulo)
 
-**F5 implementada, testada e commitada.** A autorização do proprietário (19/11/2026) para implementar F4 e continuar pelas fatias da V1 foi executada. Escopo canônico preservado, sem alterações no Python original, sem segredos no Git. Próxima ação autorizada: F6 (IA para resumos) conforme `docs/04-plano-mestre.md`.
+**F5 implementada, testada e commitada.** A autorização do proprietário (19/11/2026) para implementar F4 e continuar pelas fatias da V1 foi executada. Escopo canônico preservado, sem alterações no Python original, sem segredos no Git.
+
+**SPEC F6 escrita** em `docs/specs/f6-resumos.md` (provedores OpenAI/Anthropic/Ollama, configuração, estimativa de custo, map-reduce para textos longos, segredos isolados, fila F4, cancelamento, retry). Aguarda revisão e autorização do proprietário antes de implementar. Próxima ação: proprietário revisar a SPEC e dar aceite.
 
 **F3 validada e corrigida no Windows com YouTube real; aceite humano pendente.** Correções e evidências em `c6b7db5`. F1/F2 mantêm homologações anteriores. F4 implementada e testada em `5a13b3c`. F5 implementada e testada em `b8ce30a`.
 
