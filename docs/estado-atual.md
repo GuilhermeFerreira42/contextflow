@@ -2,9 +2,11 @@
 
 ## Estado vigente — 20/11/2026 (São Paulo)
 
-**F4 implementada, testada e commitada.** A autorização do proprietário (19/11/2026) para implementar F4 e continuar pelas fatias da V1 foi executada. Escopo canônico preservado, sem alterações no Python original, sem segredos no Git. 
+**F5 implementada, testada e commitada.** A autorização do proprietário (19/11/2026) para implementar F4 e continuar pelas fatias da V1 foi executada. Escopo canônico preservado, sem alterações no Python original, sem segredos no Git. Próxima ação autorizada: F6 (IA para resumos) conforme `docs/04-plano-mestre.md`.
 
-**SPEC F5 escrita** em `docs/specs/f5-biblioteca.md` (virtualização, filtros, seleção, ações em lote, coleções, migração 003). Aguarda revisão e autorização do proprietário antes de implementar. Próxima ação: proprietário revisar a SPEC e dar aceite.
+**F3 validada e corrigida no Windows com YouTube real; aceite humano pendente.** Correções e evidências em `c6b7db5`. F1/F2 mantêm homologações anteriores. F4 implementada e testada em `5a13b3c`. F5 implementada e testada em `b8ce30a`.
+
+**Checkpoint finalizado:** migração 003 aplicada, `RepositorioBiblioteca` com filtros/ordenação, `ServicoBiblioteca` com ações em lote e coleções, rotas HTTP para lote e coleções, migração 003 reversível — tudo verde. Último código validado: `b8ce30a`.
 
 **F3 validada e corrigida no Windows com YouTube real; aceite humano pendente.** Correções e evidências em `c6b7db5`. F1/F2 mantêm homologações anteriores. F4 implementada e testada em `5a13b3c`.
 
