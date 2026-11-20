@@ -332,7 +332,7 @@ test('cancelamento persistido antes do commit impede qualquer escrita de conteú
         assert.equal(repo.detalhe(id).estado, 'cancelado');
     } finally { banco.fechar(); }
 });
-test('migração F3 → F4 → F3 → F4 preserva dados existentes e histórico de schema', () => {
+test('migração F3 → F4 → F3 → F4 → F5 preserva dados existentes e histórico de schema', () => {
     const banco = Banco.abrir({ arquivo: ':memory:' });
     try {
         banco.migrar(MIGRACOES.slice(0, 1));
@@ -346,8 +346,10 @@ test('migração F3 → F4 → F3 → F4 preserva dados existentes e histórico 
           INSERT INTO resumos VALUES('v','teste','modelo','p1','r1','Resumo original','pronto',NULL,'2026-01-01','2026-01-01');
           INSERT INTO colecao_videos VALUES('anterior','v');
         `);
+        // Seleciona apenas colunas da v1 para comparar dados preservados (ignora colunas novas da F5)
+        const colunasVideosV1 = 'id, youtube_id, titulo, canal_id, canal_nome, duracao_segundos, url, miniatura_url, publicado_em, estado, criado_em, atualizado_em';
         const conteudo = () => ({
-          videos: banco.db.prepare('SELECT * FROM videos').all(),
+          videos: banco.db.prepare(`SELECT ${colunasVideosV1} FROM videos`).all(),
           transcricoes: banco.db.prepare('SELECT id,video_id,idioma,origem,estado,motivo,atualizado_em FROM transcricoes').all(),
           segmentos: banco.db.prepare('SELECT * FROM segmentos').all(),
           resumos: banco.db.prepare('SELECT * FROM resumos').all(),
@@ -355,14 +357,14 @@ test('migração F3 → F4 → F3 → F4 preserva dados existentes e histórico 
           associacoes: banco.db.prepare('SELECT * FROM colecao_videos').all(),
         });
         const antes = conteudo();
-        assert.equal(banco.migrar(), 1);
+        assert.equal(banco.migrar(), 2); // F4 + F5
         assert.equal(banco.migrar(), 0);
         assert.deepEqual(conteudo(), antes);
         banco.reverterPara(1);
         assert.equal(banco.versaoAtual(), 1);
         assert.deepEqual(conteudo(), antes);
         assert.equal(banco.db.prepare('SELECT titulo FROM colecoes').get()!.titulo, 'Coleção existente');
-        assert.equal(banco.migrar(), 1);
+        assert.equal(banco.migrar(), 2); // F4 + F5
         assert.deepEqual(conteudo(), antes);
         assert.equal(banco.db.prepare('SELECT COUNT(*) n FROM trabalhos').get()!.n, 0);
     }

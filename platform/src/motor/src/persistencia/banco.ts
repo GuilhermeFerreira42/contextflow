@@ -9,6 +9,7 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { MIGRACAO_TRABALHOS } from './migracao-trabalhos.ts';
+import { MIGRACAO_F5_BIBLIOTECA } from './migracao-f5-biblioteca.ts';
 
 /**
  * Tipo mínimo do driver, para os repositórios não dependerem do pacote do Node.
@@ -112,7 +113,7 @@ const MIGRACAO_1: Migracao = {
   },
 };
 
-export const MIGRACOES: readonly Migracao[] = [MIGRACAO_1, MIGRACAO_TRABALHOS];
+export const MIGRACOES: readonly Migracao[] = [MIGRACAO_1, MIGRACAO_TRABALHOS, MIGRACAO_F5_BIBLIOTECA];
 
 export interface OpcoesBanco {
   /** Caminho do arquivo. `:memory:` é aceito para testes. */

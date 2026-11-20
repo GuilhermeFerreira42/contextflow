@@ -41,6 +41,10 @@ export interface Video {
   estado: EstadoVideo;
   criadoEm: string; // ISO-8601
   atualizadoEm: string; // ISO-8601
+  /** F5: IDs das coleções às quais o vídeo pertence. */
+  colecaoIds?: string[];
+  /** F5: atalho para UI evitar join com tabela resumos. */
+  temResumo?: boolean;
 }
 
 export interface SegmentoTranscricao {
@@ -78,8 +82,11 @@ export interface Resumo {
 export interface Colecao {
   id: string;
   titulo: string;
-  videoIds: IdVideo[];
+  contagem: number;
 }
+
+/** F5: ações em lote disponíveis na Biblioteca. */
+export type AcaoLote = 'reimportar' | 'remover' | 'colecao';
 
 // ---------------------------------------------------------------------------
 // Trabalhos (fila persistente)

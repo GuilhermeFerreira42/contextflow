@@ -11,6 +11,14 @@ export interface FiltroBiblioteca {
   busca?: string;
   estado?: Video['estado'];
   canalId?: string;
+  /** F5: filtro por coleção (usa LIKE no JSON array). */
+  colecaoId?: string;
+  /** F5: filtro por presença de resumo. */
+  temResumo?: boolean;
+  /** F5: campo de ordenação. */
+  ordenacao?: 'criado_em' | 'titulo' | 'canal' | 'duracao' | 'estado';
+  /** F5: direção da ordenação. */
+  ordenacaoDirecao?: 'asc' | 'desc';
 }
 
 export interface PaginaBiblioteca {
