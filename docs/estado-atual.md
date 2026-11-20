@@ -2,9 +2,11 @@
 
 ## Estado vigente — 20/11/2026 (São Paulo)
 
-**F5 backend implementada e testada; frontend em progresso (virtualização, filtros, seleção, ações em lote, coleções).** A autorização do proprietário (19/11/2026) para implementar F4 e continuar pelas fatias da V1 foi executada. Escopo canônico preservado, sem alterações no Python original, sem segredos no Git.
+**F5 implementada, testada e commitada.** A autorização do proprietário (19/11/2026) para implementar F4 e continuar pelas fatias da V1 foi executada. Escopo canônico preservado, sem alterações no Python original, sem segredos no Git. Próxima ação autorizada: F6 (IA para resumos) conforme `docs/04-plano-mestre.md`.
 
-**SPEC F6 escrita** em `docs/specs/f6-resumos.md` (provedores OpenAI/Anthropic/Ollama, configuração, estimativa de custo, map-reduce para textos longos, segredos isolados, fila F4, cancelamento, retry). Aguarda revisão e autorização do proprietário antes de implementar. Próxima ação: concluir F5 frontend e validar.
+**F3 validada e corrigida no Windows com YouTube real; aceite humano pendente.** Correções e evidências em `c6b7db5`. F1/F2 mantêm homologações anteriores. F4 implementada e testada em `5a13b3c`. F5 implementada e testada em `7b58f32`.
+
+**Checkpoint finalizado:** migração 003 aplicada, `RepositorioBiblioteca` com filtros/ordenação, `ServicoBiblioteca` com ações em lote e coleções, rotas HTTP para lote e coleções, migração 003 reversível — tudo verde. Último código validado: `7b58f32`.
 
 **F3 validada e corrigida no Windows com YouTube real; aceite humano pendente.** Correções e evidências em `c6b7db5`. F1/F2 mantêm homologações anteriores. F4 implementada e testada em `5a13b3c`. F5 backend implementada e testada em `b8ce30a`.
 
