@@ -8,6 +8,7 @@
  * Requer um Chrome/Chromium acessível em CHROME_BIN (ver README).
  * Saída: PASS/FAIL por cenário, exit != 0 se qualquer cenário falhar.
  */
+import { exercitarBiblioteca } from './biblioteca-cenarios.mjs';
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -84,6 +85,7 @@ if (!CHROME) {
 }
 
 // --------------------------------------------------------------- CDP ------
+const errosJs = [];
 class Cdp {
   constructor(ws) {
     this.ws = ws;
@@ -91,6 +93,7 @@ class Cdp {
     this.pendentes = new Map();
     ws.addEventListener('message', (ev) => {
       const msg = JSON.parse(ev.data);
+      if (msg.method === 'Runtime.exceptionThrown') errosJs.push(msg.params?.exceptionDetails?.text ?? 'Exceção JavaScript');
       if (msg.id && this.pendentes.has(msg.id)) {
         const { resolver, rejeitar } = this.pendentes.get(msg.id);
         this.pendentes.delete(msg.id);
@@ -352,7 +355,7 @@ try {
   registrar('tema grafite escuro com detalhe azul aplicado', fundo === 'rgb(13, 15, 18)' && azul === true, `${fundo} / azul=${azul}`);
 
   // 8. Console sem erros de script.
-  const erros = await avaliar(`window.__errosJs ? window.__errosJs.length : 0`);
+  const erros = errosJs.length;
   registrar('sem erro de script na página', !erros);
 
   // 9. Captura de tela como evidência.
@@ -404,6 +407,8 @@ try {
   const capturaF4 = await S('Page.captureScreenshot', { format: 'png' });
   writeFileSync(join(raiz,'testes','.tmp','interface-fila.png'),Buffer.from(capturaF4.data,'base64'));
 
+  await exercitarBiblioteca({ app, base, avaliar, esperar, S, registrar, raiz });
+  registrar('nenhuma exceção JavaScript durante todos os fluxos de navegador', errosJs.length === 0, errosJs.join('; '));
 } catch (erro) {
   registrar('execução E2E sem exceção', false, erro.message);
 } finally {

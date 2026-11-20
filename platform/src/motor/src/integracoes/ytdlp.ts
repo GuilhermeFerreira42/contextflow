@@ -46,7 +46,7 @@ export interface ExecutorYtdlp {
   descobrirPlaylist?(url: string, aoItem: (item: ItemPlaylist) => void, sinal?: AbortSignal): Promise<void>;
 }
 
-export interface ItemPlaylist { youtubeId: string | null; titulo: string; posicao: number; }
+export interface ItemPlaylist { youtubeId: string | null; titulo: string; posicao: number; playlistTitulo?: string; }
 
 export interface OpcoesYtdlp {
   binario?: string;
@@ -332,10 +332,10 @@ export class Ytdlp implements ExecutorYtdlp {
     const resultado = await executarProcesso(this.#binario, [
       '--flat-playlist', '--dump-json', '--skip-download', '--yes-playlist', '--no-warnings', '--no-progress', url,
     ], this.#timeoutMs, this.#aoErro, sinal, (linha) => {
-      let item: { id?: unknown; title?: unknown; playlist_index?: unknown };
+      let item: { id?: unknown; title?: unknown; playlist_index?: unknown; playlist_title?: unknown };
       try { item = JSON.parse(linha); } catch { throw new ErroDominio('playlist_ilegivel', 'A playlist devolveu dados ilegíveis.', 502); }
       aoItem({ youtubeId: typeof item.id === 'string' && /^[A-Za-z0-9_-]{11}$/.test(item.id) ? item.id : null,
-        titulo: typeof item.title === 'string' ? item.title : 'Vídeo indisponível', posicao: posicao++ });
+        titulo: typeof item.title === 'string' ? item.title : 'Vídeo indisponível', posicao: posicao++, ...(typeof item.playlist_title === 'string' ? {playlistTitulo:item.playlist_title.slice(0,500)} : {}) });
     });
     if (resultado.codigo !== 0) throw traduzirErroYtdlp(resultado.stderr);
   }

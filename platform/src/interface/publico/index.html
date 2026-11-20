@@ -58,15 +58,43 @@
             <span class="contador" id="contador">—</span>
           </div>
 
-          <div class="tabela-envoltorio">
-            <table class="tabela-biblioteca">
+          <div class="barra-filtros" aria-label="Filtros da biblioteca">
+            <label class="filtro-select">Estado <select id="filtro-estado">
+              <option value="">Todos</option><option value="pronto">Pronto</option><option value="parcial">Parcial</option>
+              <option value="erro">Erro</option><option value="importando">Importando</option><option value="novo">Novo</option>
+            </select></label>
+            <label class="filtro-select">Canal <select id="filtro-canal"><option value="">Todos</option></select></label>
+            <label class="filtro-select">Playlist <select id="filtro-playlist"><option value="">Todas</option></select></label>
+            <label class="filtro-select">Coleção <select id="filtro-colecao"><option value="">Todas</option></select></label>
+            <label class="filtro-checkbox"><input id="filtro-resumo" type="checkbox" /> Com resumo</label>
+            <button id="limpar-filtros" type="button" class="botao-secundario">Limpar filtros</button>
+          </div>
+          <div class="barra-acoes-lote" id="acoes-biblioteca">
+            <span id="contador-selecao" class="contador-selecao" role="status">0 selecionados</span>
+            <button id="selecionar-visiveis" type="button" class="botao-secundario">Selecionar tudo visível</button>
+            <button id="limpar-selecao" type="button" class="botao-secundario" disabled>Limpar seleção</button>
+            <button id="reimportar-selecao" type="button" class="botao-secundario" disabled>Reimportar pendentes</button>
+            <button id="remover-selecao" type="button" class="botao-secundario" disabled>Remover</button>
+            <label class="filtro-select"><span class="visualmente-oculto">Coleção de destino</span>
+              <select id="colecao-destino"><option value="">Escolha uma coleção</option></select>
+            </label>
+            <button id="adicionar-colecao" type="button" class="botao-secundario" disabled>Adicionar à coleção</button>
+            <button id="desvincular-colecao" type="button" class="botao-secundario" disabled>Remover da coleção atual</button>
+            <button id="nova-colecao" type="button" class="botao-secundario">Nova coleção</button>
+          </div>
+          <p id="aviso-selecao" class="contador" hidden>As ações incluem todos os IDs selecionados, inclusive fora do filtro atual.</p>
+          <p id="resultado-biblioteca" role="status" aria-live="polite"></p>
+
+          <div class="tabela-envoltorio biblioteca-viewport" id="biblioteca-viewport" tabindex="0" aria-label="Vídeos da biblioteca">
+            <table class="tabela-biblioteca" aria-label="Biblioteca de vídeos">
               <thead>
                 <tr>
-                  <th scope="col" class="col-selecao"><span class="visualmente-oculto">Selecionar</span></th>
-                  <th scope="col">Vídeo</th>
-                  <th scope="col">Canal</th>
-                  <th scope="col">Duração</th>
-                  <th scope="col">Estado</th>
+                  <th scope="col" class="col-selecao"><input id="selecao-visivel" type="checkbox" aria-label="Selecionar todos os vídeos visíveis" /></th>
+                  <th scope="col" data-ordenacao="titulo"><button type="button">Vídeo <span class="seta-ordenacao"></span></button></th>
+                  <th scope="col" data-ordenacao="canal"><button type="button">Canal <span class="seta-ordenacao"></span></button></th>
+                  <th scope="col" data-ordenacao="duracao"><button type="button">Duração <span class="seta-ordenacao"></span></button></th>
+                  <th scope="col" data-ordenacao="criado_em"><button type="button">Adicionado <span class="seta-ordenacao"></span></button></th>
+                  <th scope="col" data-ordenacao="estado"><button type="button">Estado <span class="seta-ordenacao"></span></button></th>
                   <th scope="col">Resumo</th>
                 </tr>
               </thead>
@@ -79,7 +107,23 @@
                 do YouTube. Nada é simulado nesta tela.
               </p>
             </div>
+            <div id="sentinela-biblioteca" aria-hidden="true"></div>
           </div>
+          <p id="carregamento-biblioteca" class="contador" role="status"></p>
+          <dialog id="confirmar-remocao" aria-labelledby="titulo-remocao">
+            <h2 id="titulo-remocao">Remover vídeos?</h2><p id="descricao-remocao"></p>
+            <p>Transcrições, resumos e vínculos dos vídeos serão removidos da biblioteca local.</p>
+            <div class="barra-ferramentas"><button id="cancelar-remocao" class="botao-secundario" type="button">Cancelar</button>
+              <button id="confirmar-remocao-botao" class="botao-primario" type="button">Confirmar remoção</button></div>
+          </dialog>
+          <dialog id="criar-colecao" aria-labelledby="titulo-colecao">
+            <form id="formulario-colecao"><h2 id="titulo-colecao">Nova coleção</h2>
+              <label class="campo-url">Título<input id="nome-colecao" required maxlength="200" autocomplete="off" /></label>
+              <p id="erro-colecao" role="status"></p>
+              <div class="barra-ferramentas"><button id="cancelar-colecao" class="botao-secundario" type="button">Cancelar</button>
+                <button class="botao-primario" type="submit">Criar coleção</button></div>
+            </form>
+          </dialog>
         </section>
 
         <!-- Leitura -->

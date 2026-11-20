@@ -13,6 +13,7 @@ import { criarServidorApi, Roteador, ResultadoHttp } from './nucleo/http.ts';
 import { ErroValidacao } from './nucleo/erros.ts';
 import { criarRegistrador, type Registrador } from './nucleo/registro.ts';
 import { lerArquivoPublico, servirEstatico } from './nucleo/estatico.ts';
+import { RepositorioColecoes } from './persistencia/repositorio-colecoes.ts';
 import { ServicoBiblioteca } from './modulos/biblioteca/servico.ts';
 import { RepositorioBibliotecaSqlite } from './modulos/biblioteca/repositorio-sqlite.ts';
 import { Banco } from './persistencia/banco.ts';
@@ -63,7 +64,13 @@ export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}
   // Persistência: aberta por iniciarPersistencia(), para o teste controlar o ciclo.
   const banco = Banco.abrir({ arquivo: Banco.arquivoPadrao(config.pastaDados) });
   const repositorioBiblioteca = new RepositorioBibliotecaSqlite(banco.db);
-  const biblioteca = new ServicoBiblioteca(repositorioBiblioteca, banco.db);
+  const biblioteca = new ServicoBiblioteca(repositorioBiblioteca, {
+    colecoes: new RepositorioColecoes(banco),
+    reimportar: async (videos, chaveRequisicao) => (await trabalhos.criar('importar-lote', {urls:videos.map(v=>v.url),chaveRequisicao})).id,
+    cancelarImportacoes: async youtubeId => {
+      for (const id of repositorioTrabalhos.ativosDoVideo(youtubeId)) await trabalhos.cancelar(id);
+    },
+  });
 
   const repositorioTranscricoes = new RepositorioTranscricoesSqlite(banco.db);
   const executorYtdlp =
@@ -123,25 +130,29 @@ export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}
     }))
     .obter('/api/biblioteca', async ({ requisicao }) => {
       const { consulta } = requisicao;
+      if (consulta.has('temResumo') && !['0','1'].includes(consulta.get('temResumo')!)) throw new ErroValidacao('temResumo deve ser 0 ou 1.');
       const pagina = await biblioteca.consultar({
         busca: consulta.get('busca') ?? undefined,
         estado: consulta.get('estado') ?? undefined,
         canalId: consulta.get('canalId') ?? undefined,
         colecaoId: consulta.get('colecaoId') ?? undefined,
+        playlistId: consulta.get('playlistId') ?? undefined,
         temResumo: consulta.get('temResumo') === '1' ? true : consulta.get('temResumo') === '0' ? false : undefined,
         ordenacao: consulta.get('ordenacao') ?? undefined,
         ordenacaoDirecao: consulta.get('ordenacaoDirecao') ?? undefined,
         cursor: consulta.get('cursor') ?? undefined,
         limite: consulta.get('limite') ?? undefined,
       });
-      return { ...pagina, total: await biblioteca.total() };
+      return pagina;
     })
+    .obter('/api/biblioteca/playlists', () => biblioteca.listarPlaylists())
+    .obter('/api/biblioteca/canais', () => biblioteca.listarCanais())
     .obter('/api/biblioteca/:id', async ({ requisicao }) => {
       const id = requisicao.caminho.split('/').at(-1)!;
       return biblioteca.obter(id);
     })
     .postar('/api/biblioteca/lote', async ({ requisicao }) => {
-      const corpo = requisicao.corpo as { acao: import('@contextflow/compartilhado').AcaoLote; ids: string[]; colecaoId?: string } | undefined;
+      const corpo = requisicao.corpo as { acao: import('@contextflow/compartilhado').AcaoLote; ids: string[]; colecaoId?: string; chaveRequisicao?: string } | undefined;
       if (!corpo || !corpo.acao || !Array.isArray(corpo.ids) || corpo.ids.length === 0) {
         throw new ErroValidacao('Informe acao e ids (array não vazio).');
       }
@@ -151,7 +162,7 @@ export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}
       if (corpo.acao === 'colecao' && !corpo.colecaoId) {
         throw new ErroValidacao('colecaoId obrigatório para ação "colecao".');
       }
-      return biblioteca.acaoLote(corpo.acao, corpo.ids, corpo.colecaoId);
+      return biblioteca.acaoLote(corpo.acao, corpo.ids, corpo.colecaoId, corpo.chaveRequisicao);
     })
     .obter('/api/colecoes', async () => {
       return biblioteca.listarColecoes();

@@ -225,10 +225,13 @@ export class FilaTrabalhos implements ServicoTrabalhos {
                     throw new ErroDominio('indisponivel', 'Descoberta de playlist não disponível.', 503);
                 this.repositorio.fase(r, 'descobrindo');
                 await this.#executor.descobrirPlaylist(escopo.url!, item => {
-                    this.repositorio.conferirEGravar(r, () => this.repositorio.inserir('importar-video', {
+                    this.repositorio.conferirEGravar(r, () => {
+                        if (item.playlistTitulo) this.repositorio.tituloPlaylist(r.id,item.playlistTitulo);
+                        return this.repositorio.inserir('importar-video', {
                         ...(item.youtubeId ? { url: `https://www.youtube.com/watch?v=${item.youtubeId}` } : { indisponivel: true }),
                         idiomas: escopo.idiomas, posicao: item.posicao, titulo: item.titulo,
-                    }, item.youtubeId, r.id));
+                    }, item.youtubeId, r.id);
+                    });
                 }, sinal);
             }
             this.repositorio.descoberto(r);

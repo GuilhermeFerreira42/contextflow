@@ -11,8 +11,9 @@ export interface FiltroBiblioteca {
   busca?: string;
   estado?: Video['estado'];
   canalId?: string;
-  /** F5: filtro por coleção (usa LIKE no JSON array). */
+  /** F5: filtro por vínculo exato com uma coleção. */
   colecaoId?: string;
+  playlistId?: string;
   /** F5: filtro por presença de resumo. */
   temResumo?: boolean;
   /** F5: campo de ordenação. */
@@ -23,6 +24,7 @@ export interface FiltroBiblioteca {
 
 export interface PaginaBiblioteca {
   itens: Video[];
+  total: number;
   /** Cursor opaco para a próxima página; null quando acabou. */
   proximoCursor: string | null;
 }
@@ -34,4 +36,32 @@ export interface RepositorioBiblioteca {
   porYoutubeId(youtubeId: string): Promise<Video | null>;
   consultar(opcoes: { filtro: FiltroBiblioteca; cursor: string | null; limite: number }): Promise<PaginaBiblioteca>;
   contagem(): Promise<number>;
+  remover(id: IdVideo): Promise<void>;
+}
+
+export const CAMPOS_ORDENACAO = ['criado_em', 'titulo', 'canal', 'duracao', 'estado'] as const;
+export function ordemBiblioteca(filtro: FiltroBiblioteca) {
+  const campo = filtro.ordenacao ?? 'criado_em';
+  const direcao = filtro.ordenacaoDirecao ?? (campo === 'criado_em' ? 'desc' : 'asc');
+  return { campo, direcao };
+}
+
+const compararTexto = (a: string, b: string) => {
+  const ascii = (v: string) => v.replace(/[A-Z]/g, c => c.toLowerCase());
+  const x = ascii(a), y = ascii(b);
+  return x < y ? -1 : x > y ? 1 : 0;
+};
+export function compararVideos(a: Video, b: Video, filtro: FiltroBiblioteca): number {
+  const { campo, direcao } = ordemBiblioteca(filtro);
+  let principal: number;
+  switch (campo) {
+    case 'titulo': principal = compararTexto(a.titulo, b.titulo); break;
+    case 'canal': principal = compararTexto(a.canalNome ?? '', b.canalNome ?? ''); break;
+    case 'duracao': principal = (a.duracaoSegundos ?? -1) - (b.duracaoSegundos ?? -1); break;
+    case 'estado': principal = compararTexto(a.estado, b.estado); break;
+    default: principal = a.criadoEm < b.criadoEm ? -1 : a.criadoEm > b.criadoEm ? 1 : 0;
+  }
+  if (principal) return principal * (direcao === 'asc' ? 1 : -1);
+  if (a.criadoEm !== b.criadoEm) return a.criadoEm > b.criadoEm ? -1 : 1;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }

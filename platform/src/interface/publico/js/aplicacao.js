@@ -1,3 +1,4 @@
+import { criarBiblioteca } from './biblioteca.js';
 /**
  * Interface do ContextFlow — camada de apresentação.
  *
@@ -8,9 +9,6 @@
 
 const estado = {
   tela: 'biblioteca',
-  busca: '',
-  selecao: new Set(),
-  itens: [],
   ultimoStatus: null,
   transcricoes: [],
   leituraAberta: null,
@@ -113,103 +111,11 @@ function formatarDuracao(segundos) {
     : `${m}:${String(s).padStart(2, '0')}`;
 }
 
-function rotuloEstado(est) {
-  return (
-    {
-      novo: 'Novo',
-      importando: 'Importando',
-      pronto: 'Pronto',
-      parcial: 'Parcial',
-      erro: 'Erro',
-    }[est] ?? est
-  );
-}
-
-function linhaDaBiblioteca(video) {
-  const tr = document.createElement('tr');
-  tr.dataset.id = video.id;
-  if (estado.selecao.has(video.id)) tr.classList.add('selecionada');
-
-  const selecao = document.createElement('input');
-  selecao.type = 'checkbox';
-  selecao.checked = estado.selecao.has(video.id);
-  selecao.setAttribute('aria-label', `Selecionar ${video.titulo}`);
-  selecao.addEventListener('change', () => {
-    // Seleção é por ID (nunca por índice): filtrar/ordenar não desloca a seleção.
-    if (selecao.checked) estado.selecao.add(video.id);
-    else estado.selecao.delete(video.id);
-    tr.classList.toggle('selecionada', selecao.checked);
-  });
-
-  const tdSelecao = document.createElement('td');
-  tdSelecao.append(selecao);
-
-  const tdVideo = document.createElement('td');
-  const celula = document.createElement('div');
-  celula.className = 'celula-video';
-  if (video.miniaturaUrl) {
-    const img = document.createElement('img');
-    img.className = 'miniatura';
-    img.src = video.miniaturaUrl;
-    img.alt = '';
-    img.loading = 'lazy';
-    celula.append(img);
-  }
-  const titulo = document.createElement('span');
-  titulo.className = 'titulo-video';
-  titulo.textContent = video.titulo;
-  titulo.title = video.titulo;
-  celula.append(titulo);
-  tdVideo.append(celula);
-
-  const tvCanal = document.createElement('td');
-  tvCanal.textContent = video.canalNome ?? '—';
-
-  const tvDuracao = document.createElement('td');
-  tvDuracao.textContent = formatarDuracao(video.duracaoSegundos);
-
-  const tvEstado = document.createElement('td');
-  const etiqueta = document.createElement('span');
-  etiqueta.className = 'etiqueta';
-  etiqueta.dataset.estado = video.estado;
-  etiqueta.textContent = rotuloEstado(video.estado);
-  tvEstado.append(etiqueta);
-
-  const tvResumo = document.createElement('td');
-  tvResumo.textContent = '—';
-
-  tr.append(tdSelecao, tdVideo, tvCanal, tvDuracao, tvEstado, tvResumo);
-  return tr;
-}
-
-function desenharBiblioteca(pagina) {
-  const corpo = $('#corpo-biblioteca');
-  const vazio = $('#vazio-biblioteca');
-  const tabela = $('.tabela-biblioteca');
-
-  estado.itens = pagina.itens;
-  corpo.replaceChildren(...pagina.itens.map(linhaDaBiblioteca));
-
-  const semItens = pagina.itens.length === 0;
-  vazio.hidden = !semItens;
-  tabela.hidden = semItens;
-  $('#contador').textContent = `${pagina.total} ${pagina.total === 1 ? 'vídeo' : 'vídeos'}`;
-}
-
+const bibliotecaUI = criarBiblioteca({ api, aoEnfileirar: id => {
+  estado.pendentes.add(id);
+} });
 async function carregarBiblioteca() {
-  const parametros = new URLSearchParams({ limite: '100' });
-  if (estado.busca) parametros.set('busca', estado.busca);
-  try {
-    const pagina = await api(`/api/biblioteca?${parametros}`);
-    desenharBiblioteca(pagina);
-  } catch (erro) {
-    $('#contador').textContent = 'erro';
-    const vazio = $('#vazio-biblioteca');
-    vazio.hidden = false;
-    $('.tabela-biblioteca').hidden = true;
-    vazio.querySelector('.vazio-titulo').textContent = 'Não foi possível carregar a biblioteca';
-    vazio.querySelector('.vazio-texto').textContent = erro.message;
-  }
+  await Promise.all([bibliotecaUI.carregar(),bibliotecaUI.carregarOpcoes()]);
 }
 
 /* --------------------------------------------------------- importações ---- */
@@ -534,12 +440,7 @@ function ligarEventos() {
     botao.addEventListener('click', () => mostrarTela(botao.dataset.aba));
   });
 
-  let temporizador;
-  $('#busca').addEventListener('input', (evento) => {
-    estado.busca = evento.target.value.trim();
-    clearTimeout(temporizador);
-    temporizador = setTimeout(carregarBiblioteca, 180);
-  });
+  bibliotecaUI.ligar();
 
   $('#formulario-importacao').addEventListener('submit', importarVideo);
   $('#tipo-importacao').addEventListener('change', () => {
