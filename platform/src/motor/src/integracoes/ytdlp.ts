@@ -13,6 +13,7 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { StringDecoder } from 'node:string_decoder';
 
 import { ErroDominio, ErroIndisponivel } from '../nucleo/erros.ts';
 import { normalizarLegenda } from './legendas.ts';
@@ -40,9 +41,12 @@ export interface LegendaBaixada {
 
 export interface ExecutorYtdlp {
   disponivel(): Promise<{ disponivel: boolean; versao: string | null; caminho: string }>;
-  inspecionar(url: string): Promise<MetadadosYtdlp>;
-  baixarLegenda(url: string, idiomas: string[]): Promise<LegendaBaixada | null>;
+  inspecionar(url: string, sinal?: AbortSignal): Promise<MetadadosYtdlp>;
+  baixarLegenda(url: string, idiomas: string[], sinal?: AbortSignal): Promise<LegendaBaixada | null>;
+  descobrirPlaylist?(url: string, aoItem: (item: ItemPlaylist) => void, sinal?: AbortSignal): Promise<void>;
 }
+
+export interface ItemPlaylist { youtubeId: string | null; titulo: string; posicao: number; }
 
 export interface OpcoesYtdlp {
   binario?: string;
@@ -59,67 +63,54 @@ interface ResultadoProcesso {
   stderr: string;
 }
 
-function executar(
-  binario: string,
-  args: string[],
-  timeoutMs: number,
-  aoErro: (mensagem: string) => void,
+export function executarProcesso(
+  binario: string, args: string[], timeoutMs: number, aoErro: (mensagem: string) => void,
+  sinal?: AbortSignal, aoLinha?: (linha: string) => void,
 ): Promise<ResultadoProcesso> {
   return new Promise((resolver, rejeitar) => {
-    let finalizado = false;
-
+    if (sinal?.aborted) { rejeitar(erroAbortado()); return; }
     const filho = spawn(binario, args, { shell: false, windowsHide: true });
-
-    const temporizador = setTimeout(() => {
-      if (finalizado) return;
-      finalizado = true;
-      filho.kill('SIGKILL');
-      rejeitar(
-        new ErroDominio(
-          'ytdlp_timeout',
-          `O YouTube não respondeu em ${Math.round(timeoutMs / 1000)} s. Tente de novo.`,
-          504,
-        ),
-      );
-    }, timeoutMs);
-
-    let stdout = '';
-    let stderr = '';
-
-    filho.stdout?.on('data', (pedaco: Buffer) => {
-      stdout += pedaco.toString('utf8');
-    });
-    filho.stderr?.on('data', (pedaco: Buffer) => {
-      stderr += pedaco.toString('utf8');
-    });
-
-    filho.on('error', (erro: NodeJS.ErrnoException) => {
-      if (finalizado) return;
-      finalizado = true;
-      clearTimeout(temporizador);
-
-      if (erro.code === 'ENOENT') {
-        rejeitar(
-          new ErroIndisponivel(
-            'O yt-dlp não está instalado ou não está no PATH. Instale com ' +
-              '"pip install -U yt-dlp" ou defina CONTEXTFLOW_YTDLP com o caminho do executável.',
-          ),
-        );
-        return;
+    let erroFinal: Error | null = null;
+    let stdout = '', stderr = '', linha = '';
+    const saida = new StringDecoder('utf8'), erros = new StringDecoder('utf8');
+    const interromper = (erro: Error) => { erroFinal ??= erro; filho.kill('SIGKILL'); };
+    const abortar = () => interromper(erroAbortado());
+    const temporizador = setTimeout(() => interromper(new ErroDominio(
+      'ytdlp_timeout', `O YouTube não respondeu em ${Math.round(timeoutMs / 1000)} s. Tente de novo.`, 504,
+    )), timeoutMs);
+    const consumir = (texto: string) => {
+      if (!aoLinha) { stdout += texto; return; }
+      linha += texto;
+      let corte: number;
+      while ((corte = linha.indexOf('\n')) >= 0) {
+        const atual = linha.slice(0, corte).trim(); linha = linha.slice(corte + 1);
+        if (atual) aoLinha(atual);
       }
-      rejeitar(new ErroIndisponivel(`Não foi possível executar o yt-dlp: ${erro.message}`));
+    };
+    sinal?.addEventListener('abort', abortar, { once: true });
+    if (sinal?.aborted) abortar();
+    filho.stdout?.on('data', (bloco: Buffer) => {
+      try { consumir(saida.write(bloco)); } catch (erro) { interromper(erro instanceof Error ? erro : new Error('Saída inválida.')); }
     });
-
+    filho.stderr?.on('data', (bloco: Buffer) => { stderr += erros.write(bloco); });
+    filho.on('error', (erro: NodeJS.ErrnoException) => {
+      erroFinal = new ErroIndisponivel(erro.code === 'ENOENT'
+        ? 'O yt-dlp não está instalado ou não está no PATH. Instale com "pip install -U yt-dlp" ou defina CONTEXTFLOW_YTDLP com o caminho do executável.'
+        : 'Não foi possível executar o yt-dlp. Verifique a instalação.');
+    });
+    // Só finalizar depois de close: temporários nunca são apagados com o filho ainda escrevendo.
     filho.on('close', (codigo) => {
-      if (finalizado) return;
-      finalizado = true;
-      clearTimeout(temporizador);
-
-      if (stderr.trim().length > 0) aoErro(stderr.trim());
-      resolver({ codigo: codigo ?? -1, stdout, stderr });
+      clearTimeout(temporizador); sinal?.removeEventListener('abort', abortar);
+      try { consumir(saida.end()); if (aoLinha && linha.trim() && !erroFinal) aoLinha(linha.trim()); }
+      catch (erro) { erroFinal ??= erro instanceof Error ? erro : new Error('Saída inválida.'); }
+      stderr += erros.end();
+      if (stderr.trim()) aoErro(stderr.trim());
+      if (erroFinal) rejeitar(erroFinal); else resolver({ codigo: codigo ?? -1, stdout, stderr });
     });
   });
 }
+
+function erroAbortado(): ErroDominio { return new ErroDominio('trabalho_cancelado', 'Importação cancelada.', 409); }
 
 // ------------------------------------------------------------ tradução -------
 
@@ -129,6 +120,10 @@ function executar(
  */
 export function traduzirErroYtdlp(stderr: string): ErroDominio {
   const texto = stderr.toLowerCase();
+
+  if (texto.includes('http error 429') || texto.includes('too many requests')) {
+    return new ErroDominio('limite_youtube', 'O YouTube limitou as solicitações. Aguarde antes de repetir a importação.', 503);
+  }
 
   // ORDEM IMPORTA. Problemas de rede/TLS vêm primeiro: o texto de um erro de
   // rede costuma conter "unable to download", e o de restrição de idade contém
@@ -221,7 +216,7 @@ export class Ytdlp implements ExecutorYtdlp {
 
   async disponivel(): Promise<{ disponivel: boolean; versao: string | null; caminho: string }> {
     try {
-      const resultado = await executar(this.#binario, ['--version'], 10_000, this.#aoErro);
+      const resultado = await executarProcesso(this.#binario, ['--version'], 10_000, this.#aoErro);
       const versao = resultado.stdout.trim().split('\n')[0] ?? null;
       return { disponivel: resultado.codigo === 0, versao, caminho: this.#binario };
     } catch {
@@ -229,7 +224,7 @@ export class Ytdlp implements ExecutorYtdlp {
     }
   }
 
-  async inspecionar(url: string): Promise<MetadadosYtdlp> {
+  async inspecionar(url: string, sinal?: AbortSignal): Promise<MetadadosYtdlp> {
     const args = [
       '--dump-single-json',
       '--skip-download',
@@ -239,7 +234,7 @@ export class Ytdlp implements ExecutorYtdlp {
       url,
     ];
 
-    const resultado = await executar(this.#binario, args, this.#timeoutMs, this.#aoErro);
+    const resultado = await executarProcesso(this.#binario, args, this.#timeoutMs, this.#aoErro, sinal);
     if (resultado.codigo !== 0) throw traduzirErroYtdlp(resultado.stderr);
 
     let dados: JsonYtdlp;
@@ -270,8 +265,8 @@ export class Ytdlp implements ExecutorYtdlp {
    * Baixa a legenda no primeiro idioma que existir. Manual tem prioridade:
    * legendas automáticas são piores e o usuário precisa saber qual está lendo.
    */
-  async baixarLegenda(url: string, idiomas: string[]): Promise<LegendaBaixada | null> {
-    const metadados = await this.inspecionar(url);
+  async baixarLegenda(url: string, idiomas: string[], sinal?: AbortSignal): Promise<LegendaBaixada | null> {
+    const metadados = await this.inspecionar(url, sinal);
 
     const manual = escolherIdioma(metadados.legendasManuais, idiomas);
     const origem: 'manual' | 'auto' = manual ? 'manual' : 'auto';
@@ -298,7 +293,7 @@ export class Ytdlp implements ExecutorYtdlp {
         url,
       ];
 
-      const resultado = await executar(this.#binario, args, this.#timeoutMs, this.#aoErro);
+      const resultado = await executarProcesso(this.#binario, args, this.#timeoutMs, this.#aoErro, sinal);
       if (resultado.codigo !== 0) throw traduzirErroYtdlp(resultado.stderr);
 
       const arquivos = await readdir(pasta);
@@ -332,6 +327,19 @@ export class Ytdlp implements ExecutorYtdlp {
       await rm(pasta, { recursive: true, force: true }).catch(() => {});
     }
   }
+  async descobrirPlaylist(url: string, aoItem: (item: ItemPlaylist) => void, sinal?: AbortSignal): Promise<void> {
+    let posicao = 0;
+    const resultado = await executarProcesso(this.#binario, [
+      '--flat-playlist', '--dump-json', '--skip-download', '--yes-playlist', '--no-warnings', '--no-progress', url,
+    ], this.#timeoutMs, this.#aoErro, sinal, (linha) => {
+      let item: { id?: unknown; title?: unknown; playlist_index?: unknown };
+      try { item = JSON.parse(linha); } catch { throw new ErroDominio('playlist_ilegivel', 'A playlist devolveu dados ilegíveis.', 502); }
+      aoItem({ youtubeId: typeof item.id === 'string' && /^[A-Za-z0-9_-]{11}$/.test(item.id) ? item.id : null,
+        titulo: typeof item.title === 'string' ? item.title : 'Vídeo indisponível', posicao: posicao++ });
+    });
+    if (resultado.codigo !== 0) throw traduzirErroYtdlp(resultado.stderr);
+  }
+
 }
 
 // --------------------------------------------------------------- auxiliares --

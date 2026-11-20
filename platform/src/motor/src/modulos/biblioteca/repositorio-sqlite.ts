@@ -51,7 +51,9 @@ export class RepositorioBibliotecaSqlite implements RepositorioBiblioteca {
     this.db = db;
   }
 
-  async inserir(video: Video): Promise<void> {
+  async inserir(video: Video): Promise<void> { this.inserirSincrono(video); }
+
+  inserirSincrono(video: Video): void {
     try {
       this.db
         .prepare(
@@ -115,7 +117,9 @@ export class RepositorioBibliotecaSqlite implements RepositorioBiblioteca {
     return linha ? paraVideo(linha) : null;
   }
 
-  async porYoutubeId(youtubeId: string): Promise<Video | null> {
+  async porYoutubeId(youtubeId: string): Promise<Video | null> { return this.porYoutubeIdSincrono(youtubeId); }
+
+  porYoutubeIdSincrono(youtubeId: string): Video | null {
     const linha = this.db.prepare(`SELECT ${COLUNAS} FROM videos WHERE youtube_id = ?`).get(youtubeId) as unknown as LinhaVideo | undefined;
     return linha ? paraVideo(linha) : null;
   }

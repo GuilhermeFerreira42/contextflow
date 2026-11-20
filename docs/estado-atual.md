@@ -2,6 +2,23 @@
 
 ## Estado vigente — 19/11/2026 (São Paulo)
 
+**Nova autorização após a entrega documental:** o proprietário solicitou
+implementação da F4 e continuidade pelas demais fatias da V1, com validação,
+commits e atualização contínua da memória/documentação. F4 agora em implementação.
+Essa autorização substitui a restrição anterior de apenas escrever SPEC. Escopo
+canônico preservado, sem alterações no Python original e sem declarar provas
+ausentes. Próxima ação em curso: fila persistente, cancelamento e recuperação.
+
+**Checkpoint em andamento (não validado):** criados
+`platform/src/motor/src/persistencia/migracao-trabalhos.ts` e
+`repositorio-trabalhos.ts`; migração registrada em Banco e tipo compartilhado
+ampliado. Ainda não há scheduler/rotas/UI ligados a esses arquivos. **Não rodou
+typecheck ou testes deste incremento; não usar como entrega F4.** Próximo passo:
+concluir propagação de AbortSignal e gravação atômica conteúdo + trabalho, ligar
+scheduler com lease, implementar rotas/UI e executar matriz F4. Alterações locais
+intencionais, não commitadas enquanto incompletas. Último código validado continua
+`c6b7db5`; último commit completo `35a757b` (SPEC).
+
 Esta seção substitui o estado operacional anterior, preservado como histórico
 abaixo. Branch `main`; HEAD de entrada **`0aebf26`**, não `7a215cc`. Inicialmente
 só havia o ZIP do usuário não rastreado; ele permanece fora dos commits.

@@ -57,6 +57,7 @@ export interface Transcricao {
   segmentos: SegmentoTranscricao[];
   /** Mensagem legível quando não há legenda. Nunca vazio em `indisponivel`. */
   motivo: string | null;
+  codigoMotivo?: string | null;
   atualizadoEm: string;
 }
 
@@ -84,7 +85,7 @@ export interface Colecao {
 // Trabalhos (fila persistente)
 // ---------------------------------------------------------------------------
 
-export type TipoTrabalho = 'importar-video' | 'importar-playlist' | 'gerar-resumo';
+export type TipoTrabalho = 'importar-video' | 'importar-playlist' | 'importar-lote' | 'gerar-resumo';
 export type EstadoTrabalho = 'na-fila' | 'executando' | 'concluido' | 'falhou' | 'cancelado';
 
 export interface Trabalho {
@@ -97,6 +98,19 @@ export interface Trabalho {
   erro: string | null;
   criadoEm: string;
   atualizadoEm: string;
+}
+
+export interface TrabalhoDetalhado extends Trabalho {
+  titulo: string;
+  fase: string;
+  paiId: string | null;
+  videoId: string | null;
+  cancelamentoSolicitado: boolean;
+  erroCodigo: string | null;
+  resultado: unknown;
+  iniciadoEm: string | null;
+  finalizadoEm: string | null;
+  contadores: { total: number; concluidos: number; falhos: number; cancelados: number; semLegenda: number };
 }
 
 // ---------------------------------------------------------------------------

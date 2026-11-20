@@ -24,8 +24,8 @@ npm run dev            # desenvolvimento: roda o TypeScript direto
 npm start              # produção: roda dist/ (exige npm run build antes)
 npm run build          # typecheck + gera dist/
 npm run typecheck      # só checagem de tipos
-npm test               # unidade + integração (node:test) — 122 testes
-npm run test:e2e       # UI em navegador real via CDP — 17 cenários
+npm test               # unidade + integração (node:test); contagens no estado atual
+npm run test:e2e       # UI em navegador real via CDP; inclui fila/cancelamento/retry
 npm run verificar      # fumaça: sobe o motor, checa endpoints, derruba
 ```
 
@@ -108,6 +108,24 @@ variável de ambiente e com padrão por sistema operacional:
 | `CONTEXTFLOW_YTDLP` | `yt-dlp` (PATH) | caminho do binário do yt-dlp |
 | `CONTEXTFLOW_YTDLP_TIMEOUT` | `60000` | tempo máximo por operação (ms) |
 | `CONTEXTFLOW_IDIOMAS` | `pt-BR,pt,en` | ordem de preferência das legendas |
+| `CONTEXTFLOW_CONCORRENCIA` | `2` | máximo de operações de importação em paralelo (inteiro positivo) |
+
+## Fila, retomada e backups
+
+Importações aceita vídeo, playlist e lote de URLs. O aceite é imediato e o trabalho
+fica no SQLite; sair da página não o cancela. Cancelar encerra o processo externo
+antes de confirmar; Repetir reaproveita o mesmo trabalho e mantém conteúdo já pronto.
+Não há retry automático contra o YouTube, inclusive em HTTP 429.
+
+Após queda abrupta, a retomada pode aguardar até 30 segundos para expirar a posse
+anterior da fila. Uma segunda instância pode consultar; só uma executa por banco.
+Não apague a pasta de dados para resolver uma tarefa travada.
+
+Ao migrar uma base existente, o próprio SQLite cria snapshot consistente em
+`backups/` dentro da pasta de dados, antes da alteração de schema. O snapshot inclui
+conteúdo do WAL; falha de backup impede a migração. Preserve banco e backups fora
+do Git. Rollback de F4 para F3 remove histórico da fila, preservando conteúdo;
+detalhes e provas em `../docs/specs/f4-trabalhos.md`.
 | `CONTEXTFLOW_AMBIENTE` | `desenvolvimento` | `desenvolvimento`, `teste` ou `producao` |
 
 Ver `../docs/specs/` para o contrato de cada fatia e

@@ -14,6 +14,10 @@ const estado = {
   ultimoStatus: null,
   transcricoes: [],
   leituraAberta: null,
+  ultimoTrabalho: null,
+  pendentes: new Set(),
+  trabalhos: new Map(),
+  limiteTrabalhos: 50,
 };
 
 const $ = (seletor) => document.querySelector(seletor);
@@ -51,6 +55,7 @@ function pintarStatus(motor) {
     ponto.dataset.estado = 'ok';
     texto.textContent = 'Motor conectado';
     versao.textContent = `v${motor.versao} · ${motor.plataforma}`;
+    $('#atividade-global').textContent = motor.importacoesAtivas ? `${motor.importacoesAtivas} importações em andamento` : '';
   } else {
     ponto.dataset.estado = 'erro';
     texto.textContent = 'Motor indisponível';
@@ -88,7 +93,7 @@ function mostrarTela(nome) {
   // importação sem exigir recarregar a página.
   if (nome === 'biblioteca') void carregarBiblioteca();
   if (nome === 'leitura') void carregarLeitura();
-  if (nome === 'importacoes') void carregarDiagnostico();
+  if (nome === 'importacoes') { void carregarDiagnostico(); void carregarTrabalhos(); }
 }
 
 function telaDaUrl() {
@@ -248,48 +253,150 @@ async function importarVideo(evento) {
     return;
   }
 
-  // A importação chama o yt-dlp e pode levar alguns segundos: o botão precisa
-  // dizer que algo está acontecendo, senão o usuário clica de novo.
   botao.disabled = true;
-  botao.textContent = 'Importando…';
-  saida.dataset.tipo = 'pendente';
-  saida.textContent = 'Buscando metadados e legenda no YouTube…';
-
   try {
-    const resultado = await api('/api/ingestao/importar', {
-      method: 'POST',
-      body: JSON.stringify({ url }),
-    });
-
-    const { video, transcricao } = resultado;
-    saida.dataset.tipo = 'ok';
-
-    if (transcricao.estado === 'pronta') {
-      const rotulo = transcricao.origem === 'manual' ? 'manual' : 'automática';
-      saida.textContent =
-        `${resultado.criado ? 'Importado' : 'Já está na biblioteca'} — ${video.titulo}` +
-        ` · ${transcricao.quantidadeSegmentos} trechos · legenda ${rotulo} (${transcricao.idioma}).`;
-    } else {
-      saida.dataset.tipo = 'aviso';
-      saida.textContent = `${video.titulo} — ${transcricao.motivo ?? 'sem legenda disponível'}`;
-    }
-
+    const trabalho = await api('/api/trabalhos', { method: 'POST', body: JSON.stringify({
+      tipo: $('#tipo-importacao').value,
+      escopo: { url, chaveRequisicao: crypto.randomUUID() },
+    }) });
+    acompanharTrabalho(trabalho);
     campo.value = '';
-    await Promise.all([carregarBiblioteca(), carregarLeitura()]);
+    await carregarTrabalhos();
   } catch (erro) {
-    saida.dataset.tipo = 'erro';
-    if (erro.codigo === 'video_duplicado') {
-      saida.textContent = 'Este vídeo já está na biblioteca.';
-    } else if (erro.codigo === 'ytdlp_ausente' || erro.codigo === 'indisponivel') {
-      saida.textContent = `${erro.message} (veja o diagnóstico acima)`;
-      await carregarDiagnostico();
-    } else {
-      saida.textContent = erro.message;
-    }
-  } finally {
-    botao.disabled = false;
-    botao.textContent = 'Importar vídeo';
+    saida.dataset.tipo = 'erro'; saida.textContent = erro.message;
+  } finally { botao.disabled = false; }
+}
+
+function acompanharTrabalho(trabalho) {
+  estado.ultimoTrabalho = trabalho.id; estado.pendentes.add(trabalho.id);
+  $('#resultado-validacao').dataset.tipo = 'pendente';
+  $('#resultado-validacao').textContent = 'Adicionado à fila. Você pode continuar usando a biblioteca.';
+}
+
+function mostrarResultadoTrabalho(trabalho) {
+  const saida = $('#resultado-validacao');
+  const resultado = trabalho.resultado;
+  if (trabalho.estado === 'falhou' || trabalho.estado === 'cancelado') {
+    saida.dataset.tipo = 'erro'; saida.textContent = trabalho.erro ?? 'Importação cancelada.'; return;
   }
+  if (resultado?.video) {
+    const { video, transcricao } = resultado;
+    if (transcricao.estado === 'pronta') {
+      saida.dataset.tipo = 'ok';
+      saida.textContent = `${resultado.criado ? 'Importado' : 'Já está na biblioteca'} — ${video.titulo}` +
+        ` · ${transcricao.quantidadeSegmentos} trechos · legenda ${transcricao.origem === 'manual' ? 'manual' : 'automática'} (${transcricao.idioma}).`;
+    } else {
+      saida.dataset.tipo = 'aviso'; saida.textContent = `${video.titulo} — ${transcricao.motivo}`;
+    }
+  } else {
+    saida.dataset.tipo = 'ok'; saida.textContent = `Importação concluída: ${trabalho.contadores.concluidos} itens.`;
+  }
+}
+
+const ESTADOS_TRABALHO = { 'na-fila': 'Na fila', executando: 'Executando', concluido: 'Concluído', falhou: 'Falhou', cancelado: 'Cancelado' };
+const FASES = { aguardando: 'Aguardando', metadados: 'Buscando metadados', legenda: 'Buscando legenda', gravacao: 'Salvando', descobrindo: 'Lendo playlist', 'aguardando-itens': 'Processando itens', finalizado: 'Finalizado' };
+
+function linhaTrabalho(trabalho) {
+  const linha = document.createElement('article'); linha.className = 'trabalho'; linha.dataset.id = trabalho.id;
+  const titulo = document.createElement('strong');
+  titulo.textContent = trabalho.titulo ?? trabalho.resultado?.video?.titulo ?? ({ 'importar-video': 'Vídeo', 'importar-playlist': 'Playlist', 'importar-lote': 'Lote' }[trabalho.tipo]);
+  const resumo = document.createElement('p');
+  resumo.textContent = `${ESTADOS_TRABALHO[trabalho.estado]} · ${FASES[trabalho.fase] ?? trabalho.fase} · tentativa ${trabalho.tentativas}`;
+  if (trabalho.cancelamentoSolicitado && trabalho.estado === 'executando') resumo.textContent += ' · encerrando…';
+  linha.append(titulo, resumo);
+  if (trabalho.tipo !== 'importar-video') {
+    const c = trabalho.contadores;
+    const contagem = document.createElement('p');
+    contagem.textContent = `${c.total} itens · ${c.concluidos} concluídos (${c.semLegenda} sem legenda) · ${c.falhos} falhos · ${c.cancelados} cancelados`;
+    linha.append(contagem);
+  }
+  if (trabalho.progresso !== null) {
+    const progresso = document.createElement('progress'); progresso.max = 1; progresso.value = trabalho.progresso;
+    progresso.setAttribute('aria-label', 'Progresso da importação'); linha.append(progresso);
+  }
+  if (trabalho.erro) { const erro = document.createElement('p'); erro.className = 'erro-trabalho'; erro.textContent = trabalho.erro; linha.append(erro); }
+  if (trabalho.resultado?.transcricao?.estado === 'indisponivel') {
+    const motivo = document.createElement('p'); motivo.textContent = trabalho.resultado.transcricao.motivo; linha.append(motivo);
+  }
+  const acao = ['na-fila', 'executando'].includes(trabalho.estado) ? 'cancelar' : ['falhou', 'cancelado'].includes(trabalho.estado) ? 'repetir' : null;
+  if (acao) {
+    const botao = document.createElement('button'); botao.type = 'button'; botao.className = 'botao-secundario';
+    botao.dataset.acao = acao; botao.textContent = acao === 'cancelar' ? 'Cancelar' : 'Repetir';
+    botao.disabled = trabalho.cancelamentoSolicitado && trabalho.estado === 'executando';
+    botao.addEventListener('click', async () => {
+      botao.disabled = true;
+      try {
+        const atualizado = await api(`/api/trabalhos/${trabalho.id}/${acao}`, { method: 'POST', body: JSON.stringify({ chaveRequisicao: crypto.randomUUID() }) });
+        if (acao === 'repetir') acompanharTrabalho(atualizado);
+        await carregarTrabalhos();
+      } catch (erro) { $('#erro-trabalhos').textContent = erro.message; }
+      finally { botao.disabled = false; }
+    });
+    linha.append(botao);
+  }
+  if (trabalho.tipo !== 'importar-video') {
+    const itens = document.createElement('details'); itens.dataset.pai = trabalho.id;
+    const sumario = document.createElement('summary'); sumario.textContent = 'Ver itens'; itens.append(sumario);
+    const lista = document.createElement('div'); itens.append(lista);
+    let cursor = null;
+    const carregar = async (mais = false) => {
+      try {
+        const pagina = await api(`/api/trabalhos/${trabalho.id}/itens?limite=50${mais && cursor ? '&cursor=' + encodeURIComponent(cursor) : ''}`);
+        if (!mais) lista.replaceChildren();
+        lista.append(...pagina.itens.map(linhaTrabalho)); cursor = pagina.proximoCursor;
+        botaoMais.hidden = !cursor;
+      } catch (erro) { lista.textContent = erro.message; }
+    };
+    const botaoMais = document.createElement('button'); botaoMais.type = 'button'; botaoMais.textContent = 'Mais itens'; botaoMais.className = 'botao-secundario'; botaoMais.hidden = true;
+    botaoMais.addEventListener('click', () => carregar(true)); itens.append(botaoMais);
+    itens.addEventListener('toggle', () => { if (itens.open) void carregar(); });
+    linha.append(itens);
+  }
+  return linha;
+}
+
+let carregandoTrabalhos = false;
+async function carregarTrabalhos() {
+  if (carregandoTrabalhos) return;
+  carregandoTrabalhos = true;
+  try {
+    let cursor = null; const itens = [];
+    do {
+      const pagina = await api(`/api/trabalhos?raizes=1&limite=50${cursor ? '&cursor=' + encodeURIComponent(cursor) : ''}`);
+      itens.push(...pagina.itens); cursor = pagina.proximoCursor;
+    } while (cursor && itens.length < estado.limiteTrabalhos);
+    $('#mais-trabalhos').hidden = !cursor;
+    const lista = $('#lista-trabalhos');
+    if (itens.length && !lista.querySelector('.trabalho')) lista.replaceChildren();
+    for (const trabalho of itens) {
+      const atual = lista.querySelector(`.trabalho[data-id="${trabalho.id}"]`);
+      const anterior = estado.trabalhos.get(trabalho.id);
+      if (!atual || JSON.stringify(anterior) !== JSON.stringify(trabalho)) {
+        const novo = linhaTrabalho(trabalho);
+        const aberto = atual?.querySelector('details[open]'); if (aberto) novo.querySelector('details').open = true;
+        if (atual) atual.replaceWith(novo); else lista.append(novo);
+      }
+      estado.trabalhos.set(trabalho.id, trabalho);
+    }
+    // Ordenação vinda do servidor, sem recriar botões que não mudaram.
+    itens.forEach((t, i) => {
+      const linha = lista.querySelector(`.trabalho[data-id="${t.id}"]`);
+      if (lista.children[i] !== linha) lista.insertBefore(linha, lista.children[i] ?? null);
+    });
+    if (!itens.length) lista.textContent = 'Nenhuma importação na fila.';
+    for (const id of [...estado.pendentes]) {
+      const t = itens.find(t => t.id === id) ?? await api(`/api/trabalhos/${id}`);
+      if (['concluido', 'falhou', 'cancelado'].includes(t.estado)) {
+        estado.pendentes.delete(id);
+        if (id === estado.ultimoTrabalho) mostrarResultadoTrabalho(t);
+        await Promise.all([carregarBiblioteca(), carregarLeitura()]);
+      }
+    }
+    const ativos = itens.filter(t => ['na-fila', 'executando'].includes(t.estado)).length;
+    $('#atividade-importacoes').textContent = ativos ? `${ativos} importações ativas nesta página` : 'Fila atualizada';
+    $('#erro-trabalhos').textContent = '';
+  } catch (erro) { $('#erro-trabalhos').textContent = erro.message; }
+  finally { carregandoTrabalhos = false; }
 }
 
 /* -------------------------------------------------------------- leitura ---- */
@@ -435,6 +542,21 @@ function ligarEventos() {
   });
 
   $('#formulario-importacao').addEventListener('submit', importarVideo);
+  $('#tipo-importacao').addEventListener('change', () => {
+    $('#botao-importar').textContent = $('#tipo-importacao').value === 'importar-playlist' ? 'Importar playlist' : 'Importar vídeo';
+  });
+  $('#formulario-lote').addEventListener('submit', async evento => {
+    evento.preventDefault();
+    const botao = evento.target.querySelector('button'); botao.disabled = true;
+    try {
+      const trabalho = await api('/api/ingestao/lote', { method: 'POST', body: JSON.stringify({
+        urls: $('#urls-lote').value.split(/\r?\n/).map(u => u.trim()).filter(Boolean), chaveRequisicao: crypto.randomUUID(),
+      }) });
+      acompanharTrabalho(trabalho); $('#urls-lote').value = ''; await carregarTrabalhos();
+    } catch (erro) { $('#resultado-validacao').dataset.tipo = 'erro'; $('#resultado-validacao').textContent = erro.message; }
+    finally { botao.disabled = false; }
+  });
+  $('#mais-trabalhos').addEventListener('click', () => { estado.limiteTrabalhos += 50; void carregarTrabalhos(); });
   $('#fechar-leitor').addEventListener('click', fecharLeitura);
   window.addEventListener('hashchange', () => mostrarTela(telaDaUrl()));
 }
@@ -448,6 +570,7 @@ async function iniciar() {
 
   // Atividade global discreta: o status do motor se atualiza sem recarregar a tela.
   setInterval(verificarMotor, 15000);
+  setInterval(() => { if (!document.hidden && (estado.tela === 'importacoes' || estado.pendentes.size)) void carregarTrabalhos(); }, 1000);
 }
 
 iniciar();

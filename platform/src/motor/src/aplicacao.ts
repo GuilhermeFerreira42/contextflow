@@ -1,4 +1,4 @@
-import { gravarResultadoIngestao } from './persistencia/resultado-ingestao.ts';
+import { gravarResultadoIngestao, escreverResultadoIngestao } from './persistencia/resultado-ingestao.ts';
 /**
  * Montagem do aplicativo: única função que conhece todos os módulos.
  *
@@ -9,7 +9,7 @@ import { randomUUID } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import type { Preferencias } from '@contextflow/compartilhado';
 import type { ConfigMotor } from './nucleo/configuracao.ts';
-import { criarServidorApi, Roteador } from './nucleo/http.ts';
+import { criarServidorApi, Roteador, ResultadoHttp } from './nucleo/http.ts';
 import { ErroValidacao } from './nucleo/erros.ts';
 import { criarRegistrador, type Registrador } from './nucleo/registro.ts';
 import { lerArquivoPublico, servirEstatico } from './nucleo/estatico.ts';
@@ -19,7 +19,8 @@ import { Banco } from './persistencia/banco.ts';
 import { ServicoIngestaoReal, normalizarUrlVideo } from './modulos/ingestao/servico.ts';
 import { RepositorioTranscricoesSqlite } from './persistencia/repositorio-transcricoes.ts';
 import { Ytdlp, type ExecutorYtdlp } from './integracoes/ytdlp.ts';
-import type { ServicoTrabalhos } from './modulos/trabalhos/servico.ts';
+import { FilaTrabalhos, validarIdiomas } from './modulos/trabalhos/servico.ts';
+import { RepositorioTrabalhos } from './persistencia/repositorio-trabalhos.ts';
 import type { ServicoResumos } from './modulos/resumos/servico.ts';
 import type { ServicoConfiguracao } from './modulos/configuracao/servico.ts';
 
@@ -41,6 +42,7 @@ export interface Aplicacao {
   config: ConfigMotor;
   registrador: Registrador;
   banco: Banco;
+  trabalhos: FilaTrabalhos;
   /** Abre o banco e aplica migrações; separado do listen para testes controlarem o ciclo. */
   iniciarPersistencia(): number;
   encerrar(): Promise<void>;
@@ -52,6 +54,7 @@ export interface OpcoesAplicacao {
    * indefinido e o adaptador real é criado com o binário do PATH.
    */
   executorYtdlp?: ExecutorYtdlp;
+  concorrencia?: number;
 }
 
 export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}): Aplicacao {
@@ -77,7 +80,28 @@ export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}
     idiomas: config.idiomasLegenda,
   });
 
-  const trabalhos = null as ServicoTrabalhos | null;
+  const repositorioTrabalhos = new RepositorioTrabalhos(banco);
+  const trabalhos = new FilaTrabalhos({
+    repositorio: repositorioTrabalhos, executor: executorYtdlp,
+    concorrencia: opcoes.concorrencia ?? Number(process.env.CONTEXTFLOW_CONCORRENCIA ?? 2),
+    registrarErro: () => registrador.erro('Falha ao processar a fila.'),
+    processar: (r, escopo, sinal) => ingestao.importar(escopo.url!, escopo.idiomas, {
+      sinal, retomar: true,
+      verificar: () => repositorioTrabalhos.conferir(r),
+      fase: fase => repositorioTrabalhos.fase(r, fase),
+      // A URL já está durável no trabalho; não criar vídeo Importando sem conteúdo.
+      provisionar: () => repositorioTrabalhos.conferir(r),
+      marcarErro: video => repositorioTrabalhos.conferirEGravar(r, () => {
+        if (repositorioBiblioteca.porYoutubeIdSincrono(video.youtubeId)?.id === video.id) repositorioBiblioteca.atualizarSincrono(video);
+      }),
+      persistirResultado: (video, transcricao, resultado) => repositorioTrabalhos.concluir(r, resultado,
+        () => {
+          if (!repositorioBiblioteca.porYoutubeIdSincrono(video.youtubeId)) repositorioBiblioteca.inserirSincrono(video);
+          escreverResultadoIngestao(banco, video, transcricao);
+        },
+        resultado.transcricao.erroCodigo ? { codigo: resultado.transcricao.erroCodigo, mensagem: resultado.transcricao.motivo!, status: resultado.transcricao.erroHttp } : undefined),
+    }),
+  });
   const resumos = null as ServicoResumos | null;
   const configuracao = null as ServicoConfiguracao | null;
 
@@ -88,6 +112,7 @@ export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}
       plataforma: process.platform,
       node: process.version,
       pastaDados: config.pastaDados,
+      importacoesAtivas: repositorioTrabalhos.ativos(),
       modulos: {
         biblioteca: 'sqlite',
         ingestao: 'yt-dlp',
@@ -170,11 +195,9 @@ export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}
       if (!corpo || typeof corpo.url !== 'string') {
         throw new ErroValidacao('Corpo obrigatório com o campo "url"');
       }
-      const idiomas =
-        Array.isArray(corpo.idiomas) && corpo.idiomas.every((i) => typeof i === 'string')
-          ? (corpo.idiomas as string[])
-          : undefined;
-      const resultado = await ingestao.importar(corpo.url, idiomas);
+      const idiomas = validarIdiomas(corpo.idiomas);
+      const trabalho = await trabalhos.criar('importar-video', { url: corpo.url, idiomas, chaveRequisicao: randomUUID() });
+      const resultado = await trabalhos.aguardar(trabalho.id);
       registrador.info('ingestão concluída', {
         youtubeId: resultado.video.youtubeId,
         estado: resultado.video.estado,
@@ -183,6 +206,38 @@ export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}
         criado: resultado.criado,
       });
       return resultado;
+    })
+    .postar('/api/trabalhos', async ({ requisicao }) => {
+      const corpo = requisicao.corpo as { tipo?: unknown; escopo?: unknown } | undefined;
+      if (!corpo || typeof corpo.tipo !== 'string' || !corpo.escopo || typeof corpo.escopo !== 'object' || Array.isArray(corpo.escopo))
+        throw new ErroValidacao('Informe tipo e escopo do trabalho.');
+      const trabalho = await trabalhos.criar(corpo.tipo as import('@contextflow/compartilhado').TipoTrabalho, corpo.escopo as Record<string, unknown>);
+      return new ResultadoHttp(trabalho, 202, { location: `/api/trabalhos/${trabalho.id}` });
+    })
+    .postar('/api/ingestao/lote', async ({ requisicao }) => {
+      const corpo = requisicao.corpo;
+      if (!corpo || typeof corpo !== 'object' || Array.isArray(corpo)) throw new ErroValidacao('Informe URLs e chaveRequisicao.');
+      const trabalho = await trabalhos.criar('importar-lote', corpo as Record<string, unknown>);
+      return new ResultadoHttp(trabalho, 202, { location: `/api/trabalhos/${trabalho.id}` });
+    })
+    .obter('/api/trabalhos', ({ requisicao }) => repositorioTrabalhos.pagina({
+      raizes: requisicao.consulta.get('raizes') === '1', estado: requisicao.consulta.get('estado') ?? undefined, cursor: requisicao.consulta.get('cursor') ?? undefined,
+      limite: Number(requisicao.consulta.get('limite') ?? 50),
+    }))
+    .obter('/api/trabalhos/:id', ({ requisicao }) => repositorioTrabalhos.detalhe(requisicao.caminho.split('/')[3]!))
+    .obter('/api/trabalhos/:id/itens', ({ requisicao }) => repositorioTrabalhos.pagina({
+      paiId: requisicao.caminho.split('/')[3]!, cursor: requisicao.consulta.get('cursor') ?? undefined,
+      limite: Number(requisicao.consulta.get('limite') ?? 50),
+    }))
+    .postar('/api/trabalhos/:id/cancelar', async ({ requisicao }) => {
+      const id = requisicao.caminho.split('/')[3]!; await trabalhos.cancelar(id);
+      const trabalho = repositorioTrabalhos.detalhe(id);
+      return new ResultadoHttp(trabalho, trabalho.estado === 'executando' ? 202 : 200);
+    })
+    .postar('/api/trabalhos/:id/repetir', async ({ requisicao }) => {
+      const corpo = requisicao.corpo as { chaveRequisicao?: unknown } | undefined;
+      const trabalho = await trabalhos.repetir(requisicao.caminho.split('/')[3]!, String(corpo?.chaveRequisicao ?? ''));
+      return new ResultadoHttp(trabalho, trabalho.estado === 'na-fila' ? 202 : 200);
     })
     .obter('/api/biblioteca/:id/transcricao', async ({ requisicao }) => {
       const partes = requisicao.caminho.split('/');
@@ -223,8 +278,10 @@ export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}
     config,
     registrador,
     banco,
+    trabalhos,
     iniciarPersistencia: () => {
       const aplicadas = banco.migrar();
+      trabalhos.iniciar();
       registrador.info('persistência pronta', {
         arquivo: Banco.arquivoPadrao(config.pastaDados),
         migracoesAplicadas: aplicadas,
@@ -232,11 +289,12 @@ export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}
       });
       return aplicadas;
     },
-    encerrar: () =>
-      new Promise<void>((ok) => {
-        servidor.close(() => ok());
-        servidor.closeAllConnections?.();
-        banco.fechar();
-      }),
+    encerrar: async () => {
+      const fechado = new Promise<void>(ok => servidor.close(() => ok()));
+      servidor.closeAllConnections?.();
+      await trabalhos.encerrar();
+      await fechado;
+      banco.fechar();
+    },
   };
 }
