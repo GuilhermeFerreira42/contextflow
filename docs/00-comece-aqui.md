@@ -2,8 +2,8 @@
 
 **Status**: V1 em implementação. **F1 e F2 homologadas**; **F3 validada no Windows
 com YouTube real** (19/11/2026; aceite humano e ressalvas no estado atual).
-**F4 somente especificada, sem implementação.** Base documental: pacote
-`ContextFlow_Pacote_Execucao_V1` (2026-11-18). Estado vivo em
+**F4 implementada e testada**; **F5 backend implementada, frontend em progresso**; **F6 SPEC escrita**.
+Base documental: pacote `ContextFlow_Pacote_Execucao_V1` (2026-11-18). Estado vivo em
 `docs/estado-atual.md`.
 
 **Se você é um agente chegando agora (Codex ou outro):** leia

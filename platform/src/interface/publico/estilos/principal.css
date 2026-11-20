@@ -227,6 +227,110 @@ body {
   margin-bottom: 12px;
 }
 
+.barra-filtros {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  background: var(--grafite-900);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+}
+
+.campo-busca {
+  flex: 1;
+  max-width: 420px;
+}
+
+.filtros-grupo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.filtro-select {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.filtro-select select {
+  font: inherit;
+  font-size: 11px;
+  color: var(--texto);
+  background: var(--grafite-850);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  padding: 5px 24px 5px 8px;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b95a1' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  padding-right: 28px;
+  min-width: 140px;
+}
+
+.filtro-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--texto-fraco);
+}
+
+.filtro-checkbox input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--azul-forte);
+}
+
+.contador {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--texto-fraco);
+}
+
+.contador-selecao {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--azul);
+  background: var(--azul-fraco);
+  padding: 2px 8px;
+  border-radius: var(--raio);
+}
+
+.barra-acoes-lote {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: var(--grafite-900);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  border-left: 3px solid var(--azul-forte);
+}
+
+.acoes-lote-grupo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.acoes-lote-grupo .filtro-select {
+  flex: 1;
+  min-width: 180px;
+}
+
+.acoes-lote-grupo .filtro-select select {
+  min-width: 180px;
+}
+
 .campo-busca {
   flex: 1;
   max-width: 420px;
@@ -287,6 +391,35 @@ body {
   height: 30px;
   border-bottom: 1px solid var(--borda);
   white-space: nowrap;
+  user-select: none;
+}
+
+.tabela-biblioteca thead th[data-ordenacao] {
+  cursor: pointer;
+}
+
+.tabela-biblioteca thead th[data-ordenacao]:hover {
+  background: var(--grafite-800);
+  color: var(--texto-forte);
+}
+
+.seta-ordenacao {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 9px;
+  line-height: 1;
+  vertical-align: middle;
+  opacity: 0.4;
+  transition: opacity 0.15s, transform 0.15s;
+}
+
+.tabela-biblioteca thead th.ordenado .seta-ordenacao {
+  opacity: 1;
+  color: var(--azul);
+}
+
+.tabela-biblioteca thead th.ordenado[data-ordenacao-direcao="asc"] .seta-ordenacao {
+  transform: rotate(180deg);
 }
 
 .tabela-biblioteca tbody td {
@@ -669,3 +802,168 @@ body {
 .trabalho progress { display: block; width: 100%; max-width: 400px; margin: 8px 0; accent-color: var(--azul-forte); }
 .trabalho .erro-trabalho, #erro-trabalhos { color: var(--aviso); }
 .trabalho .trabalho { margin-top: 8px; }
+
+/* =========================================================================
+   F5: Biblioteca — filtros, ordenação, seleção, ações em lote, coleções
+   ========================================================================= */
+
+.barra-filtros {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  background: var(--grafite-900);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+}
+
+.filtros-grupo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.filtro-select {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.filtro-select select {
+  font: inherit;
+  font-size: 11px;
+  color: var(--texto);
+  background: var(--grafite-850);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  padding: 5px 24px 5px 8px;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b95a1' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  padding-right: 28px;
+  min-width: 140px;
+}
+
+.filtro-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--texto-fraco);
+}
+
+.filtro-checkbox input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--azul-forte);
+}
+
+.contador-selecao {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--azul);
+  background: var(--azul-fraco);
+  padding: 2px 8px;
+  border-radius: var(--raio);
+}
+
+.barra-acoes-lote {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: var(--grafite-900);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  border-left: 3px solid var(--azul-forte);
+}
+
+.acoes-lote-grupo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.acoes-lote-grupo .filtro-select {
+  flex: 1;
+  min-width: 180px;
+}
+
+.acoes-lote-grupo .filtro-select select {
+  min-width: 180px;
+}
+
+#sentinela-biblioteca {
+  pointer-events: none;
+}
+
+.tabela-biblioteca thead th[data-ordenacao].ordenado .seta-ordenacao {
+  opacity: 1;
+  color: var(--azul);
+}
+
+.tabela-biblioteca thead th.ordenado[data-ordenacao-direcao="asc"] .seta-ordenacao {
+  transform: rotate(180deg);
+}
+
+/* Virtualização: sentinela no final da tabela */
+#sentinela-biblioteca {
+  pointer-events: none;
+}
+
+/* Seleção: linha destacada */
+.tabela-biblioteca tbody tr.selecionada td {
+  background: var(--azul-fraco);
+}
+
+/* Ações em lote */
+.barra-acoes-lote[hidden] {
+  display: none;
+}
+
+.acoes-lote-grupo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.acoes-lote-grupo .filtro-select {
+  flex: 1;
+  min-width: 180px;
+}
+
+.acoes-lote-grupo .filtro-select select {
+  min-width: 180px;
+}
+
+/* Coleções dropdown */
+.acoes-lote-grupo .filtro-select select {
+  min-width: 180px;
+}
+
+/* Scrollbar fina para tabelas virtualizadas */
+.tabela-envoltorio::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.tabela-envoltorio::-webkit-scrollbar-track {
+  background: var(--grafite-900);
+}
+
+.tabela-envoltorio::-webkit-scrollbar-thumb {
+  background: var(--grafite-600);
+  border-radius: 4px;
+}
+
+.tabela-envoltorio::-webkit-scrollbar-thumb:hover {
+  background: var(--grafite-500);
+}

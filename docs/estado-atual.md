@@ -2,17 +2,15 @@
 
 ## Estado vigente — 20/11/2026 (São Paulo)
 
-**F5 implementada, testada e commitada.** A autorização do proprietário (19/11/2026) para implementar F4 e continuar pelas fatias da V1 foi executada. Escopo canônico preservado, sem alterações no Python original, sem segredos no Git.
+**F5 backend implementada e testada; frontend em progresso (virtualização, filtros, seleção, ações em lote, coleções).** A autorização do proprietário (19/11/2026) para implementar F4 e continuar pelas fatias da V1 foi executada. Escopo canônico preservado, sem alterações no Python original, sem segredos no Git.
 
-**SPEC F6 escrita** em `docs/specs/f6-resumos.md` (provedores OpenAI/Anthropic/Ollama, configuração, estimativa de custo, map-reduce para textos longos, segredos isolados, fila F4, cancelamento, retry). Aguarda revisão e autorização do proprietário antes de implementar. Próxima ação: proprietário revisar a SPEC e dar aceite.
+**SPEC F6 escrita** em `docs/specs/f6-resumos.md` (provedores OpenAI/Anthropic/Ollama, configuração, estimativa de custo, map-reduce para textos longos, segredos isolados, fila F4, cancelamento, retry). Aguarda revisão e autorização do proprietário antes de implementar. Próxima ação: concluir F5 frontend e validar.
 
-**F3 validada e corrigida no Windows com YouTube real; aceite humano pendente.** Correções e evidências em `c6b7db5`. F1/F2 mantêm homologações anteriores. F4 implementada e testada em `5a13b3c`. F5 implementada e testada em `b8ce30a`.
+**F3 validada e corrigida no Windows com YouTube real; aceite humano pendente.** Correções e evidências em `c6b7db5`. F1/F2 mantêm homologações anteriores. F4 implementada e testada em `5a13b3c`. F5 backend implementada e testada em `b8ce30a`.
 
 **Checkpoint finalizado:** migração 003 aplicada, `RepositorioBiblioteca` com filtros/ordenação, `ServicoBiblioteca` com ações em lote e coleções, rotas HTTP para lote e coleções, migração 003 reversível — tudo verde. Último código validado: `b8ce30a`.
 
-**F3 validada e corrigida no Windows com YouTube real; aceite humano pendente.** Correções e evidências em `c6b7db5`. F1/F2 mantêm homologações anteriores. F4 implementada e testada em `5a13b3c`.
-
-**Checkpoint finalizado:** migração 002 aplicada, `RepositorioTrabalhos`, `FilaTrabalhos`, rotas HTTP, UI de Importações, testes de integração, E2E e processos reais (SIGKILL, lease, fencing) — tudo verde. Último código validado: `5a13b3c`.
+**Checkpoint F4:** migração 002 aplicada, `RepositorioTrabalhos`, `FilaTrabalhos`, rotas HTTP, UI de Importações, testes de integração, E2E e processos reais (SIGKILL, lease, fencing) — tudo verde. Código validado: `5a13b3c`.
 
 Esta seção substitui o estado operacional anterior, preservado como histórico abaixo. Branch `main`; HEAD de entrada era `0aebf26`; agora `5a13b3c` (F4). Inicialmente só havia o ZIP do usuário não rastreado; ele permanece fora dos commits.
 
@@ -178,7 +176,7 @@ Próximos gates: aceite humano da F3 (com ressalvas acima) e F5 conforme plano m
 ## O que falta (ordem executável)
 
 1. **Aceite humano da F3** — com ressalvas do HTTP 429 na tradução `pt` e teste privado não executado.
-2. **F5 — Virtualização, busca e performance**: grade virtualizada (10k+ itens), FTS, cursor otimizado, Leitura sem N+1. Conforme `docs/04-plano-mestre.md`.
+2. **F5 frontend — Virtualização, filtros, seleção, ações em lote, coleções**: grade virtualizada com IntersectionObserver (10k+ itens), filtros combinados (busca, estado, canal, temResumo, coleção), ordenação por coluna, seleção múltipla com range e "tudo visível", ações em lote (reimportar via fila F4, remover cascade, mover para coleção), CRUD coleções. Conforme `docs/specs/f5-biblioteca.md`.
 3. F6 em diante, conforme `docs/04-plano-mestre.md`.
 
 ## Pendências técnicas conhecidas
@@ -210,12 +208,12 @@ Próximos gates: aceite humano da F3 (com ressalvas acima) e F5 conforme plano m
 | Campo | Valor |
 |---|---|
 | Repositório | `contextflow2/` — branch `main`, sem remote configurado |
-| HEAD | `5a13b3c` (F4) · `c6b7db5` (F3 validação Windows) · `7a215cc` (F3) · `4c02f6f` (F2) · `8009009`, `9fb9f32` (F1) |
+| HEAD | `b8ce30a` (F5 backend) · `d9ef6a6` (F6 SPEC) · `5a13b3c` (F4) · `c6b7db5` (F3 validação Windows) · `7a215cc` (F3) · `4c02f6f` (F2) · `8009009`, `9fb9f32` (F1) |
 | Mudanças locais | verificar `git status --short` antes de agir |
-| Fase concluída tecnicamente | **F4** (fila, progresso, cancelamento, retry, playlist, recuperação) |
+| Fase concluída tecnicamente | **F4** (fila, progresso, cancelamento, retry, playlist, recuperação); **F5 backend** (filtros, ordenação, coleções, ações em lote, migração 003) |
 | Fases homologadas | **F1** e **F2** |
 | Bloqueio de homologação | **F3** aguarda aceite humano (ressalvas: 429 tradução pt, vídeo privado não testado) |
-| Próxima ação autorizada | F5 — virtualização, busca, performance (conforme `docs/04-plano-mestre.md`) |
+| Próxima ação autorizada | Concluir F5 frontend (virtualização, filtros UI, seleção, ações em lote, coleções) e validar; depois F6 |
 | Documento de transferência | `docs/handoff-codex.md` |
 
 ### Comandos de verificação (a partir de `platform/`)
