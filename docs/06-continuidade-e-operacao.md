@@ -45,8 +45,7 @@ compreensível se o artefato desaparecer.
 ## Estrutura física do projeto
 
 ```
-contextflow/              → projeto original (Python). Somente leitura.
-contextflow2/             → repositório Git deste projeto
+contextflow/              → repositório Git deste projeto
 ├── docs/                 → documentação canônica
 └── platform/             → tudo do executável Node.js + TypeScript
 Continuidade de Projeto/  → material operacional, FORA do Git (ao lado do repositório)

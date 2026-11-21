@@ -30,7 +30,7 @@ dependências, segurança ou compatibilidade. Nada aqui é "homologado".
 ## Privacidade — regra dura
 
 O projeto original contém `config/credentials.json`, bancos SQLite, thumbs e `.git/`.
-Esses materiais **nunca** são copiados para `contextflow2` nem para
+Esses materiais **nunca** são copiados para `contextflow` nem para
 `Continuidade de Projeto/`, nem entram em commit. O original permanece **somente leitura**.
 
 ## Referências externas — evidências documentais, NÃO código auditado

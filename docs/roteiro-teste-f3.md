@@ -31,7 +31,7 @@ PowerShell de novo (o PATH só é atualizado em sessões novas).
 ## 2. Subir o app
 
 ```powershell
-cd C:\Users\Usuario\Desktop\contextflow2\platform
+cd C:\Users\Usuario\Desktop\contextflow\platform
 npm run dev
 ```
 

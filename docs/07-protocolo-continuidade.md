@@ -10,7 +10,7 @@
 ## 1. Ao abrir uma sessão (obrigatório, nesta ordem)
 
 1. Ler `docs/00-comece-aqui.md` → `docs/01-escopo-canonico.md` → `docs/estado-atual.md`.
-2. Conferir o estado real: `git status --short --branch` (dentro de `contextflow2/`),
+2. Conferir o estado real: `git status --short --branch` (dentro de `contextflow/`),
    `git log --oneline -5`, e se `platform/` sofreu alterações locais.
 3. Se código e documentação divergirem, **investigar antes de agir** e corrigir o registro
    com os fatos confirmados. Preservar alterações locais do usuário.
@@ -77,9 +77,8 @@ o que demonstra, revisão e como encontrar — nunca embutida no Git.
 ## 5. Estrutura de pastas (invariante)
 
 ```
-contextflow/        → projeto original Python — SOMENTE LEITURA
-contextflow2/       → repositório Git (docs/ + platform/)
-Continuidade de Projeto/ → operacional, FORA do Git, irmã de contextflow2
+contextflow/        → repositório Git (docs/ + platform/)
+Continuidade de Projeto/ → operacional, FORA do Git, irmã de contextflow
 ```
 
 Nada de código em `docs/`. Nada de documentação canônica em `platform/`.

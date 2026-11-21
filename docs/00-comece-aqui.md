@@ -25,8 +25,7 @@ Monólito modular. Chat sobre conteúdo é **V2** e não entra na V1.
 ## Onde está o quê
 
 ```
-contextflow/        → projeto original (Python/wxPython). SOMENTE LEITURA. Congelado.
-contextflow2/       → repositório Git do novo projeto
+contextflow/        → o projeto (uma única pasta, um único repositório Git)
 ├── docs/           → documentação canônica (este arquivo, escopo, SPECs, decisões, estado)
 └── platform/       → TODO o projeto executável Node.js + TypeScript
 Continuidade de Projeto/  → materiais operacionais FORA do Git
@@ -35,9 +34,12 @@ Continuidade de Projeto/  → materiais operacionais FORA do Git
 > **Sobre os caminhos neste documento:** onde aparecer `/home/user/...`, leia como
 > o caminho da **máquina onde você está trabalhando**. Aquele prefixo é do
 > ambiente Linux onde o projeto foi desenvolvido; no Windows do proprietário o
-> projeto está em `C:\Users\Usuario\Desktop\contextflow2\` e a pasta
+> projeto está em `C:\Users\Usuario\Desktop\contextflow\` e a pasta
 > `Continuidade de Projeto` fica **ao lado** dele, em `Desktop`. O que importa é
 > a **relação** entre as pastas, não o prefixo.
+>
+> O protótipo desktop anterior em Python está congelado na branch
+> `legado/python-desktop` deste mesmo repositório — não há mais duas pastas.
 
 ## Ordem de leitura obrigatória
 

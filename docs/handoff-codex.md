@@ -72,7 +72,7 @@ dependência de produção**.
 
 > **Sobre caminhos:** o projeto foi desenvolvido num ambiente Linux, então
 > alguma documentação antiga usa `/home/user/...`. **No Windows do proprietário
-> nada disso existe.** O projeto está em `C:\Users\Usuario\Desktop\contextflow2\`
+> nada disso existe.** O projeto está em `C:\Users\Usuario\Desktop\contextflow\`
 > e a pasta `Continuidade de Projeto` fica ao lado, no `Desktop`. Onde você ler
 > um caminho absoluto, traduza para o lugar onde você colocou as pastas — o que
 > importa é a relação entre elas, não o prefixo.
@@ -81,7 +81,7 @@ dependência de produção**.
 
 ```
 contextflow/                        → projeto ORIGINAL em Python. Somente leitura.
-contextflow2/                       → repositório Git do projeto novo (é este)
+contextflow/                       → repositório Git do projeto novo (é este)
 ├── .git/
 ├── docs/                           → documentação canônica
 │   ├── 00-comece-aqui.md
