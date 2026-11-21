@@ -619,12 +619,22 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
       const semItens = total === 0;
       $('#vazio-biblioteca').hidden = !semItens;
       tabela.hidden = semItens;
-      $('#vazio-biblioteca .vazio-titulo').textContent = $('#busca').value.trim() || temFiltroAtivo()
-        ? 'Nenhum vídeo encontrado'
-        : 'Biblioteca vazia';
-      $('#vazio-biblioteca .vazio-texto').textContent = $('#busca').value.trim() || temFiltroAtivo()
-        ? 'Nenhum vídeo corresponde aos filtros atuais. Ajuste ou limpe os filtros.'
-        : 'Importe um vídeo pela janela "Adicionar link" ou pela tela de Importações.';
+      // A mensagem nomeia a CAUSA: buscar "x" e receber "limpe os filtros"
+      // manda a pessoa olhar para o lugar errado.
+      const termo = $('#busca').value.trim();
+      const temFiltro = temFiltroAtivo();
+      if (termo) {
+        $('#vazio-biblioteca .vazio-titulo').textContent = `Nada encontrado para “${termo}”`;
+        $('#vazio-biblioteca .vazio-texto').textContent = temFiltro
+          ? 'Há filtros aplicados junto com a busca. Limpe a busca ou os filtros para ampliar o resultado.'
+          : 'Tente outro termo, ou procure por canal, playlist ou coleção pela árvore à esquerda.';
+      } else if (temFiltro) {
+        $('#vazio-biblioteca .vazio-titulo').textContent = 'Nenhum vídeo nesta seleção';
+        $('#vazio-biblioteca .vazio-texto').textContent = 'Os filtros atuais não deixam nenhum vídeo. Limpe os filtros para ver a biblioteca inteira.';
+      } else {
+        $('#vazio-biblioteca .vazio-titulo').textContent = 'Biblioteca vazia';
+        $('#vazio-biblioteca .vazio-texto').textContent = 'Importe um vídeo pela janela "Adicionar link" ou pela tela de Importações.';
+      }
       $('#contador').textContent = `${total} ${total === 1 ? 'vídeo' : 'vídeos'}`;
       for (const th of tabela.querySelectorAll('th[data-ordenacao]')) {
         const ativo = th.dataset.ordenacao === ordenacao;
