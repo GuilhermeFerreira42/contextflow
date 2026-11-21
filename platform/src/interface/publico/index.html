@@ -16,6 +16,18 @@
         <div class="marca">
           <span class="marca-simbolo" aria-hidden="true"></span>
           <span class="marca-nome">ContextFlow</span>
+          <button
+            type="button"
+            class="botao-recolher"
+            id="recolher-barra"
+            aria-label="Recolher barra lateral"
+            aria-expanded="true"
+            aria-controls="barra-lateral-id"
+            title="Recolher barra lateral"
+          >
+            <span class="marca-simbolo" aria-hidden="true"></span>
+            <svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 7-5 5 5 5"/><path d="M19 4v16"/></svg>
+          </button>
         </div>
 
         <nav class="navegacao" aria-label="Telas">
@@ -45,18 +57,6 @@
         </div>
 
         <div class="rodape-lateral">
-          <button
-            type="button"
-            class="botao-recolher"
-            id="recolher-barra"
-            aria-label="Recolher barra lateral"
-            aria-expanded="true"
-            aria-controls="barra-lateral-id"
-            title="Recolher barra lateral"
-          >
-            <svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 7-5 5 5 5"/><path d="M19 4v16"/></svg>
-            <span class="rotulo-recolher">Recolher</span>
-          </button>
           <div class="status-motor" id="status-motor" role="status" aria-live="polite">
             <span class="ponto" data-estado="conectando"></span>
             <span class="status-texto">Conectando…</span>

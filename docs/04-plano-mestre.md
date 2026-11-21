@@ -31,12 +31,11 @@ globais permanecem nos documentos canônicos.
 `F1 → F2 → F3 → F4 → F5 → F6 → F7 → F8 → F9`, cada uma com sua SPEC.
 F2 e F3 podem ser preparadas em paralelo documental, mas F3 só roda sobre persistência real.
 
-**Organização vigente do trabalho (21/11/2026):** Codex atua como parceiro de
-raciocínio e mantém documentação/continuidade; comandos de implementação serão
-preparados com o proprietário para a Arena. Texto de tarefa já enviada à Arena
-é contexto, não nova autorização para o Codex repetir a execução. O proprietário
-informou que a revisão visual já foi realizada pela Arena; vincular evidências
-adicionais quando a entrega correspondente estiver disponível neste repositório.
+**Organização vigente do trabalho (21/11/2026):** a entrega da Arena está
+presente em `da4cf1b`. O proprietário autorizou explicitamente o Codex a
+implementar os refinamentos subsequentes, limitados pela SPEC
+`specs/f5-ui-refinamentos-leitura.md`. Não repetir a entrega anterior por
+inferência nem iniciar F6. Evidências e próxima ação no estado de retomada.
 
 ### Ajuste de escopo registrado na F3
 

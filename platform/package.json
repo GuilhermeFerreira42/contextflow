@@ -20,6 +20,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-sqlite --experimental-strip-types --disable-warning=ExperimentalWarning --test \"testes/**/*.test.ts\"",
     "test:e2e": "node --experimental-sqlite --experimental-strip-types --disable-warning=ExperimentalWarning testes/e2e/executar.mjs",
+    "test:e2e:refinamentos": "node --experimental-sqlite --experimental-strip-types --disable-warning=ExperimentalWarning testes/e2e/refinamentos-ui.mjs",
     "verificar": "node --experimental-sqlite --experimental-strip-types --disable-warning=ExperimentalWarning scripts/verificar.mjs"
   },
   "devDependencies": {

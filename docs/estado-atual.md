@@ -11,7 +11,64 @@ Homologação humana pendente.** A F6 (IA para resumos) está somente especifica
 e é a próxima na sequência do plano, mas o proprietário determinou que
 **não** fosse iniciada nesta etapa.
 
-### Direção vigente — atualização documental de 21/11/2026
+### Rodada vigente — refinamentos sobre a entrega atualizada da Arena
+
+**Autorização:** após trazer o repositório atualizado, o proprietário pediu ao
+Codex que implementasse os refinamentos combinados. Esse pedido substitui,
+para esta tarefa, a atuação apenas documental anterior. F6 continua fora.
+
+Base conferida: `main`, `da4cf1b` (sobre `ef51be9`), sem alterações locais
+preexistentes. A entrega da Arena agora está presente, inclusive opções de
+transcrição, tratamento de miniaturas, gaveta e controle de altura. Foi
+preservada; os ajustes atuais complementam essa entrega.
+
+**O que mudou e por quê:**
+- Seleção fixa em 46 px e vídeo logo a seguir: corrigidas as larguras da
+  tabela e o `colSpan` dos espaçadores, que ainda declarava oito colunas
+  mesmo quando várias estavam ocultas. Uma coluna de leitura absorve a sobra.
+- Altura de 88–200 px realmente amplia a leitura: miniaturas de 104–222 px
+  de largura, sempre 16:9; resumo cresce de duas para oito linhas visíveis.
+  Compacto permanece com 64 px de altura. Nada foi alterado no conteúdo salvo.
+- Recolher voltou ao topo junto da marca. Recolhida, a logo é o alvo de
+  expansão (36×36 px); hover/foco troca a logo pelo ícone, sem deslocamento.
+  Clique, Enter, Espaço, toque e restauração após reload exercitados.
+- Corrigido o deslocamento de rolagem por ancoragem nativa no viewport
+  virtualizado; teste alcança o vídeo 3.000 em três alturas, preservando seleção.
+- Eventos de modo limitados aos botões: o seletor anterior também capturava
+  a raiz e redesenhava a grade ao receber cliques de outros controles.
+
+**Validação executada no Windows, Node v22.12.0:**
+
+| Comando | Resultado |
+|---|---|
+| `npm install` | saída 0; 12 pacotes auditados, zero vulnerabilidades |
+| `npm test` | saída 0; 183 testes, 177 aprovados, 6 ignorados, zero falhas |
+| `npm run test:e2e` | saída 0; 57/57 cenários CDP |
+| `npm run test:e2e:refinamentos` | saída 0; 7/7 grupos Playwright, cliques reais, teclado e toque |
+| `npm run verificar` | saída 0; nove verificações aprovadas, `TUDO OK` |
+| `npm run build` | saída 0; inclui typecheck sem erros |
+
+Playwright cobre seleção/colunas/espaçadores, crescimento de imagem/texto em
+88/136/200 px, compacto, dez ciclos de lateral e reload, hover/foco, rolagem
+com 5.000 vídeos, navegação nas três telas, larguras 390/768/960/1366/1920 px,
+estados aberto/recolhido no desktop, gaveta e toque. Zero exceções JavaScript.
+As falhas iniciais reproduzidas e as capturas comparativas ficam fora do Git em
+`../Continuidade de Projeto/refinamentos-ui-da4cf1b/`. Provas finais:
+`playwright-final.log`, `npm-e2e-final.log`, `npm-test.log`, `npm-build.log`,
+`npm-verificar.log` e capturas em `depois/`. A primeira reprodução conserva
+as falhas que motivaram esta fatia; não representa o resultado após as correções.
+
+SPEC: `specs/f5-ui-refinamentos-leitura.md`. Teste Playwright versionado em
+`platform/testes/e2e/refinamentos-ui.mjs`, com servidor e banco descartáveis.
+Nenhuma dependência nova, migração ou alteração de backend. O banco pessoal
+não foi usado. Não executados nesta rodada: YouTube real, provedores de IA e
+regressão Linux; fixtures não são prova desses serviços.
+
+**Próxima ação:** homologação visual humana destes refinamentos. Não iniciar
+F6 nem outras funcionalidades sem nova autorização. Registros abaixo são
+históricos das rodadas anteriores e não redefinem este limite.
+
+### Registro anterior — atualização documental de 21/11/2026
 
 **Novo pedido preparado para a Arena:** o proprietário solicitou um arquivo
 de texto para encaminhar, com correções da barra lateral que não reabre,

@@ -23,9 +23,11 @@ compreensível se o artefato desaparecer.
 ## Fluxo de uma sessão nova
 
 **Papéis vigentes, definidos pelo proprietário em 21/11/2026:** Codex é parceiro
-de raciocínio e responsável pela atualização documental solicitada; proprietário
-e Codex preparam comandos para a Arena executar. Uma tarefa repassada como
-contexto não autoriza o Codex a refazer a implementação. Registrar separadamente
+de raciocínio e pode executar o escopo explicitamente autorizado. Depois de
+trazer a entrega atualizada da Arena, o proprietário autorizou o Codex a corrigir
+os refinamentos de grade/leitura/lateral, registrados no estado e na SPEC própria.
+Uma tarefa repassada apenas como contexto não autoriza repetir implementação.
+Registrar separadamente
 o relato de entrega da Arena, a presença da revisão local e a evidência executada.
 Não iniciar F6 nesta etapa.
 

@@ -50,8 +50,9 @@ espaçadores (`tr[data-espacador]`) que simulam o resto do scroll.
 
 Três regras que precisam ser mantidas juntas, porque cada uma já causou defeito:
 
-1. **Altura fixa por modo.** Linha ampliada 136 px, compacta 64 px. Se a altura
-   variasse por conteúdo, a aritmética do scroll quebraria. Texto longo usa
+1. **Altura uniforme por modo.** Ampliado ajustável de 88 a 200 px (padrão
+   136 px), compacto 64 px. Miniatura e quantidade visível de resumo acompanham
+   o ajuste; a altura não varia por conteúdo nem por linha. Texto longo usa
    `-webkit-line-clamp` + botão "ver mais", nunca altura livre.
 
 2. **A altura vem do CSS, não de uma constante em JS.** O JS lê
@@ -65,6 +66,17 @@ Três regras que precisam ser mantidas juntas, porque cada uma já causou defeit
 A posição de scroll é capturada **no evento** e passada ao render. Lida dentro
 do `requestAnimationFrame`, ela já pode ter avançado — outro defeito real que
 apareceu na implementação.
+
+Os espaçadores usam `colSpan` igual à quantidade de colunas visíveis. O seletor
+fica em 46 px e uma coluna de leitura permanece flexível para absorver a sobra;
+larguras e piso são recalculados ao mudar colunas ou redimensionar o viewport.
+`overflow-anchor: none` no viewport impede a ancoragem nativa de deslocar o
+índice virtual durante a paginação. A Biblioteca usa toda a largura disponível,
+inclusive acima de 1600 px; as demais telas preservam seu limite anterior.
+
+O controle da lateral fica no topo da marca. Recolhida, seu alvo de 36×36 px
+exibe a logo em repouso e ícone de expansão no hover/foco, com ativação nativa
+por clique, teclado ou toque. A gaveta até 900 px continua independente.
 
 ### Resumo na linha
 

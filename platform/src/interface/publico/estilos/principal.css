@@ -147,8 +147,7 @@ body {
 .aplicativo[data-barra='recolhida'] .marca-nome,
 .aplicativo[data-barra='recolhida'] .nav-rotulo,
 .aplicativo[data-barra='recolhida'] .arvore,
-.aplicativo[data-barra='recolhida'] .rodape-lateral .versao,
-.aplicativo[data-barra='recolhida'] .rotulo-recolher {
+.aplicativo[data-barra='recolhida'] .rodape-lateral .versao {
   display: none;
 }
 
@@ -256,22 +255,14 @@ body {
   white-space: nowrap;
 }
 
-/* Controle de recolher/expandir.
- *
- * Antes ele vivia dentro de `.marca`, com `margin-left: auto`. Recolhida, a
- * marca tem 56px e 28px de preenchimento: o botão era empurrado para x=49 e
- * ficava fora da área visível (`overflow: hidden`), então NÃO havia como
- * expandir de novo — o clique caía no conteúdo. Agora ele tem posição fixa
- * no pé da barra, alinhado ao símbolo, e ocupa a largura toda nos dois
- * estados. */
+/* Topo da marca: a área do botão é estável na troca logo/expansão. */
 .botao-recolher {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  min-width: 0;
-  padding: 7px 9px;
-  margin: 0 0 6px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  margin: 0 0 0 auto;
   background: transparent;
   border: 1px solid transparent;
   border-radius: var(--raio-pequeno);
@@ -291,17 +282,36 @@ body {
   outline-offset: 1px;
 }
 .botao-recolher .icone {
+  grid-area: 1 / 1;
   width: 16px;
   height: 16px;
   flex-shrink: 0;
   transition: transform 0.18s ease;
 }
+.botao-recolher .marca-simbolo {
+  display: none;
+  grid-area: 1 / 1;
+}
+.aplicativo[data-barra='recolhida'] .marca > .marca-simbolo {
+  display: none;
+}
 .aplicativo[data-barra='recolhida'] .botao-recolher {
-  justify-content: center;
-  padding: 7px 0;
+  width: 36px;
+  height: 36px;
+  margin: 0;
+}
+.aplicativo[data-barra='recolhida'] .botao-recolher .marca-simbolo {
+  display: block;
 }
 .aplicativo[data-barra='recolhida'] .botao-recolher .icone {
   transform: rotate(180deg);
+  opacity: 0;
+}
+.aplicativo[data-barra='recolhida'] .botao-recolher:is(:hover, :focus-visible) .marca-simbolo {
+  opacity: 0;
+}
+.aplicativo[data-barra='recolhida'] .botao-recolher:is(:hover, :focus-visible) .icone {
+  opacity: 1;
 }
 
 .navegacao {
@@ -465,7 +475,6 @@ body {
 }
 
 .rodape-lateral {
-  /* O botão de recolher é o primeiro item; ver `.botao-recolher`. */
   flex-shrink: 0;
   padding: 10px 14px 12px;
   border-top: 1px solid var(--borda);
@@ -552,6 +561,11 @@ body {
   max-width: 1600px;
   margin-inline: auto;
   width: 100%;
+}
+.tela[data-tela-nome='biblioteca'] {
+  /* A grade usa a largura liberada pela lateral, inclusive em monitores
+   * largos. O limite de leitura das demais telas não cria uma faixa vazia. */
+  max-width: none;
 }
 
 /* --------------------------------------------------------------- topo */
@@ -932,6 +946,9 @@ body {
 }
 
 .biblioteca-viewport {
+  /* Os espaçadores já representam a posição lógica. A ancoragem nativa
+   * tentava compensar sua troca e deslocava o índice solicitado ao paginar. */
+  overflow-anchor: none;
   /* 1000px é o teto do virtualizador; a altura real é a da janela. */
   max-height: calc(100vh - 300px);
   min-height: 320px;
@@ -941,49 +958,14 @@ body {
 
 .tabela-biblioteca {
   width: 100%;
-  /* Abaixo de 1180px a tabela rola em vez de esmagar as colunas — mas esse
-   * piso só faz sentido com todas as colunas visíveis. Com colunas ocultas
-   * ele mantinha 1180px e espalhava a sobra entre as poucas que sobravam
-   * (checkbox de 218px, um vazio enorme até o vídeo). Cada combinação de
-   * colunas visíveis tem o seu piso, sempre cabendo no viewport. */
-  min-width: min(1180px, 100%);
+  /* aplicarColunas define o piso conforme as colunas visíveis. Uma coluna
+   * de leitura fica flexível para absorver a sobra, nunca a seleção. */
   border-collapse: separate;
   border-spacing: 0;
   table-layout: fixed;
 }
 
-/* Sem a coluna de resumo, o título pode ocupar o espaço que sobra. */
-.aplicativo[data-coluna-resumo='oculta'] .tabela-biblioteca th[data-coluna='titulo'] {
-  width: auto;
-}
-.aplicativo[data-coluna-resumo='oculta'] .tabela-biblioteca th[data-coluna='resumo-estado'] {
-  width: 122px;
-}
-
-/* Larguras: a leitura (vídeo + resumo) domina; o resto é apoio discreto. */
-.tabela-biblioteca th[data-coluna='titulo'] {
-  width: 36%;
-  min-width: 320px;
-}
-.tabela-biblioteca th[data-coluna='canal'] {
-  width: 142px;
-}
-.tabela-biblioteca th[data-coluna='duracao'] {
-  width: 96px;
-}
-.tabela-biblioteca th[data-coluna='adicionado'] {
-  width: 126px;
-}
-.tabela-biblioteca th[data-coluna='estado'] {
-  width: 96px;
-}
-.tabela-biblioteca th[data-coluna='resumo'] {
-  width: 25%;
-  min-width: 240px;
-}
-.tabela-biblioteca th[data-coluna='resumo-estado'] {
-  width: 122px;
-}
+/* Larguras calculadas em biblioteca.js para a janela e as colunas atuais. */
 
 .tabela-biblioteca thead th {
   position: sticky;
@@ -1099,6 +1081,7 @@ input[type='checkbox'] {
 
 .tabela-biblioteca tbody td[data-coluna='titulo'],
 .tabela-biblioteca tbody td[data-coluna='resumo'] {
+  text-align: left;
   vertical-align: top;
   padding-top: 12px;
 }
@@ -1106,7 +1089,7 @@ input[type='checkbox'] {
 .miniatura {
   position: relative;
   flex-shrink: 0;
-  width: 138px;
+  width: clamp(104px, calc(var(--altura-linha) * 1.3 - 38px), 222px);
   aspect-ratio: 16 / 9;
   border-radius: 6px;
   overflow: hidden;
@@ -1300,8 +1283,8 @@ input[type='checkbox'] {
  * que calcula pela variável, ficava fora de fase com o que estava na tela.
  *
  * A conta: cada linha ocupa `font-size * line-height` = 12 * 1.6 = 19.2px.
- * Descontamos ~34px do topo (respiro + "ver resumo completo") e limitamos
- * entre 1 e 5 linhas, que é o máximo que cabe no modo ampliado padrão. */
+ * Descontamos ~34px do topo (respiro + "ver resumo completo"). Aumentar a
+ * altura revela mais linhas, sem o antigo teto de cinco. */
 /* Quantas linhas do resumo cabem na altura atual da linha. O JS calcula e
  * grava em `--linhas-resumo`; aqui só consumimos. Um valor fixo (era 5)
  * fazia o texto ditar a altura da tabela, e o virtualizador — que calcula
@@ -1378,11 +1361,16 @@ input[type='checkbox'] {
   --altura-linha: var(--altura-linha-compacto);
 }
 .aplicativo[data-modo='compacto'] .miniatura {
-  width: 96px;
+  width: 88px;
 }
 .aplicativo[data-modo='compacto'] .celula-video {
   gap: 10px;
-  padding: 6px 0;
+  padding: 0;
+  max-height: calc(var(--altura-linha) - 12px);
+}
+.aplicativo[data-modo='compacto'] .tabela-biblioteca tbody td[data-coluna='titulo'],
+.aplicativo[data-modo='compacto'] .tabela-biblioteca tbody td[data-coluna='resumo'] {
+  padding-top: 6px;
 }
 .aplicativo[data-modo='compacto'] .titulo-video {
   -webkit-line-clamp: 1;
@@ -2077,8 +2065,7 @@ dialog p {
   .aplicativo[data-barra='recolhida'] .marca-nome,
   .aplicativo[data-barra='recolhida'] .nav-rotulo,
   .aplicativo[data-barra='recolhida'] .arvore,
-  .aplicativo[data-barra='recolhida'] .rodape-lateral .versao,
-  .aplicativo[data-barra='recolhida'] .rotulo-recolher {
+  .aplicativo[data-barra='recolhida'] .rodape-lateral .versao {
     display: revert;
   }
   .aplicativo[data-barra='recolhida'] .nav-item {
@@ -2091,10 +2078,18 @@ dialog p {
   .botao-menu-mobile {
     display: grid;
   }
-  /* O botão de recolher do pé da barra não faz sentido como gaveta: quem
+  /* O botão de recolher não faz sentido como gaveta: quem
    * fecha aqui é o véu ou o Esc. */
   .aplicativo[data-barra] .botao-recolher {
     display: none;
+  }
+  .aplicativo[data-barra='recolhida'] .marca {
+    justify-content: flex-start;
+    padding: 14px 14px 16px;
+    gap: 9px;
+  }
+  .aplicativo[data-barra='recolhida'] .marca > .marca-simbolo {
+    display: block;
   }
   .barra-lateral {
     position: fixed;
@@ -2115,9 +2110,6 @@ dialog p {
     max-height: 100vh;
     border-radius: 0;
     height: 100vh;
-  }
-  .miniatura {
-    width: 112px;
   }
   .celula-video {
     gap: 10px;

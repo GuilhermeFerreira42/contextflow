@@ -20,6 +20,14 @@
 
 ## Status de execução (atualizado a cada fatia)
 
+**Refinamentos após a entrega da Arena (`da4cf1b`):** o proprietário autorizou
+implementação pelo Codex. Playwright versionado em `testes/e2e/refinamentos-ui.mjs`
+cobre 7 grupos, com cliques reais, dez ciclos da lateral, logo/ícone no topo,
+teclado/toque/reload, colunas/espaçadores, três alturas com crescimento efetivo
+da miniatura e do resumo, 5.000 vídeos e cinco larguras de janela. Os resultados
+atuais e limitações estão no início de `estado-atual.md`; registros abaixo
+preservam o alcance das provas anteriores. Homologação humana pendente.
+
 **Referência vigente (21/11/2026):** regressão Windows na base `0fdf6e8`,
 documentada em `estado-atual.md`: 177 testes aprovados, 6 ignorados, zero falhas;
 57/57 E2E; build/typecheck e fumaça aprovados. Evidências em

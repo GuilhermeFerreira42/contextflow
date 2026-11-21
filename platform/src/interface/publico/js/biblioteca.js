@@ -72,7 +72,6 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
   let intervaloData = null; // recorte da árvore "Data de importação"
   const chaves = new Map();
   let linhasAtuais = new Map();
-  const TOTAL_COLUNAS = 8; // checkbox + vídeo + 6 colunas configuráveis
   const espacoSuperior = espaco(0);
   const espacoInferior = espaco(0);
 
@@ -125,9 +124,9 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
     const limite = Math.min(ALTURA_MAXIMA, Math.max(ALTURA_MINIMA, Math.round(px)));
     const app = document.querySelector('.aplicativo');
     app.style.setProperty('--altura-linha-ampliado', `${limite}px`);
-    // Quantas linhas de resumo cabem: 19,2px por linha (12px * 1.6), com
-    // ~34px de respiro e do "ver resumo completo". Entre 1 e 5.
-    const linhas = Math.max(1, Math.min(5, Math.floor((limite - 34) / 19.2)));
+    // Reserva respiro e a ação de leitura completa; a altura extra deve
+    // revelar mais texto, em vez de manter o antigo teto de cinco linhas.
+    const linhas = Math.max(1, Math.floor((limite - 34) / 19.2));
     app.style.setProperty('--linhas-resumo', String(linhas));
     const rotulo = $('#altura-valor');
     if (rotulo) rotulo.textContent = `${limite} px`;
@@ -467,7 +466,9 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
     tr.dataset.espacador = '';
     tr.setAttribute('aria-hidden', 'true');
     const td = document.createElement('td');
-    td.colSpan = TOTAL_COLUNAS;
+    // Durante a criação inicial, as preferências ainda não foram lidas.
+    // aplicarColunas sincroniza depois os dois espaçadores com a grade real.
+    td.colSpan = 8;
     td.style.height = `${px}px`;
     td.style.padding = '0';
     td.style.border = '0';
@@ -883,15 +884,35 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
     for (const nome of ordemColunas) {
       app.setAttribute(`data-coluna-${nome}`, colunas[nome] ? 'visivel' : 'oculta');
     }
+    const quantidade = 2 + ordemColunas.filter(nome => colunas[nome]).length;
+    espacoSuperior.firstElementChild.colSpan = quantidade;
+    espacoInferior.firstElementChild.colSpan = quantidade;
+    ajustarLarguras();
     linhasAtuais = new Map();
     if (itens.length) renderizar();
+  }
+
+  function ajustarLarguras() {
+    // Uma coluna de leitura permanece sem largura explícita para absorver
+    // a sobra. Se todas têm largura, table-layout:fixed amplia até o checkbox.
+    const apoio = { canal: 142, duracao: 96, adicionado: 126, estado: 96, 'resumo-estado': 122 };
+    let fixa = 46;
+    for (const [nome, largura] of Object.entries(apoio)) {
+      tabela.querySelector(`th[data-coluna="${nome}"]`).style.width = `${largura}px`;
+      if (colunas[nome]) fixa += largura;
+    }
+    const minima = fixa + 360 + (colunas.resumo ? 280 : 0);
+    tabela.style.minWidth = `${minima}px`;
+    tabela.querySelector('th[data-coluna="titulo"]').style.width = colunas.resumo
+      ? `${Math.round((Math.max(viewport.clientWidth, minima) - fixa) * 0.55)}px` : 'auto';
+    tabela.querySelector('th[data-coluna="resumo"]').style.width = 'auto';
   }
 
   function aplicarModo(novoModo) {
     modo = novoModo === 'compacto' ? 'compacto' : 'ampliado';
     const app = document.querySelector('.aplicativo');
     app.dataset.modo = modo;
-    for (const botao of document.querySelectorAll('[data-modo]')) {
+    for (const botao of document.querySelectorAll('button[data-modo]')) {
       botao.classList.toggle('ativo', botao.dataset.modo === modo);
       botao.setAttribute('aria-pressed', String(botao.dataset.modo === modo));
     }
@@ -915,7 +936,7 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
       agendar();
     }, { passive: true });
 
-    new ResizeObserver(agendar).observe(viewport);
+    new ResizeObserver(() => { ajustarLarguras(); agendar(); }).observe(viewport);
 
     if ('IntersectionObserver' in window) {
       new IntersectionObserver(entradas => {
@@ -959,7 +980,7 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
       $('#abrir-colunas').setAttribute('aria-expanded', String(abrir));
     });
 
-    for (const botao of document.querySelectorAll('[data-modo]')) {
+    for (const botao of document.querySelectorAll('button[data-modo]')) {
       botao.addEventListener('click', () => aplicarModo(botao.dataset.modo));
     }
 
@@ -1024,10 +1045,9 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
 
     // Recolher a barra lateral inteira.
     //
-    // O botão fica no pé da barra e tem de continuar alcançável no estado
-    // recolhido — é o único caminho de volta. Além do rótulo visível, o
-    // estado vai em `aria-expanded` para quem usa leitor de tela, e o
-    // `title` acompanha para o tooltip não mentir.
+    // O mesmo botão fica no topo: recolhida, sua área exibe a logo em
+    // repouso e o ícone de expansão no hover/foco. Não depende de hover
+    // para receber clique, toque ou ativação por teclado.
     const aplicarEstadoBarra = (recolhida) => {
       const app = document.querySelector('.aplicativo');
       const botao = $('#recolher-barra');
@@ -1035,9 +1055,8 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
       botao.setAttribute('aria-label', recolhida ? 'Expandir barra lateral' : 'Recolher barra lateral');
       botao.setAttribute('aria-expanded', recolhida ? 'false' : 'true');
       botao.title = recolhida ? 'Expandir barra lateral' : 'Recolher barra lateral';
-      const rotulo = botao.querySelector('.rotulo-recolher');
-      if (rotulo) rotulo.textContent = recolhida ? 'Expandir' : 'Recolher';
     };
+    aplicarEstadoBarra(document.querySelector('.aplicativo').dataset.barra === 'recolhida');
 
     // --- gaveta (modo <=900px) ------------------------------------------
     //
