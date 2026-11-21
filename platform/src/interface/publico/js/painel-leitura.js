@@ -14,6 +14,9 @@ export function criarPainel({ api }) {
   let videoAtual = null;
   let focoAnterior = null;
   let pedido = 0;
+  // Segmentos como vieram do banco. A apresentação (tempos, texto corrido)
+  // é só uma camada por cima — nunca altera esta lista.
+  let segmentosAtuais = [];
 
   function escapar(texto) {
     return String(texto ?? '');
@@ -75,13 +78,25 @@ export function criarPainel({ api }) {
     // miniatura
     const caixa = $('#painel-miniatura');
     caixa.replaceChildren();
+    caixa.classList.remove('painel-miniatura-vazia');
+    const semMiniatura = () => {
+      caixa.classList.add('painel-miniatura-vazia');
+      const vazio = document.createElement('span');
+      vazio.className = 'sem-miniatura';
+      vazio.textContent = 'sem miniatura';
+      caixa.replaceChildren(vazio);
+    };
     if (video.miniaturaUrl) {
       const img = document.createElement('img');
-      img.src = video.miniaturaUrl;
       img.alt = `Miniatura de ${video.titulo}`;
+      // Mesmo tratamento da Biblioteca: falha de carregamento vira um
+      // espaço reservado com a proporção mantida, nunca o ícone nativo de
+      // imagem quebrada.
+      img.addEventListener('error', semMiniatura, { once: true });
+      img.src = video.miniaturaUrl;
       caixa.append(img);
     } else {
-      caixa.textContent = 'sem miniatura';
+      semMiniatura();
     }
 
     // fatos
@@ -156,11 +171,84 @@ export function criarPainel({ api }) {
     }
   }
 
+  /**
+   * Desenha os segmentos conforme as duas opções de apresentação.
+   *
+   * "Mostrar tempos" e "Texto corrido" são independentes, então são quatro
+   * combinações. Em texto corrido o texto é o mesmo, na mesma ordem, com um
+   * espaço entre os trechos; os tempos, quando visíveis, ficam discretos e
+   * clicáveis ao lado do trecho a que pertencem. Nada é reescrito, resumido
+   * ou pontuado — a leitura contínua é só junção do que já existe.
+   */
+  function desenharTranscricao() {
+    const lista = $('#segmentos-transcricao');
+    if (!lista) return;
+    const mostrarTempos = $('#mostrar-tempos')?.checked !== false;
+    const corrido = $('#texto-corrido')?.checked === true;
+
+    if (!segmentosAtuais.length) return;
+    lista.replaceChildren();
+    lista.dataset.apresentacao = `${mostrarTempos ? 'tempos' : 'sem-tempos'}${corrido ? ' corrido' : ''}`;
+
+    if (corrido) {
+      // Um único bloco em prosa. Os tempos, se pedidos, entram como marcas
+      // pequenas antes do trecho — sem quebrar a linha entre eles.
+      const item = document.createElement('li');
+      item.className = 'segmento segmento-corrido';
+      const bloco = document.createElement('p');
+      bloco.className = 'texto-corrido';
+      for (const segmento of segmentosAtuais) {
+        const inicioMs = segmento.inicioMs ?? 0;
+        if (mostrarTempos) {
+          const marca = document.createElement('a');
+          marca.className = 'marca-tempo';
+          if (videoAtual?.url) {
+            marca.href = `${videoAtual.url}&t=${Math.floor(inicioMs / 1000)}s`;
+            marca.target = '_blank';
+            marca.rel = 'noopener noreferrer';
+          }
+          marca.textContent = tempo(inicioMs / 1000);
+          bloco.append(marca);
+        }
+        bloco.append(document.createTextNode((segmento.texto ?? '') + ' '));
+      }
+      item.append(bloco);
+      lista.append(item);
+      return;
+    }
+
+    const fragmento = document.createDocumentFragment();
+    for (const segmento of segmentosAtuais) {
+      const item = document.createElement('li');
+      item.className = 'segmento' + (mostrarTempos ? '' : ' sem-tempo');
+
+      const inicioMs = segmento.inicioMs ?? 0;
+      const texto = document.createElement('span');
+      texto.className = 'segmento-texto';
+      texto.textContent = segmento.texto ?? '';
+
+      if (mostrarTempos) {
+        const marca = document.createElement('a');
+        marca.className = 'segmento-tempo';
+        marca.href = `${videoAtual?.url ?? '#'}&t=${Math.floor(inicioMs / 1000)}s`;
+        marca.target = '_blank';
+        marca.rel = 'noopener noreferrer';
+        marca.textContent = tempo(inicioMs / 1000);
+        item.append(marca, texto);
+      } else {
+        item.append(texto);
+      }
+      fragmento.append(item);
+    }
+    lista.append(fragmento);
+  }
+
   async function renderizarTranscricao(video, geracao) {
     const lista = $('#segmentos-transcricao');
     const estado = $('#painel-transcricao-estado');
     lista.replaceChildren();
     estado.hidden = true;
+    segmentosAtuais = [];
 
     try {
       const transcricao = await api(`/api/biblioteca/${encodeURIComponent(video.id)}/transcricao`);
@@ -180,27 +268,8 @@ export function criarPainel({ api }) {
         return;
       }
 
-      const fragmento = document.createDocumentFragment();
-      for (const segmento of segmentos) {
-        const item = document.createElement('li');
-        item.className = 'segmento';
-
-        const marca = document.createElement('a');
-        marca.className = 'segmento-tempo';
-        const inicioMs = segmento.inicioMs ?? 0;
-        marca.href = `${video.url ?? '#'}&t=${Math.floor(inicioMs / 1000)}s`;
-        marca.target = '_blank';
-        marca.rel = 'noopener noreferrer';
-        marca.textContent = tempo(inicioMs / 1000);
-
-        const texto = document.createElement('span');
-        texto.className = 'segmento-texto';
-        texto.textContent = segmento.texto ?? '';
-
-        item.append(marca, texto);
-        fragmento.append(item);
-      }
-      lista.append(fragmento);
+      segmentosAtuais = segmentos;
+      desenharTranscricao();
       const idioma = transcricao.idioma ? ` · ${transcricao.idioma}` : '';
       const origem = transcricao.origem === 'manual' ? 'manual' : 'automática';
       mostrarSelo('painel-transcricao-estado', 'pronto', `${segmentos.length} trechos · ${origem}${idioma}`);
@@ -258,6 +327,11 @@ export function criarPainel({ api }) {
 
   function ligar() {
     $('#fechar-painel').addEventListener('click', fechar);
+    // Trocar a apresentação não refaz a chamada de rede nem toca no banco:
+    // os mesmos segmentos são redesenhados.
+    for (const id of ['#mostrar-tempos', '#texto-corrido']) {
+      $(id)?.addEventListener('change', desenharTranscricao);
+    }
     $('#painel-fundo').addEventListener('click', fechar);
 
     // Esc fecha só o painel — nunca a tela por trás.

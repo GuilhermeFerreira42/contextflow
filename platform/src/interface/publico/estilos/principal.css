@@ -125,6 +125,14 @@ body {
 /* ============================================================== aplicativo */
 
 .aplicativo {
+  /* As alturas vivem aqui, não em `:root`. O JS ajusta
+   * `--altura-linha-ampliado` inline neste elemento; se `--altura-linha`
+   * estivesse resolvida em `:root`, ela ficaria presa no valor original e o
+   * ajuste mudaria a variável sem mudar a linha. */
+  --altura-linha-ampliado: 136px;
+  --altura-linha-compacto: 64px;
+  --altura-linha: var(--altura-linha-ampliado);
+
   display: grid;
   grid-template-columns: var(--largura-barra) 1fr;
   height: 100vh;
@@ -137,14 +145,55 @@ body {
   grid-template-columns: 56px 1fr;
 }
 .aplicativo[data-barra='recolhida'] .marca-nome,
-.aplicativo[data-barra='recolhida'] .nav-item span:not(.nav-icone),
+.aplicativo[data-barra='recolhida'] .nav-rotulo,
 .aplicativo[data-barra='recolhida'] .arvore,
-.aplicativo[data-barra='recolhida'] .rodape-lateral .versao {
+.aplicativo[data-barra='recolhida'] .rodape-lateral .versao,
+.aplicativo[data-barra='recolhida'] .rotulo-recolher {
   display: none;
 }
+
+/* O status do motor perde o texto mas mantém o ponto: é o indicador de que
+ * o servidor responde. Sem isto, "Motor conectado" quebrava em quatro linhas
+ * dentro de 56px. O estado continua anunciado por `role="status"`. */
+.aplicativo[data-barra='recolhida'] .status-texto {
+  display: none;
+}
+.aplicativo[data-barra='recolhida'] .status-motor {
+  justify-content: center;
+  padding: 0;
+}
+.aplicativo[data-barra='recolhida'] .rodape-lateral {
+  padding: 10px 0 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+/* A marca fica só com o símbolo, centralizado: com o preenchimento de 14px
+ * dos dois lados, 26px de símbolo não caberiam em 56px e o conteúdo vazava
+ * para fora da área visível da barra. */
+.aplicativo[data-barra='recolhida'] .marca {
+  justify-content: center;
+  padding: 12px 0 10px;
+  gap: 0;
+}
+
+/* O ícone é a única coisa que sobra na navegação. Sem `position: relative` o
+ * botão continua sendo a área de clique inteira, e o tooltip cobre o nome que
+ * não cabe. */
 .aplicativo[data-barra='recolhida'] .nav-item {
+  position: relative;
   justify-content: center;
   padding: 10px 0;
+  font-size: 0;           /* some o texto, sem quebrar o nome acessível */
+}
+.aplicativo[data-barra='recolhida'] .nav-item .nav-icone {
+  font-size: 14px;
+}
+.aplicativo[data-barra='recolhida'] .nav-item .icone {
+  width: 17px;
+  height: 17px;
 }
 
 
@@ -207,23 +256,49 @@ body {
   white-space: nowrap;
 }
 
+/* Controle de recolher/expandir.
+ *
+ * Antes ele vivia dentro de `.marca`, com `margin-left: auto`. Recolhida, a
+ * marca tem 56px e 28px de preenchimento: o botão era empurrado para x=49 e
+ * ficava fora da área visível (`overflow: hidden`), então NÃO havia como
+ * expandir de novo — o clique caía no conteúdo. Agora ele tem posição fixa
+ * no pé da barra, alinhado ao símbolo, e ocupa a largura toda nos dois
+ * estados. */
 .botao-recolher {
-  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 7px 9px;
+  margin: 0 0 6px;
   background: transparent;
-  border: 0;
+  border: 1px solid transparent;
+  border-radius: var(--raio-pequeno);
   color: var(--texto-fraco);
   cursor: pointer;
-  width: 24px;
-  height: 24px;
-  border-radius: var(--raio-pequeno);
-  display: grid;
-  place-items: center;
-  font-size: 13px;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
   flex-shrink: 0;
 }
 .botao-recolher:hover {
   background: var(--grafite-800);
   color: var(--texto-forte);
+}
+.botao-recolher:focus-visible {
+  outline: 2px solid var(--azul);
+  outline-offset: 1px;
+}
+.botao-recolher .icone {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  transition: transform 0.18s ease;
+}
+.aplicativo[data-barra='recolhida'] .botao-recolher {
+  justify-content: center;
+  padding: 7px 0;
 }
 .aplicativo[data-barra='recolhida'] .botao-recolher .icone {
   transform: rotate(180deg);
@@ -390,6 +465,7 @@ body {
 }
 
 .rodape-lateral {
+  /* O botão de recolher é o primeiro item; ver `.botao-recolher`. */
   flex-shrink: 0;
   padding: 10px 14px 12px;
   border-top: 1px solid var(--borda);
@@ -427,6 +503,39 @@ body {
   color: var(--grafite-500);
 }
 
+/* --- menu da gaveta (modo <=900px) ------------------------------------ */
+
+/* Escondido no desktop: lá a barra está sempre presente. */
+.botao-menu-mobile {
+  display: none;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  margin: 0 0 12px;
+  place-items: center;
+  border: 1px solid var(--borda-forte);
+  border-radius: var(--raio-pequeno);
+  background: var(--grafite-850);
+  color: var(--texto);
+  cursor: pointer;
+}
+.botao-menu-mobile:hover {
+  background: var(--grafite-800);
+  color: var(--texto-forte);
+}
+.botao-menu-mobile .icone {
+  width: 17px;
+  height: 17px;
+}
+
+.veu-mobile {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  background: rgba(0, 0, 0, 0.55);
+  border: 0;
+}
+
 /* =============================================================== conteúdo */
 
 .conteudo {
@@ -435,8 +544,14 @@ body {
   min-width: 0;
 }
 
+/* O limite de 1600px existe para a linha não ficar longa demais em monitores
+ * grandes — mas sem centralizar ele encostava na esquerda e deixava uma faixa
+ * morta à direita, que é o vazio que aparece nas capturas de tela larga.
+ * `margin-inline: auto` distribui a sobra entre os dois lados. */
 .tela {
   max-width: 1600px;
+  margin-inline: auto;
+  width: 100%;
 }
 
 /* --------------------------------------------------------------- topo */
@@ -616,6 +731,53 @@ body {
   color: var(--texto-fraco);
 }
 
+/* --- ajuste de altura das linhas --------------------------------------- */
+
+.ajuste-altura {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--borda);
+}
+.altura-linha-controle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.botao-mini-ajuste {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--borda-forte);
+  border-radius: var(--raio-pequeno);
+  background: var(--grafite-850);
+  color: var(--texto);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.botao-mini-ajuste:hover {
+  background: var(--grafite-800);
+  color: var(--texto-forte);
+}
+.botao-mini-ajuste:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.altura-valor {
+  min-width: 58px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--texto-forte);
+  font-variant-numeric: tabular-nums;
+}
+.botao-restaurar-altura {
+  margin-left: auto;
+  padding: 4px 10px;
+  font-size: 11.5px;
+}
+
 .painel-nota {
   margin: 0;
   font-size: 11.5px;
@@ -779,10 +941,23 @@ body {
 
 .tabela-biblioteca {
   width: 100%;
-  min-width: 1180px; /* abaixo disso, rolagem horizontal em vez de colunas esmagadas */
+  /* Abaixo de 1180px a tabela rola em vez de esmagar as colunas — mas esse
+   * piso só faz sentido com todas as colunas visíveis. Com colunas ocultas
+   * ele mantinha 1180px e espalhava a sobra entre as poucas que sobravam
+   * (checkbox de 218px, um vazio enorme até o vídeo). Cada combinação de
+   * colunas visíveis tem o seu piso, sempre cabendo no viewport. */
+  min-width: min(1180px, 100%);
   border-collapse: separate;
   border-spacing: 0;
   table-layout: fixed;
+}
+
+/* Sem a coluna de resumo, o título pode ocupar o espaço que sobra. */
+.aplicativo[data-coluna-resumo='oculta'] .tabela-biblioteca th[data-coluna='titulo'] {
+  width: auto;
+}
+.aplicativo[data-coluna-resumo='oculta'] .tabela-biblioteca th[data-coluna='resumo-estado'] {
+  width: 122px;
 }
 
 /* Larguras: a leitura (vídeo + resumo) domina; o resto é apoio discreto. */
@@ -887,9 +1062,15 @@ body {
   background: var(--azul-fraco);
 }
 
+/* `table-layout: fixed` distribui a sobra da tabela entre as colunas que não
+ * declaram largura. Quando as demais somem, toda a sobra caía aqui: a coluna
+ * do checkbox ia a 218px e o vídeo começava longe da margem. */
 .col-selecao {
   width: 46px;
+  min-width: 46px;
+  max-width: 46px;
   padding-left: 16px;
+  padding-right: 0;
 }
 
 .col-abrir {
@@ -939,6 +1120,27 @@ input[type='checkbox'] {
   height: 100%;
   object-fit: cover;
   display: block;
+}
+/* Fallback de miniatura ausente ou que falhou ao carregar: um fundo
+ * listrado discreto em vez do ícone nativo de imagem quebrada. A caixa
+ * mantém a proporção e o alinhamento originais. */
+.miniatura-vazia,
+.painel-miniatura-vazia {
+  background:
+    repeating-linear-gradient(
+      45deg,
+      rgba(255, 255, 255, 0.025) 0 6px,
+      transparent 6px 12px
+    ),
+    var(--grafite-900);
+  border: 1px solid var(--borda);
+}
+.miniatura-vazia .sem-miniatura,
+.painel-miniatura-vazia .sem-miniatura {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
 }
 .miniatura .sem-miniatura {
   font-size: 10px;
@@ -1090,8 +1292,22 @@ input[type='checkbox'] {
   max-height: calc(var(--altura-linha) - 20px);
   overflow: hidden;
 }
+/* O número de linhas do resumo acompanha a altura da linha.
+ *
+ * Era um `5` fixo. Com a linha ajustável, 5 linhas pedem ~96px e a célula só
+ * tem `altura - 20px`: abaixo de ~116px o texto passava a ditar a altura da
+ * tabela, o `td` crescia (129px numa linha pedida de 88) e o virtualizador,
+ * que calcula pela variável, ficava fora de fase com o que estava na tela.
+ *
+ * A conta: cada linha ocupa `font-size * line-height` = 12 * 1.6 = 19.2px.
+ * Descontamos ~34px do topo (respiro + "ver resumo completo") e limitamos
+ * entre 1 e 5 linhas, que é o máximo que cabe no modo ampliado padrão. */
+/* Quantas linhas do resumo cabem na altura atual da linha. O JS calcula e
+ * grava em `--linhas-resumo`; aqui só consumimos. Um valor fixo (era 5)
+ * fazia o texto ditar a altura da tabela, e o virtualizador — que calcula
+ * pela variável — ficava fora de fase com a tela. */
 .celula-resumo .resumo-linha {
-  -webkit-line-clamp: 5;
+  -webkit-line-clamp: var(--linhas-resumo, 5);
 }
 .celula-resumo .ver-mais {
   display: inline-block;
@@ -1186,11 +1402,17 @@ input[type='checkbox'] {
 
 /* ------------------------------------------------ colunas ocultas */
 
+/* Cada opção do painel esconde o seu cabeçalho E as suas células: o seletor
+ * casa pelo `data-coluna` do próprio `<th>`/`<td>`, então não há como um
+ * deles ficar de fora. `resumo-estado` (a coluna "Situação") estava ausente
+ * desta lista — desmarcar a opção não escondia nada, e a coluna continuava
+ * com 578px de largura mesmo com todas as opções desmarcadas. */
 .aplicativo[data-coluna-canal='oculta'] [data-coluna='canal'],
 .aplicativo[data-coluna-duracao='oculta'] [data-coluna='duracao'],
 .aplicativo[data-coluna-adicionado='oculta'] [data-coluna='adicionado'],
 .aplicativo[data-coluna-estado='oculta'] [data-coluna='estado'],
-.aplicativo[data-coluna-resumo='oculta'] [data-coluna='resumo'] {
+.aplicativo[data-coluna-resumo='oculta'] [data-coluna='resumo'],
+.aplicativo[data-coluna-resumo-estado='oculta'] [data-coluna='resumo-estado'] {
   display: none;
 }
 
@@ -1445,6 +1667,70 @@ input[type='checkbox'] {
 
 .segmento-texto {
   color: var(--texto);
+}
+
+/* --- apresentação da transcrição ------------------------------------- */
+
+/* Controles de apresentação. São opções de leitura, não filtros: ficam
+ * discretos ao lado do título da seção. */
+.transcricao-controles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 2px 6px 8px;
+  font-size: 11.5px;
+  color: var(--texto-fraco);
+}
+.opcao-transcricao {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+.opcao-transcricao:hover {
+  color: var(--texto);
+}
+
+/* Sem tempos, a coluna fixa de 62px não tem o que alinhar: o texto usa a
+ * largura inteira do painel. Era isso que deixava a leitura numa faixa
+ * estreita com um trecho por linha. */
+.segmento.sem-tempo {
+  grid-template-columns: minmax(0, 1fr);
+  padding: 5px 6px;
+  line-height: 1.7;
+}
+
+/* Texto corrido: um bloco em prosa, com limites de largura para a linha não
+ * ficar longa a ponto de atrapalhar a leitura. */
+.segmento-corrido {
+  display: block;
+  padding: 2px 6px 8px;
+}
+.texto-corrido {
+  margin: 0;
+  color: var(--texto);
+  font-size: 13px;
+  line-height: 1.85;
+  /* 62rem ≈ 95 caracteres em 13px: confortável, e o bloco não estica em
+   * monitores muito largos. */
+  max-width: 62rem;
+}
+.texto-corrido .marca-tempo {
+  color: var(--texto-fraco);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  text-decoration: none;
+  vertical-align: 0.15em;
+  margin-right: 3px;
+  padding: 0 2px;
+  letter-spacing: -0.2px;
+  opacity: 0.75;
+}
+.texto-corrido .marca-tempo:hover {
+  color: var(--azul);
+  opacity: 1;
+  text-decoration: underline;
 }
 
 /* ==================================================== diálogos e modais */
@@ -1773,8 +2059,42 @@ dialog p {
 }
 
 @media (max-width: 900px) {
-  .aplicativo {
-    grid-template-columns: 1fr;
+  /* No modo gaveta a barra sai do fluxo: a coluna dela não pode existir em
+   * NENHUM estado. `.aplicativo[data-barra='recolhida']` tem especificidade
+   * maior que `.aplicativo` e voltava a criar a coluna de 56px — quem havia
+   * recolhido a barra no desktop abria a janela estreita com o conteúdo
+   * espremido e sem navegação. O seletor de atributo aqui empata a
+   * especificidade e vem depois; o `!important` cobre variantes futuras. */
+  .aplicativo,
+  .aplicativo[data-barra='recolhida'] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .aplicativo[data-barra='recolhida'] .barra-lateral {
+    /* a gaveta sempre mostra o conteúdo completo, independente do estado
+       salvo do desktop */
+    width: var(--largura-barra);
+  }
+  .aplicativo[data-barra='recolhida'] .marca-nome,
+  .aplicativo[data-barra='recolhida'] .nav-rotulo,
+  .aplicativo[data-barra='recolhida'] .arvore,
+  .aplicativo[data-barra='recolhida'] .rodape-lateral .versao,
+  .aplicativo[data-barra='recolhida'] .rotulo-recolher {
+    display: revert;
+  }
+  .aplicativo[data-barra='recolhida'] .nav-item {
+    justify-content: flex-start;
+    padding: 9px 10px;
+    font-size: inherit;
+  }
+  /* Sem este botão não havia como abrir a navegação: a barra sai do fluxo
+   * com `translateX(-100%)` e nada a trazia de volta. */
+  .botao-menu-mobile {
+    display: grid;
+  }
+  /* O botão de recolher do pé da barra não faz sentido como gaveta: quem
+   * fecha aqui é o véu ou o Esc. */
+  .aplicativo[data-barra] .botao-recolher {
+    display: none;
   }
   .barra-lateral {
     position: fixed;

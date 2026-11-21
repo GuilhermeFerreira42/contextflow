@@ -200,6 +200,42 @@ Reformulação centrada na Biblioteca, a partir dos dois mockups do proprietári
 `CONTEXTFLOW_YTDLP` controlam o motor. Ver `docs/03-arquitetura-e-contratos.md`
 e `platform/src/motor/src/nucleo/configuracao.ts`.
 
+## Rodada de 21/11/2026 — correções pontuais pedidas pelo proprietário
+
+**Implementadas e validadas tecnicamente. Homologação humana pendente.**
+SPEC: `docs/specs/f5-ui-correcoes-2026-11-21.md`. Pedido de origem:
+`Continuidade de Projeto/PEDIDO-PARA-ARENA-CORRECOES-INTERFACE.txt`.
+
+| # | Defeito | Causa raiz | Correção |
+|---|---|---|---|
+| 1 | Barra recolhe e não reabre | botão dentro de `.marca` era empurrado para x=49 numa barra de 56 px, fora da área visível; rótulo era texto solto, impossível de ocultar | botão no pé da barra, visível nos dois estados, com `aria-expanded`; rótulo em `<span>` |
+| 2 | Faixa morta à direita | `.tela` com `max-width` sem centralização | `margin-inline: auto` |
+| 3 | Sem ajuste de altura | não existia | controle no painel de colunas, 88–200 px, fonte única na variável CSS |
+| 4 | "Resumo" aparecia desmarcado; vazio de 218 px | `resumo-estado` ausente da lista de colunas ocultas; `table-layout: fixed` distribuía a sobra no checkbox | seletor incluído; `.col-selecao` com largura fixa; piso da tabela acompanha as colunas visíveis |
+| 5 | Transcrição em faixa estreita | coluna de tempo fixa, sem leitura contínua | duas opções independentes; nada do conteúdo muda |
+| 6 | Miniatura quebrada | sem tratamento de `error` | fallback com proporção preservada na lista e no painel |
+| 7 | **Achado na validação:** sem navegação abaixo de 900 px | CSS previa `data-barra-mobile`, nada o definia; não havia botão | botão de menu, véu, Esc e fechamento ao escolher a tela |
+
+**Números desta máquina (Linux, Node v22.22.3):**
+
+```
+npm test            183/183
+npm run test:e2e     57/57
+npm run verificar    TUDO OK
+npm run typecheck    0 erros
+npm run build        OK
+```
+
+Mais 6 suítes Playwright desta tarefa (barra, transcrição, altura, miniatura,
+gaveta, responsividade geral) — todas OK. O detalhamento está na SPEC §3–§4.
+
+**Ressalvas registradas:** as miniaturas foram exercitadas com respostas
+controladas por `page.route` (dublê), não contra o YouTube real; a importação
+real segue não executada nesta máquina; a homologação visual é do proprietário.
+
+Playwright entrou como **dependência de desenvolvimento** (`1.56.1`), a pedido
+explícito do proprietário. Não há dependência nova de produção.
+
 ## Histórico
 
 ### Sessões anteriores a 21/11/2026

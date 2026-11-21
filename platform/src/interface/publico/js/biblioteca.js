@@ -22,6 +22,18 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
    * variável elimina a segunda fonte de verdade.
    */
   const ALTURAS_PADRAO = { ampliado: 136, compacto: 64 };
+  /**
+   * Altura ajustável do modo Ampliado.
+   *
+   * Os limites existem para a linha continuar legível: abaixo de 88px a
+   * miniatura e duas linhas de título não cabem; acima de 200px cada vídeo
+   * ocupa quase a tela inteira. O valor é gravado em `--altura-linha-ampliado`
+   * no próprio `.aplicativo`, então o CSS e o virtualizador leem a MESMA
+   * fonte — nenhuma altura por linha é escrita à mão.
+   */
+  const ALTURA_MINIMA = 88;
+  const ALTURA_MAXIMA = 200;
+  const ALTURA_PASSO = 8;
   function alturaDoCss() {
     const valor = getComputedStyle(document.querySelector('.aplicativo'))
       .getPropertyValue('--altura-linha').trim();
@@ -99,6 +111,41 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
 
   function alturaLinha() {
     return alturaDoCss() ?? ALTURAS_PADRAO[modo] ?? ALTURAS_PADRAO.ampliado;
+  }
+
+  function alturaAmpliadaAtual() {
+    const app = document.querySelector('.aplicativo');
+    const valor = Number.parseFloat(
+      getComputedStyle(app).getPropertyValue('--altura-linha-ampliado'),
+    );
+    return Number.isFinite(valor) ? valor : ALTURAS_PADRAO.ampliado;
+  }
+
+  function aplicarAlturaAmpliada(px, { salvar = true, renderizar: redesenhar = true } = {}) {
+    const limite = Math.min(ALTURA_MAXIMA, Math.max(ALTURA_MINIMA, Math.round(px)));
+    const app = document.querySelector('.aplicativo');
+    app.style.setProperty('--altura-linha-ampliado', `${limite}px`);
+    // Quantas linhas de resumo cabem: 19,2px por linha (12px * 1.6), com
+    // ~34px de respiro e do "ver resumo completo". Entre 1 e 5.
+    const linhas = Math.max(1, Math.min(5, Math.floor((limite - 34) / 19.2)));
+    app.style.setProperty('--linhas-resumo', String(linhas));
+    const rotulo = $('#altura-valor');
+    if (rotulo) rotulo.textContent = `${limite} px`;
+    const restaurar = $('#restaurar-altura');
+    if (restaurar) restaurar.disabled = limite === ALTURAS_PADRAO.ampliado;
+    if (salvar) {
+      try {
+        localStorage.setItem('contextflow.biblioteca.altura', String(limite));
+      } catch { /* armazenamento indisponível não impede o uso */ }
+    }
+    // A altura mudou: a janela virtual e as linhas já montadas precisam ser
+    // recalculadas a partir da mesma fonte. `renderizar` preserva a seleção
+    // porque ela vive em `selecionados`, por id, não no DOM.
+    if (redesenhar) {
+      linhasAtuais = new Map();
+      if (itens.length) renderizar();
+      agendar();
+    }
   }
 
   // -------------------------------------------------------------- consultas
@@ -223,18 +270,36 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
     const caixa = document.createElement('div');
     caixa.className = 'miniatura';
 
-    if (video.miniaturaUrl) {
-      const img = document.createElement('img');
-      img.src = video.miniaturaUrl;
-      img.alt = '';
-      img.loading = 'lazy';
-      img.decoding = 'async';
-      caixa.append(img);
-    } else {
+    /**
+     * Fallback: mesma caixa, mesma proporção, sem ícone de imagem quebrada.
+     *
+     * Substitui SÓ a imagem. A duração e o botão de abrir são criados uma
+     * única vez, mais abaixo, para os dois caminhos — criá-los aqui também
+     * duplicava o botão e, com dois `abrir-painel` na mesma linha, o clique
+     * podia cair no errado.
+     */
+    const semImagem = () => {
+      caixa.classList.add('miniatura-vazia');
+      caixa.dataset.fallback = '1';
       const vazio = document.createElement('span');
       vazio.className = 'sem-miniatura';
       vazio.textContent = 'sem miniatura';
       caixa.append(vazio);
+    };
+
+    if (video.miniaturaUrl) {
+      const img = document.createElement('img');
+      img.alt = '';
+      img.loading = 'lazy';
+      img.decoding = 'async';
+      // Uma miniatura remota pode falhar (404, CDN fora, vídeo removido).
+      // Sem isto o navegador desenhava o ícone de imagem quebrada no lugar
+      // da miniatura. O fallback mantém a caixa e a proporção intactas.
+      img.addEventListener('error', () => { img.remove(); semImagem(); }, { once: true });
+      img.src = video.miniaturaUrl;
+      caixa.append(img);
+    } else {
+      semImagem();
     }
 
     if (Number.isFinite(video.duracaoSegundos)) {
@@ -755,6 +820,33 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
 
   // ------------------------------------------------- visual: colunas e modo
 
+  function montarAltura() {
+    const aplicarSalvo = () => {
+      let salvo = null;
+      try {
+        salvo = Number.parseFloat(localStorage.getItem('contextflow.biblioteca.altura') ?? '');
+      } catch { /* idem */ }
+      // Sem renderizar: `montarAltura` roda durante `ligar`, antes de a lista
+    // existir. Renderizar aqui dispararia `renderizar()` com `itens` vazio e,
+    // pior, no meio da inicialização — foi o que fez o painel de leitura
+    // abrir num vídeo sem transcrição na suíte E2E.
+    aplicarAlturaAmpliada(Number.isFinite(salvo) ? salvo : ALTURAS_PADRAO.ampliado, {
+      salvar: false,
+      renderizar: false,
+    });
+    };
+    aplicarSalvo();
+    $('#diminuir-altura')?.addEventListener('click', () => {
+      aplicarAlturaAmpliada(alturaAmpliadaAtual() - ALTURA_PASSO);
+    });
+    $('#aumentar-altura')?.addEventListener('click', () => {
+      aplicarAlturaAmpliada(alturaAmpliadaAtual() + ALTURA_PASSO);
+    });
+    $('#restaurar-altura')?.addEventListener('click', () => {
+      aplicarAlturaAmpliada(ALTURAS_PADRAO.ampliado);
+    });
+  }
+
   function montarColunas() {
     const lista = $('#colunas-lista');
     const ROTULOS = {
@@ -815,6 +907,7 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
   function ligar() {
     lerPreferencias();
     montarColunas();
+    montarAltura();
     aplicarModo(modo);
 
     viewport.addEventListener('scroll', () => {
@@ -929,12 +1022,70 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
       }
     });
 
-    // Recolher a barra lateral inteira
+    // Recolher a barra lateral inteira.
+    //
+    // O botão fica no pé da barra e tem de continuar alcançável no estado
+    // recolhido — é o único caminho de volta. Além do rótulo visível, o
+    // estado vai em `aria-expanded` para quem usa leitor de tela, e o
+    // `title` acompanha para o tooltip não mentir.
+    const aplicarEstadoBarra = (recolhida) => {
+      const app = document.querySelector('.aplicativo');
+      const botao = $('#recolher-barra');
+      app.dataset.barra = recolhida ? 'recolhida' : 'expandida';
+      botao.setAttribute('aria-label', recolhida ? 'Expandir barra lateral' : 'Recolher barra lateral');
+      botao.setAttribute('aria-expanded', recolhida ? 'false' : 'true');
+      botao.title = recolhida ? 'Expandir barra lateral' : 'Recolher barra lateral';
+      const rotulo = botao.querySelector('.rotulo-recolher');
+      if (rotulo) rotulo.textContent = recolhida ? 'Expandir' : 'Recolher';
+    };
+
+    // --- gaveta (modo <=900px) ------------------------------------------
+    //
+    // Abaixo de 900px a barra sai do fluxo. Até aqui não havia botão para
+    // abri-la: o CSS previa `data-barra-mobile='aberta'`, mas ninguém
+    // definia esse atributo e não existia gatilho. Quem abria numa janela
+    // estreita ficava sem navegação.
+    const appGaveta = document.querySelector('.aplicativo');
+    const gavetaAberta = () => appGaveta.dataset.barraMobile === 'aberta';
+    const fecharGaveta = () => {
+      delete appGaveta.dataset.barraMobile;
+      $('#abrir-menu-mobile')?.setAttribute('aria-expanded', 'false');
+      const veu = $('#veu-mobile');
+      if (veu) veu.hidden = true;
+    };
+    const abrirGaveta = () => {
+      appGaveta.dataset.barraMobile = 'aberta';
+      $('#abrir-menu-mobile')?.setAttribute('aria-expanded', 'true');
+      const veu = $('#veu-mobile');
+      if (veu) veu.hidden = false;
+      // Foco vai para o primeiro item da navegação: quem usa teclado
+      // atravessa a gaveta sem precisar redescobrir onde ela começa.
+      $('.nav-item')?.focus({ preventScroll: true });
+    };
+
+    $('#abrir-menu-mobile')?.addEventListener('click', () => {
+      if (gavetaAberta()) fecharGaveta();
+      else abrirGaveta();
+    });
+    $('#veu-mobile')?.addEventListener('click', fecharGaveta);
+    // Esc fecha a gaveta (sem interferir no painel de leitura, que trata o
+    // próprio Esc e chama stopPropagation).
+    document.addEventListener('keydown', (evento) => {
+      if (evento.key === 'Escape' && gavetaAberta()) fecharGaveta();
+    });
+    // Escolher uma tela fecha a gaveta: o conteúdo já mudou.
+    for (const item of document.querySelectorAll('.nav-item')) {
+      item.addEventListener('click', () => { if (gavetaAberta()) fecharGaveta(); });
+    }
+    // Voltar ao desktop não deixa o estado de gaveta pendurado.
+    matchMedia('(min-width: 901px)').addEventListener('change', (e) => {
+      if (e.matches) fecharGaveta();
+    });
+
     $('#recolher-barra').addEventListener('click', () => {
       const app = document.querySelector('.aplicativo');
       const recolhida = app.dataset.barra !== 'recolhida';
-      app.dataset.barra = recolhida ? 'recolhida' : 'expandida';
-      $('#recolher-barra').setAttribute('aria-label', recolhida ? 'Expandir barra lateral' : 'Recolher barra lateral');
+      aplicarEstadoBarra(recolhida);
       try {
         localStorage.setItem('contextflow.biblioteca.barra', recolhida ? 'recolhida' : 'expandida');
       } catch { /* idem */ }

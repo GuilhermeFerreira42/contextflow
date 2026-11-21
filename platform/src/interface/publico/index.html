@@ -12,30 +12,24 @@
 
     <div class="aplicativo" data-tela="biblioteca" data-barra="expandida">
       <!-- ================================================== barra lateral -->
-      <aside class="barra-lateral" aria-label="Navegação e organização">
+      <aside class="barra-lateral" id="barra-lateral-id" aria-label="Navegação e organização">
         <div class="marca">
           <span class="marca-simbolo" aria-hidden="true"></span>
           <span class="marca-nome">ContextFlow</span>
-          <button
-            type="button"
-            class="botao-recolher"
-            id="recolher-barra"
-            aria-label="Recolher barra lateral"
-            title="Recolher barra lateral"
-          >
-            <svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 7-5 5 5 5"/><path d="M19 4v16"/></svg>
-          </button>
         </div>
 
         <nav class="navegacao" aria-label="Telas">
           <button class="nav-item ativo" data-aba="biblioteca" type="button">
-            <span class="nav-icone"><svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="3" y="15" width="7" height="5" rx="1.5"/><rect x="14" y="15" width="7" height="5" rx="1.5"/></svg></span> Biblioteca
+            <span class="nav-icone"><svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="3" y="15" width="7" height="5" rx="1.5"/><rect x="14" y="15" width="7" height="5" rx="1.5"/></svg></span>
+            <span class="nav-rotulo">Biblioteca</span>
           </button>
           <button class="nav-item" data-aba="importacoes" type="button">
-            <span class="nav-icone"><svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M4 20h16"/></svg></span> Importações
+            <span class="nav-icone"><svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M4 20h16"/></svg></span>
+            <span class="nav-rotulo">Importações</span>
           </button>
           <button class="nav-item" data-aba="configuracoes" type="button">
-            <span class="nav-icone"><svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.9 19.3a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.7 8.9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 15 4.7a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9v.09c.02.66.4 1.26 1.03 1.56H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1.03z"/></svg></span> Configurações
+            <span class="nav-icone"><svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.9 19.3a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.7 8.9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 15 4.7a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9v.09c.02.66.4 1.26 1.03 1.56H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1.03z"/></svg></span>
+            <span class="nav-rotulo">Configurações</span>
           </button>
         </nav>
 
@@ -51,6 +45,18 @@
         </div>
 
         <div class="rodape-lateral">
+          <button
+            type="button"
+            class="botao-recolher"
+            id="recolher-barra"
+            aria-label="Recolher barra lateral"
+            aria-expanded="true"
+            aria-controls="barra-lateral-id"
+            title="Recolher barra lateral"
+          >
+            <svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 7-5 5 5 5"/><path d="M19 4v16"/></svg>
+            <span class="rotulo-recolher">Recolher</span>
+          </button>
           <div class="status-motor" id="status-motor" role="status" aria-live="polite">
             <span class="ponto" data-estado="conectando"></span>
             <span class="status-texto">Conectando…</span>
@@ -60,8 +66,25 @@
         </div>
       </aside>
 
+      <!-- Véu da gaveta: só no modo gaveta, quando a barra está aberta. -->
+      <div class="veu-mobile" id="veu-mobile" hidden></div>
+
       <!-- ========================================================= conteúdo -->
       <main class="conteudo" id="conteudo">
+        <!-- Abre a navegação no modo gaveta. Fica fora das telas porque
+             precisa existir em todas — dentro da Biblioteca, quem estivesse
+             em Importações ou Configurações não tinha como reabrir a barra. -->
+        <button
+          type="button"
+          class="botao-menu-mobile"
+          id="abrir-menu-mobile"
+          aria-label="Abrir navegação"
+          aria-expanded="false"
+          aria-controls="barra-lateral-id"
+        >
+          <svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/></svg>
+        </button>
+
         <!-- ---------------------------------------------------- Biblioteca -->
         <section class="tela" data-tela-nome="biblioteca">
           <header class="topo-tela">
@@ -162,6 +185,19 @@
             <p class="painel-titulo">Colunas visíveis</p>
             <div class="colunas-lista" id="colunas-lista"></div>
             <p class="painel-nota">Isto muda o que aparece na linha. Para mudar quais vídeos aparecem, use Filtros.</p>
+
+            <!-- Altura das linhas do modo Ampliado. Fica junto de "Colunas"
+                 porque é a mesma família de ajuste: como a linha se apresenta. -->
+            <div class="ajuste-altura" id="ajuste-altura">
+              <p class="painel-titulo">Altura das linhas</p>
+              <div class="altura-linha-controle">
+                <button type="button" class="botao-mini-ajuste" id="diminuir-altura" aria-label="Diminuir altura das linhas" title="Diminuir">−</button>
+                <span class="altura-valor" id="altura-valor" role="status" aria-live="polite">136 px</span>
+                <button type="button" class="botao-mini-ajuste" id="aumentar-altura" aria-label="Aumentar altura das linhas" title="Aumentar">+</button>
+                <button type="button" class="botao-secundario botao-restaurar-altura" id="restaurar-altura">Padrão</button>
+              </div>
+              <p class="painel-nota">Vale para o modo Ampliado. O modo Compacto mantém 64 px.</p>
+            </div>
           </div>
 
           <p id="aviso-selecao" class="contador" hidden>
@@ -370,6 +406,18 @@
               <div class="secao-cabecalho">
                 <h3>Transcrição</h3>
                 <span class="selo" id="painel-transcricao-estado"></span>
+              </div>
+              <!-- Controles de apresentação. Não alteram nada do que está
+                   persistido: só como os mesmos trechos são exibidos. -->
+              <div class="transcricao-controles" role="group" aria-label="Apresentação da transcrição">
+                <label class="opcao-transcricao">
+                  <input type="checkbox" id="mostrar-tempos" checked />
+                  <span>Mostrar tempos</span>
+                </label>
+                <label class="opcao-transcricao">
+                  <input type="checkbox" id="texto-corrido" />
+                  <span>Texto corrido</span>
+                </label>
               </div>
               <ol class="segmentos" id="segmentos-transcricao"></ol>
             </section>
