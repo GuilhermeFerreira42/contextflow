@@ -187,6 +187,16 @@ media query agora inclui o seletor de atributo. Reproduzido em 900, 880, 700,
 planilha, a barra de rolagem fica visível e uma sombra indica o conteúdo à
 direita.
 
+**Segunda correção (`de13751`) — o cache era metade do problema.** O defeito
+voltou numa captura seguinte mesmo com a correção publicada: o navegador
+ainda tinha a folha antiga. Reproduzido de propósito (CSS anterior + barra
+recolhida salva) e resolvido nas duas pontas: a coluna da barra agora vem de
+`--coluna-barra` (cada estado muda a variável; a media query de 900 px troca
+o grid para uma coluna), o que elimina a disputa de especificidade, e
+HTML/CSS/JS passam a ser servidos com `cache-control: no-store`, com
+`?v=2` no link da folha. Imagens e fontes seguem com cache de um dia.
+Verificado em 14 larguras (320–1600) × 2 estados: 28/28.
+
 ### Sessões anteriores a 21/11/2026
 
 Base documental: ZIP `ContextFlow_Pacote_Execucao_V1 (1).zip` (18/11/2026).
