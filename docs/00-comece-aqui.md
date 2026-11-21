@@ -2,7 +2,9 @@
 
 **Status**: V1 em implementação. **F1 e F2 homologadas**; **F3 validada no Windows
 com YouTube real** (19/11/2026; aceite humano e ressalvas no estado atual).
-**F4 implementada e testada**; **F5 backend implementada, frontend em progresso**; **F6 SPEC escrita**.
+**F4 e F5 implementadas e testadas**; **F5-UI (reformulação da interface)
+implementada e testada, homologação humana pendente**; **F6 apenas especificada**,
+não implementada.
 Base documental: pacote `ContextFlow_Pacote_Execucao_V1` (2026-11-18). Estado vivo em
 `docs/estado-atual.md`.
 
@@ -14,7 +16,9 @@ que **não** fazer sem autorização.
 
 Construir **ContextFlow V1**: aplicativo **local** multiplataforma (Windows/Linux),
 **motor (backend) Node.js + TypeScript** com **interface web local**, contendo
-Biblioteca, Leitura, Importações e Configurações. Vídeos do YouTube, metadados,
+Biblioteca, Importações e Configurações. A leitura acontece **na própria
+Biblioteca** — na linha e num painel sobreposto —, não numa tela separada.
+Vídeos do YouTube, metadados,
 legendas com timestamps, resumos via provedores configuráveis e persistência local.
 Monólito modular. Chat sobre conteúdo é **V2** e não entra na V1.
 
@@ -42,10 +46,11 @@ Continuidade de Projeto/  → materiais operacionais FORA do Git
 3. `docs/03-arquitetura-e-contratos.md` — arquitetura, fronteiras de módulos, contratos.
 4. `docs/04-plano-mestre.md` — fatias, gates, definição de concluído.
 5. `docs/05-criterios-de-aceite.md` — matriz de cenários verificáveis.
-6. `docs/estado-atual.md` — estado de retomada (branch, HEAD, o que foi feito, próximo passo).
-7. `docs/06-continuidade-e-operacao.md` — governança documental e protocolo de sessão.
-8. `docs/07-protocolo-continuidade.md` — protocolo vinculante para qualquer agente.
-9. `docs/handoff-codex.md` — **transferência**: ambiente, comandos, o que está
+6. `docs/06b-arquitetura-da-interface.md` — como a interface está montada (virtualização, painel, árvore).
+7. `docs/estado-atual.md` — estado de retomada (branch, HEAD, o que foi feito, próximo passo).
+8. `docs/06-continuidade-e-operacao.md` — governança documental e protocolo de sessão.
+9. `docs/07-protocolo-continuidade.md` — protocolo vinculante para qualquer agente.
+10. `docs/handoff-codex.md` — **transferência**: ambiente, comandos, o que está
    pendente e como provar que está pronto.
 
 As SPECs de cada fatia estão em `docs/specs/` (`f1-esqueleto.md`,

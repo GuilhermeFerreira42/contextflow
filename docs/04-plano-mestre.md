@@ -10,10 +10,11 @@ globais permanecem nos documentos canônicos.
 | **F1 — Esqueleto modular** | motor Node+TS sobe localmente, serve a interface, contratos e scripts reproduzíveis | ✅ concluída + homologada |
 | **F2 — Persistência e migração** | biblioteca persiste vídeo e conteúdo; migrações versionadas | ✅ concluída + **homologada** (banco decidido por medição) |
 | **F3 — Ingestão/legendas** | metadados reais, legendas manual/auto segmentadas por tempo | 🟨 **validada no Windows/YouTube real** (`c6b7db5`); aceite humano pendente, ressalvas no estado atual. **Playlist ficou para a F4.** |
-| **F4 — Trabalhos e recuperação** | fila persistente, estados, cancelamento, falhas, reexecução controlada | **SPEC escrita, não implementada**; depende de revisão/autorização e aceite F3 |
-| **F5 — Biblioteca** | grid denso/virtualizado, filtros/pesquisa, seleção, agrupamento, ações em lote | F2–4; estabilidade com volume representativo |
-| **F6 — IA para resumos** | provedores/configuração, resumos persistidos, custos/erros, múltiplas seleções | F2–5; chaves seguras e casos de falha |
-| **F7 — Leitura avançada** | resumos/transcrições/ambos, expansão, leitor completo, retorno sem perda de estado | F5–6; textos longos |
+| **F4 — Trabalhos e recuperação** | fila persistente, estados, cancelamento, falhas, reexecução controlada | ✅ concluída + testada (`5a13b3c`) |
+| **F5 — Biblioteca** | grid virtualizado, filtros/pesquisa, seleção, ações em lote | ✅ concluída + testada (`7b58f32`) |
+| **F5-UI — Reformulação da interface** | Biblioteca centrada, linhas com resumo, colunas, painel sobreposto, árvore lateral, Adicionar link | 🟨 **implementada e testada** (`9e7ce02`, `3db2e48`); homologação humana pendente. SPEC em `specs/f5-ui-reformulacao.md` |
+| **F6 — IA para resumos** | provedores/configuração, resumos persistidos, custos/erros, múltiplas seleções | **SPEC escrita** (`d9ef6a6`), **não implementada**. É a próxima fatia autorizada |
+| **F7 — Leitura avançada** | resumos/transcrições/ambos, expansão, leitor completo, retorno sem perda de estado | F5–6; textos longos. **Nota:** a leitura na linha e o painel sobreposto já existem desde a F5-UI; a F7 acrescenta o que falta (ver SPEC) |
 | **F8 — Configuração e acabamento** | preferências, segurança, navegação, feedback consistente, texto de ajuda | F1–7; exportação só se aprovada na SPEC |
 | **F9 — End-to-end e entrega** | smoke, regressão, instalação Windows/Linux, roteiro de homologação V1 | todas; aceite do escopo |
 
