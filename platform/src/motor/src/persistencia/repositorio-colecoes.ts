@@ -46,6 +46,30 @@ export class RepositorioColecoes {
       FROM videos WHERE canal_id IS NOT NULL GROUP BY canal_id ORDER BY nome,canal_id`).all() as unknown as {id:string;nome:string|null;contagem:number}[];
     return { itens: linhas.map(l => ({ ...l, nome: l.nome ?? l.id })) };
   }
+  /**
+   * Meses de importação, para a árvore lateral. Agrupado no banco: derivar de
+   * uma página de 500 itens daria contagem errada quando a biblioteca cresce.
+   * `id` é AAAA-MM; o intervalo ISO exato é montado pelo chamador.
+   */
+  meses(): { itens: { id: string; nome: string; contagem: number }[] } {
+    const linhas = this.#banco.db
+      .prepare(
+        `SELECT substr(criado_em,1,7) id, COUNT(*) contagem
+           FROM videos
+          GROUP BY 1
+          ORDER BY 1 DESC`,
+      )
+      .all() as unknown as { id: string; contagem: number }[];
+    return {
+      itens: linhas.map((l) => {
+        const [ano, mes] = l.id.split('-').map((n) => Number(n) || 1) as [number, number];
+        const data = new Date(Date.UTC(ano, mes - 1, 1));
+        const rotulo = data.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+        return { id: l.id, nome: rotulo.charAt(0).toUpperCase() + rotulo.slice(1), contagem: l.contagem };
+      }),
+    };
+  }
+
   playlists(): {itens: {id:string;titulo:string;contagem:number}[]} {
     const linhas = this.#banco.db.prepare(`SELECT json_extract(pai.escopo,'$.url') url,
       MAX(json_extract(pai.escopo,'$.titulo')) titulo, COUNT(DISTINCT v.id) contagem

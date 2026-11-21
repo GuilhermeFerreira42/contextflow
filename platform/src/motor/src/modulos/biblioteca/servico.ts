@@ -96,4 +96,5 @@ export class ServicoBiblioteca {
   async removerVideoColecao(id: string, videoId: string): Promise<void> { this.#colecoes().remover(id, videoId); }
   async listarPlaylists() { return this.#colecoes().playlists(); }
   async listarCanais() { return this.#colecoes().canais(); }
+  async listarMeses() { return this.#colecoes().meses(); }
 }
