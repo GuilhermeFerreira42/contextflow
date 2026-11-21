@@ -128,7 +128,13 @@ body {
 
 .aplicativo {
   display: grid;
-  grid-template-columns: var(--largura-barra) 1fr;
+  /* A largura da coluna da barra vem de uma variável, não de um valor fixo.
+   * Assim quem esconde a barra (gaveta) só precisa zerar a variável — não há
+   * como uma regra de desktop vencer a de mobile e sobrar uma coluna vazia
+   * comendo o conteúdo. Foi exatamente esse conflito que deixou a tela com
+   * uma tira de 56 px ao abrir. */
+  --coluna-barra: var(--largura-barra);
+  grid-template-columns: var(--coluna-barra) minmax(0, 1fr);
   height: 100vh;
   overflow: hidden;
   transition: grid-template-columns 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -142,7 +148,7 @@ body {
  * `overflow: hidden` na barra — o botão de alternância ficava com 17 px fora
  * do clipe e não podia ser clicado. Recolher era uma passagem só de ida. */
 .aplicativo[data-barra='recolhida'] {
-  grid-template-columns: var(--largura-barra-recolhida) 1fr;
+  --coluna-barra: var(--largura-barra-recolhida);
 }
 .aplicativo[data-barra='recolhida'] .marca-nome,
 .aplicativo[data-barra='recolhida'] .nav-rotulo,
@@ -2052,15 +2058,13 @@ dialog p {
 }
 
 @media (max-width: 900px) {
-  /* A barra vira gaveta (position: fixed) e SAI do grid, então a coluna dela
-   * não pode existir. A regra precisa vencer `.aplicativo[data-barra=
-   * 'recolhida']`, que é mais específica e vale em qualquer largura: sem o
-   * seletor de atributo aqui, quem já havia recolhido a barra no desktop
-   * abria a tela pequena com duas colunas — a gaveta fora do fluxo e o
-   * conteúdo espremido em 56 px. Era o "monte de coisa estranha" ao abrir. */
+  /* A barra vira gaveta (position: fixed) e SAI do grid: a coluna dela tem
+   * de ser zero. Zerar a VARIÁVEL resolve para os dois estados de uma vez —
+   * não existe mais a disputa de especificidade entre "recolhida" (desktop)
+   * e a media query, que deixava uma coluna vazia espremendo o conteúdo. */
   .aplicativo,
   .aplicativo[data-barra='recolhida'] {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   /* Barra de ferramentas em 420 px: com os rótulos longos as ferramentas de

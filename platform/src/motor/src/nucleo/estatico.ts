@@ -58,7 +58,16 @@ export async function servirEstatico(
   if (!arquivo) return false;
 
   const tipo = TIPOS[extname(arquivo).toLowerCase()] ?? 'application/octet-stream';
-  res.writeHead(200, { 'content-type': tipo, 'cache-control': 'no-cache' });
+  // `no-cache` obriga a revalidar, mas o navegador ainda pode reusar uma
+  // resposta de outra sessão do preview. Para a interface (HTML/CSS/JS), que
+  // não é asset imutável, `no-store` é o cabeçalho honesto: cada abertura
+  // recebe o arquivo atual. Foi um CSS antigo em cache que fez uma correção
+  // já publicada continuar aparecendo com o defeito.
+  const imutavel = /\.(png|svg|woff2|ico)$/i.test(arquivo);
+  res.writeHead(200, {
+    'content-type': tipo,
+    'cache-control': imutavel ? 'public, max-age=86400' : 'no-store',
+  });
 
   if (fallbackHtml && extname(arquivo) === '.html') {
     res.end(await fallbackHtml());
