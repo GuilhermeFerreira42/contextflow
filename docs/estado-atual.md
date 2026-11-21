@@ -13,6 +13,19 @@ e é a próxima na sequência do plano, mas o proprietário determinou que
 
 ### Direção vigente — atualização documental de 21/11/2026
 
+**Novo pedido preparado para a Arena:** o proprietário solicitou um arquivo
+de texto para encaminhar, com correções da barra lateral que não reabre,
+responsividade/largura, altura ajustável no modo Ampliado, colunas, miniaturas
+e duas opções independentes de transcrição (tempos e texto corrido). O arquivo
+está na raiz da pasta entregue: `../PEDIDO-PARA-ARENA-CORRECOES-INTERFACE.txt`.
+As três imagens fornecidas foram copiadas para
+`../Continuidade de Projeto/pedido-correcao-ui-2026-11-21/`.
+Playwright em navegador real foi solicitado explicitamente para validar essa
+tarefa, complementando a suíte CDP existente. A Arena deve escrever a SPEC
+antes de implementar, trabalhar dentro da pasta entregue e seguir suas skills.
+**Status:** pedido redigido para envio pelo proprietário; não enviado pelo
+Codex, não implementado e não validado. F6 continua fora do escopo.
+
 - **Pedido atual:** manter documentação e continuidade conforme o estado real.
   Codex atua como parceiro de raciocínio; comandos de implementação serão
   preparados com o proprietário para a Arena. Não refazer a revisão visual
