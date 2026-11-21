@@ -35,15 +35,43 @@ situação da entrega F3 original, anterior a essa validação.
 | A3 (vídeo sem legenda) | 🟨 **verificado tecnicamente; prova real pendente** | `estado = indisponivel` + motivo + vídeo `parcial`; testado em unidade e rota |
 | A7 (reabertura do app) | ✅ **executado e aprovado** | processo morto com SIGKILL; outro processo releu os dados; mais `testes/integracao/ingestao.test.ts` reabrindo o arquivo do banco |
 | A14 (segurança local) | ✅ **executado e aprovado** (ampliado na F3) | travessia de path bloqueada; `spawn` com `shell:false`; teste de injeção de comando na URL; URL de outro domínio rejeitada |
-| A4 (playlist) | ⬜ não executado | F4 |
-| A5 (falha de rede) | 🟨 **parcial** — erro traduzido e estado recuperável | teste real: TLS bloqueado → 503 com mensagem correta e vídeo em `erro`; retry é F4 |
-| A6 (cancelamento) | ⬜ não executado | F4 |
-| A8, A9, A10 (volume, seleção, leitura contínua) | ⬜ não executado | F5–F7 |
+| A4 (playlist) | ✅ **executado e aprovado** | `testes/e2e` — playlist importada, itens classificados, filtro por playlist (F4) |
+| A5 (falha de rede) | ✅ **executado e aprovado** | TLS bloqueado → 503 com mensagem correta; retry e repetição cobertos na F4 |
+| A6 (cancelamento) | ✅ **executado e aprovado** | `testes/e2e` e integração: cancelamento pedido, encerramento, estado final |
+| A8 (volume) | ✅ **executado e aprovado** | 5.004 vídeos no E2E, DOM com menos de 150 linhas; rolagem até o índice 3.000 sem perder identidade |
+| A9 (seleção) | ✅ **executado e aprovado** | seleção por linha, selecionar visíveis, ações em lote, seleção fora do filtro |
+| A10 (leitura contínua) | 🟨 **implementada; homologação humana pendente** | resumo na linha + painel sobreposto com transcrição; a fluidez contínua de rolagem longa é avaliação do proprietário |
 | A11, A12 (IA, custos, segredos) | ⬜ não executado | F6–F8 |
 | A13 (migração da base original) | ⬜ não executado | F9 |
 | A15 (Windows e Linux) | 🟨 **Windows: app roda; suíte não executada lá** | F3 rodou em Windows pelo proprietário (`npm run dev`); falta rodar `npm test` no Windows |
 
 **Legenda:** ✅ executado e aprovado · 🟨 parcial ou verificado sem prova real · ⬜ não executado
+
+### Aceite da F5-UI (reformulação da interface)
+
+Executado em 21/11/2026, commits `9e7ce02` e `3db2e48`. Todos os itens abaixo
+têm cenário automatizado em `testes/e2e/` — menos os marcados como visuais,
+que dependem de homologação humana por natureza.
+
+| # | Critério | Status |
+|---|---|---|
+| U1 | Biblioteca com linhas ampliadas, miniatura e resumo legível na linha | ✅ |
+| U2 | Colunas ocultam/exibem e a escolha persiste | ✅ |
+| U3 | Modo compacto reduz a altura real da linha | ✅ |
+| U4 | Ordenação por título/canal/data pelo cabeçalho | ✅ |
+| U5 | Filtros de estado, canal, playlist, coleção e "com resumo" | ✅ |
+| U6 | Painel abre com dados completos, resumo e transcrição | ✅ |
+| U7 | Fechar o painel preserva busca, filtros e posição | ✅ |
+| U8 | Árvore lista canais, playlists, datas e coleções | ✅ |
+| U9 | Nó da árvore filtra a Biblioteca | ✅ |
+| U10 | Barra lateral recolhe liberando espaço | ✅ |
+| U11 | "Adicionar link" valida a URL antes de chamar o motor | ✅ |
+| U12 | Importação feita pela janela aparece em Importações | 🟨 depende de yt-dlp alcançar o YouTube (bloqueado neste ambiente) |
+| U13 | Importações e Configurações mantêm todos os recursos | ✅ |
+| U14 | Seleção, ações em lote e coleções seguem funcionando | ✅ |
+| U15 | Sem regressão: `npm test` 182/182 e E2E 56/56 | ✅ |
+| U16 | Sem erro de script no console em nenhuma tela | ✅ |
+| — | **Fidelidade visual aos mockups** | 🟨 **homologação humana pendente** |
 
 ### O que a F3 mudou nesta matriz
 

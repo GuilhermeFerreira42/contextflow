@@ -63,8 +63,9 @@ adivinhar nada.
 Aplicativo **local** de biblioteca pessoal de vídeos do YouTube. Importa URLs,
 guarda metadados, baixa **legendas com timestamps** e (mais adiante) gera
 resumos com IA. Interface web servida pelo próprio processo, tema grafite escuro
-com detalhes em azul. Quatro telas: Biblioteca, Leitura, Importações,
-Configurações. Chat sobre o conteúdo é **V2** e está fora da V1.
+com detalhes em azul. Três telas: Biblioteca, Importações e Configurações —
+a leitura acontece dentro da Biblioteca (na linha e num painel sobreposto),
+não numa tela à parte. Chat sobre o conteúdo é **V2** e está fora da V1.
 
 Monólito modular em **Node.js 22 + TypeScript**, sem framework HTTP e **zero
 dependência de produção**.
@@ -253,8 +254,8 @@ assinatura, ou justifique a mudança na SPEC.
 |---|---|---|
 | P1 | Importação de playlist | F4 |
 | P2 | Lista de importações com progresso na UI | F4 |
-| P3 | Biblioteca sem virtualização (limite 100) | F5 |
-| P4 | Leitura busca transcrição vídeo a vídeo (N+1) | F5/F7 |
+| P3 | ~~Biblioteca sem virtualização~~ — resolvido na F5 | — |
+| P4 | ~~Leitura com N+1~~ — a tela Leitura deixou de existir na F5-UI; o painel busca sob demanda | — |
 | P5 | Busca por `LIKE`, sem FTS | F5, com volume medido |
 | P6 | Configurações somente leitura | F8 |
 | P7 | Nenhum resumo por IA | F6 |
