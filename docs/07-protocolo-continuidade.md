@@ -32,6 +32,26 @@
 | 8 | **Parar só a parte bloqueada.** Decisão de produto/segurança/arquitetura não resolvida ⇒ pergunta objetiva com recomendação, não improviso. |
 | 9 | **Memória do agente ≠ funcionalidade do produto.** Anotações de continuidade não viram requisito. |
 | 10 | **Pesquisa tem gate.** Investigar até a decisão ficar possível; não até esgotar a bibliografia. |
+| 11 | **Uma fatia por commit**, com mensagem dizendo o que foi validado e como. Commit que mistura correção, documentação e limpeza não permite reverter só o que quebrou. |
+| 12 | **Não reabrir decisão fechada sem evidência nova.** A lista de decisões fechadas está em `docs/estado-atual.md` (§ "Decisões que continuam valendo"); reabrir exige um fato novo, não uma preferência. |
+| 13 | **A entrega ao navegador é parte da correção.** Uma correção de CSS/JS que fica presa em cache não chegou ao usuário: HTML, CSS e JS são servidos com `cache-control: no-store` e o link leva `?v=N` que sobe a cada mudança. |
+
+## 2.1 Artefatos e evidências
+
+O repositório guarda **só** o que precisa sobreviver à máquina. Material de
+trabalho fica fora do Git, em `../Arquivo/`:
+
+| O que | Onde |
+|---|---|
+| Evidência citada em homologação | `docs/mockups/evidencia/` (versionada, com `LEIA-ME.md` dizendo o que cada captura prova) |
+| Capturas de sessão de auditoria, ainda não citadas | `../Arquivo/auditoria-atual/` |
+| Capturas de defeitos **já corrigidos** | `../Arquivo/auditoria-historico/` — prova de antes/depois, não é mais estado do produto |
+| Telas anteriores a uma revisão de interface | `../Arquivo/_capturas-antes-da-revisao/` — não usar em homologação, mostra defeito já corrigido |
+| Cópias de recuperação e pacotes redundantes | `../Arquivo/_pacotes-descartaveis/` |
+
+Regra: captura com defeito corrigido **nunca** aparece como estado atual. Se
+uma tela antiga é citada, o texto tem de dizer que é anterior à correção e
+qual commit a corrigiu.
 
 ## 3. Ciclo de uma fatia
 

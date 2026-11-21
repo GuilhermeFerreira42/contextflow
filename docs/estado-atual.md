@@ -19,14 +19,14 @@ que a F6 **não** fosse iniciada nesta etapa.
 | F4 — fila persistente | implementada e testada | `5a13b3c` | SIGKILL, lease, fencing |
 | F5 — Biblioteca | implementada e testada | `7b58f32` | virtualização, filtros, lote, coleções |
 | **F5-UI** — reformulação | **implementada, aguardando homologação** | `9e7ce02`, `3db2e48`, `909843a`, `6d571c3`, `0b9a9bd`, `978401d` | — |
-| **F5-QA** — revisão de qualidade | **implementada, aguardando homologação** | `F5-QA` (ver histórico) | **62/62 E2E** |
+| **F5-QA** — revisão de qualidade | **implementada, aguardando homologação** | `F5-QA` (ver histórico) | **63/63 E2E** |
 | F6 — IA para resumos | especificada, **não implementada** | `d9ef6a6` (spec) | — |
 
 ### Números desta máquina (Linux, Node v22)
 
 ```
 npm test          183/183
-npm run test:e2e   62/62
+npm run test:e2e   63/63
 npm run verificar TUDO OK
 npm run build     OK
 npm run typecheck  0 erros
@@ -187,6 +187,18 @@ media query agora inclui o seletor de atributo. Reproduzido em 900, 880, 700,
 planilha, a barra de rolagem fica visível e uma sombra indica o conteúdo à
 direita.
 
+**Terceira correção (`5df05bc`) — HTML e JS de versões diferentes.** O
+proprietário relatou "duas colunas de situação, uma sem título" e o painel
+de colunas listando opções que não existem mais. Reproduzido servindo o
+HTML novo com o JS anterior: `nTh=7` e `nTd=8`, dois selos "Pronto" por
+linha, e o painel mostrando "Estado do vídeo" e "Conteúdo do resumo" —
+rótulos removidos em `c5fa1a9`. A 8ª célula caía fora do `<thead>` e
+aparecia como coluna sem cabeçalho. O `de13751` versionou o CSS e
+**esqueceu o módulo JS**. Correções: `aplicacao.js?v=2`; a linha passa a
+montar as células lendo o `<thead>` (com HTML de outra versão a linha
+acompanha o cabeçalho em vez de criar célula órfã); o `colspan` vem da
+contagem real de colunas, não de um `TOTAL_COLUNAS = 7` fixo.
+
 **Segunda correção (`de13751`) — o cache era metade do problema.** O defeito
 voltou numa captura seguinte mesmo com a correção publicada: o navegador
 ainda tinha a folha antiga. Reproduzido de propósito (CSS anterior + barra
@@ -215,6 +227,15 @@ leitura** — nenhuma escrita foi feita nele.
 Ambiente do proprietário: Windows/PowerShell, Node v22.12.0, yt-dlp 2026.03.17,
 Chrome real via CDP. Nenhum login, cookie, chave ou token foi usado nas
 validações.
+
+**Organização dos artefatos (21/11/2026).** A evidência desta rodada está
+versionada em `docs/mockups/evidencia-revisao-21-11/`, com `LEIA-ME.md`
+dizendo o que cada captura prova e qual commit corrigiu cada defeito. As
+capturas do estado **com defeito** saíram do repositório e do caminho
+principal: vivem em `../Arquivo/auditoria-historico/` e
+`../Arquivo/_capturas-antes-da-revisao/`, porque não são estado do
+produto. A política de onde cada tipo de artefato mora está na §2.1 de
+`docs/07-protocolo-continuidade.md`.
 
 **Decisões que continuam valendo:** monólito modular; `node:sqlite` (o
 `better-sqlite3` não instala em árvore limpa); sem etapa de build no frontend
