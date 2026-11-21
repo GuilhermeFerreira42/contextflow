@@ -20,10 +20,15 @@ export async function exercitarBiblioteca({ app, base, avaliar, esperar, S, regi
   const domInicial=await avaliar(`document.querySelectorAll('#corpo-biblioteca tr').length`);
   registrar('F5: 5.000 vídeos com quantidade limitada de linhas no DOM',domInicial<150,`total=5004 · tr=${domInicial}`);
 
-  await avaliar(`document.querySelector('#biblioteca-viewport').scrollTop=3000*48`);
+  // F5-UI: a linha deixou de ter altura fixa de 48 px. O teste pergunta a
+  // altura REAL da linha e rola para `altura * índice` — que é exatamente a
+  // posição do item dentro do conteúdo virtualizado. Não soma o espaçador: ele
+  // é justamente o pedaço já percorrido, não um deslocamento adicional.
+  const alturaLinha=await avaliar(`document.querySelector('#corpo-biblioteca tr[data-id]').getBoundingClientRect().height`);
+  await avaliar(`document.querySelector('#biblioteca-viewport').scrollTop=${alturaLinha}*3000`);
   const alcançou=await esperar(`document.querySelector('#corpo-biblioteca tr[data-id="massa-03000"] .titulo-video')?.textContent==='Massa 03000'`,20000);
   const geometria=await avaliar(`(()=>{const v=document.querySelector('#biblioteca-viewport').getBoundingClientRect(),r=document.querySelector('tr[data-id="massa-03000"]')?.getBoundingClientRect();return !!r&&r.top<v.bottom&&r.bottom>v.top;})()`);
-  registrar('F5: rolagem chega ao vídeo 3.000 sem perder identidade',alcançou&&geometria);
+  registrar('F5: rolagem chega ao vídeo 3.000 sem perder identidade',alcançou&&geometria,`altura=${alturaLinha}px`);
 
   await avaliar(`window.__linhaMantida=document.querySelector('tr[data-id="massa-03005"]');document.querySelector('#biblioteca-viewport').scrollTop+=48`);
   await avaliar(`new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);

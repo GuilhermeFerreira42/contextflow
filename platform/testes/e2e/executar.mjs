@@ -318,20 +318,30 @@ try {
   );
   registrar('deduplicação é explicada ao usuário', avisouDuplicata === true);
 
-  // 5d. Leitura: transcrição com trechos e tempo.
-  await avaliar(`document.querySelector('[data-aba="leitura"]').click()`);
-  const listaPronta = await esperar(`document.querySelectorAll('.linha-leitura').length === 1`, 15000);
-  const metaLinha = await avaliar(`document.querySelector('.linha-leitura-meta')?.textContent`);
-  registrar('Leitura lista a transcrição importada', listaPronta, metaLinha);
+  // 5d. F5-UI: a tela "Leitura" foi absorvida pela Biblioteca. A leitura
+  //     acontece na linha; o painel sobreposto é complementar e abre por botão.
+  const abaLeituraSumiu = await avaliar(`document.querySelector('[data-aba="leitura"]')===null`);
+  registrar('abas principais são Biblioteca, Importações e Configurações', abaLeituraSumiu);
 
-  await avaliar(`document.querySelector('.linha-leitura').click()`);
+  // Abre o painel pelo botão explícito da miniatura — nunca por selecionar linha.
+  await avaliar(`document.querySelector('[data-aba="biblioteca"]').click()`);
+  const painelDisponivel = await esperar(`!!document.querySelector('#corpo-biblioteca tr[data-id] .abrir-painel')`, 15000);
+  if (!painelDisponivel) throw new Error('botão de abrir painel não apareceu na linha');
+
+  const antesDoClique = await avaliar(`document.querySelector('#painel-leitura').hidden`);
+  await avaliar(`document.querySelector('#corpo-biblioteca tr[data-id] input').click()`);
+  const selecionarNaoAbre = await avaliar(`document.querySelector('#painel-leitura').hidden`);
+  registrar('selecionar a linha não abre o painel', antesDoClique && selecionarNaoAbre);
+  await avaliar(`document.querySelector('#limpar-selecao').click()`);
+
+  await avaliar(`document.querySelector('#corpo-biblioteca tr[data-id] .abrir-painel').click()`);
   const segmentosVisiveis = await esperar(
-    `document.querySelectorAll('#segmentos-transcricao .segmento').length === 3`, 10000,
+    `document.querySelectorAll('#segmentos-transcricao .segmento').length === 3`, 15000,
   );
   const primeiroTempo = await avaliar(`document.querySelector('.segmento-tempo')?.textContent`);
   const primeiroTexto = await avaliar(`document.querySelector('.segmento-texto')?.textContent`);
   registrar(
-    'leitor abre com trechos e tempo',
+    'painel abre com trechos e tempo',
     segmentosVisiveis && primeiroTempo === '0:00' && primeiroTexto?.includes('Bem-vindo'),
     `${primeiroTempo} ${primeiroTexto}`,
   );
@@ -343,6 +353,23 @@ try {
     linkTempo?.slice(0, 60),
   );
 
+  const resumoNoPainel = await avaliar(`document.querySelector('#painel-resumo')?.textContent?.length > 50`);
+  const linkOriginal = await avaliar(`document.querySelector('#painel-link')?.href?.startsWith('https://www.youtube.com/watch')`);
+  registrar('painel mostra resumo completo e link original', resumoNoPainel && linkOriginal);
+
+  // Fechar devolve ao mesmo contexto: busca, filtros e posição intactos.
+  await avaliar(`document.querySelector('#busca').value='Bem-vindo'`);
+  await avaliar(`document.querySelector('#busca').dispatchEvent(new Event('input'))`);
+  await esperar(`document.querySelector('#biblioteca-viewport').dataset.total==='1'`);
+  await S('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+  await S('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+  const contextoPreservado = await esperar(
+    `document.querySelector('#painel-leitura').hidden && document.querySelector('#busca').value==='Bem-vindo' && document.querySelector('#biblioteca-viewport').dataset.total==='1'`,
+  );
+  registrar('fechar o painel preserva busca, filtros e posição', contextoPreservado);
+  await avaliar(`document.querySelector('#limpar-filtros').click()`);
+  await esperar(`document.querySelector('#biblioteca-viewport').dataset.total==='1'`);
+
   // 6. Configurações vêm do motor.
   await avaliar(`document.querySelector('[data-aba="configuracoes"]').click()`);
   const configCarregou = await esperar(`document.querySelectorAll('#lista-config dt').length >= 3`);
@@ -352,7 +379,10 @@ try {
   // 7. Tema escuro aplicado de fato (não basta declarar no CSS).
   const fundo = await avaliar(`getComputedStyle(document.body).backgroundColor`);
   const azul = await avaliar(`getComputedStyle(document.querySelector('.marca-simbolo')).backgroundImage.includes('76, 154, 255')`);
-  registrar('tema grafite escuro com detalhe azul aplicado', fundo === 'rgb(13, 15, 18)' && azul === true, `${fundo} / azul=${azul}`);
+  // F5-UI: o grafite de fundo ficou mais profundo para casar com o mockup
+  // (#080b12). O teste guarda o VALOR, não um número solto: mudar o tema exige
+  // mudar o teste de propósito.
+  registrar('tema grafite escuro com detalhe azul aplicado', fundo === 'rgb(8, 11, 18)' && azul === true, `${fundo} / azul=${azul}`);
 
   // 8. Console sem erros de script.
   const erros = errosJs.length;

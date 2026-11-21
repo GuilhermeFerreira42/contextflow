@@ -169,6 +169,14 @@ export class RepositorioBibliotecaSqlite implements RepositorioBiblioteca {
       condicoes.push('tem_resumo = ?');
       params.push(filtro.temResumo ? 1 : 0);
     }
+    if (filtro.importadoDe) {
+      condicoes.push('criado_em >= ?');
+      params.push(filtro.importadoDe);
+    }
+    if (filtro.importadoAte) {
+      condicoes.push('criado_em < ?');
+      params.push(filtro.importadoAte);
+    }
 
     const total = Number(this.db.prepare(`SELECT COUNT(*) n FROM videos ${condicoes.length ? 'WHERE '+condicoes.join(' AND ') : ''}`).get(...params as never[])!.n);
     const { campo, direcao } = ordemBiblioteca(filtro);

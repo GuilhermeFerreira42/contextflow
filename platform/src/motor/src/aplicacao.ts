@@ -14,6 +14,7 @@ import { ErroValidacao } from './nucleo/erros.ts';
 import { criarRegistrador, type Registrador } from './nucleo/registro.ts';
 import { lerArquivoPublico, servirEstatico } from './nucleo/estatico.ts';
 import { RepositorioColecoes } from './persistencia/repositorio-colecoes.ts';
+import { RepositorioResumosLeituraSqlite } from './persistencia/repositorio-resumos-leitura.ts';
 import { ServicoBiblioteca } from './modulos/biblioteca/servico.ts';
 import { RepositorioBibliotecaSqlite } from './modulos/biblioteca/repositorio-sqlite.ts';
 import { Banco } from './persistencia/banco.ts';
@@ -73,6 +74,7 @@ export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}
   });
 
   const repositorioTranscricoes = new RepositorioTranscricoesSqlite(banco.db);
+  const repositorioResumosLeitura = new RepositorioResumosLeituraSqlite(banco.db);
   const executorYtdlp =
     opcoes.executorYtdlp ??
     new Ytdlp({
@@ -138,6 +140,8 @@ export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}
         colecaoId: consulta.get('colecaoId') ?? undefined,
         playlistId: consulta.get('playlistId') ?? undefined,
         temResumo: consulta.get('temResumo') === '1' ? true : consulta.get('temResumo') === '0' ? false : undefined,
+        importadoDe: consulta.get('importadoDe') ?? undefined,
+        importadoAte: consulta.get('importadoAte') ?? undefined,
         ordenacao: consulta.get('ordenacao') ?? undefined,
         ordenacaoDirecao: consulta.get('ordenacaoDirecao') ?? undefined,
         cursor: consulta.get('cursor') ?? undefined,
@@ -297,6 +301,19 @@ export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}
       await biblioteca.obter(id); // 404 se o vídeo não existe
       const transcricao = await repositorioTranscricoes.porVideo(id);
       return transcricao ?? { videoId: id, idioma: '', origem: 'auto', estado: 'pendente', segmentos: [], motivo: 'Transcrição ainda não importada.', atualizadoEm: '' };
+    })
+    .obter('/api/biblioteca/:id/resumo', async ({ requisicao }) => {
+      const partes = requisicao.caminho.split('/');
+      const id = partes.at(-2)!;
+      await biblioteca.obter(id); // 404 se o vídeo não existe
+      const resumo = await repositorioResumosLeitura.porVideo(id);
+      if (!resumo) {
+        // Sem resumo não é erro de servidor: é ausência declarada, e a F6 é
+        // quem vai preencher. Devolver 404 aqui deixaria a interface confusa
+        // entre "não existe" e "falhou".
+        return { videoId: id, estado: 'pendente' as const, texto: null, provedor: null, modelo: null, atualizadoEm: null };
+      }
+      return resumo;
     });
 
   const servidorApi = criarServidorApi(roteador, registrador);

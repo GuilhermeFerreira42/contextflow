@@ -46,6 +46,8 @@ export class RepositorioBibliotecaMemoria implements RepositorioBiblioteca {
       .filter((v) => (!filtro.colecaoId || (v.colecaoIds ?? []).includes(filtro.colecaoId)))
       .filter((v) => (!filtro.playlistId || (v.playlistIds ?? []).includes(filtro.playlistId)))
       .filter((v) => (filtro.temResumo === undefined || Boolean(v.temResumo) === filtro.temResumo))
+      .filter((v) => (!filtro.importadoDe || v.criadoEm >= filtro.importadoDe))
+      .filter((v) => (!filtro.importadoAte || v.criadoEm < filtro.importadoAte))
       .sort((a,b) => compararVideos(a,b,filtro));
 
     let inicio = 0;
