@@ -22,6 +22,13 @@ compreensível se o artefato desaparecer.
 
 ## Fluxo de uma sessão nova
 
+**Papéis vigentes, definidos pelo proprietário em 21/11/2026:** Codex é parceiro
+de raciocínio e responsável pela atualização documental solicitada; proprietário
+e Codex preparam comandos para a Arena executar. Uma tarefa repassada como
+contexto não autoriza o Codex a refazer a implementação. Registrar separadamente
+o relato de entrega da Arena, a presença da revisão local e a evidência executada.
+Não iniciar F6 nesta etapa.
+
 1. `docs/00-comece-aqui.md` → escopo → decisões → `docs/estado-atual.md`.
 2. No repositório: conferir branch/HEAD e alterações locais; **não** sobrescrever
    alterações de terceiros.

@@ -13,7 +13,7 @@ globais permanecem nos documentos canônicos.
 | **F4 — Trabalhos e recuperação** | fila persistente, estados, cancelamento, falhas, reexecução controlada | ✅ concluída + testada (`5a13b3c`) |
 | **F5 — Biblioteca** | grid virtualizado, filtros/pesquisa, seleção, ações em lote | ✅ concluída + testada (`7b58f32`) |
 | **F5-UI — Reformulação da interface** | Biblioteca centrada, linhas com resumo, colunas, painel sobreposto, árvore lateral, Adicionar link | 🟨 **implementada e testada** (`9e7ce02`, `3db2e48`); homologação humana pendente. SPEC em `specs/f5-ui-reformulacao.md` |
-| **F6 — IA para resumos** | provedores/configuração, resumos persistidos, custos/erros, múltiplas seleções | **SPEC escrita** (`d9ef6a6`), **não implementada**. É a próxima fatia autorizada |
+| **F6 — IA para resumos** | provedores/configuração, resumos persistidos, custos/erros, múltiplas seleções | **SPEC escrita** (`d9ef6a6`), **não implementada**. Próxima na sequência, mas **não iniciar nesta etapa**, conforme orientação vigente do proprietário |
 | **F7 — Leitura avançada** | resumos/transcrições/ambos, expansão, leitor completo, retorno sem perda de estado | F5–6; textos longos. **Nota:** a leitura na linha e o painel sobreposto já existem desde a F5-UI; a F7 acrescenta o que falta (ver SPEC) |
 | **F8 — Configuração e acabamento** | preferências, segurança, navegação, feedback consistente, texto de ajuda | F1–7; exportação só se aprovada na SPEC |
 | **F9 — End-to-end e entrega** | smoke, regressão, instalação Windows/Linux, roteiro de homologação V1 | todas; aceite do escopo |
@@ -30,6 +30,13 @@ globais permanecem nos documentos canônicos.
 
 `F1 → F2 → F3 → F4 → F5 → F6 → F7 → F8 → F9`, cada uma com sua SPEC.
 F2 e F3 podem ser preparadas em paralelo documental, mas F3 só roda sobre persistência real.
+
+**Organização vigente do trabalho (21/11/2026):** Codex atua como parceiro de
+raciocínio e mantém documentação/continuidade; comandos de implementação serão
+preparados com o proprietário para a Arena. Texto de tarefa já enviada à Arena
+é contexto, não nova autorização para o Codex repetir a execução. O proprietário
+informou que a revisão visual já foi realizada pela Arena; vincular evidências
+adicionais quando a entrega correspondente estiver disponível neste repositório.
 
 ### Ajuste de escopo registrado na F3
 

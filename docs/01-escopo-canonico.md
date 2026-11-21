@@ -29,7 +29,9 @@ de conteúdo. A experiência de **alta densidade, formato planilha e leitura con
 - **Configurações**: provedor, modelo, prompt, chave/endpoint, pasta de dados,
   preferências visuais; segredos protegidos, excluídos de logs/exportações.
 - **Visual**: tema grafite escuro com detalhes azuis; navegação principal Biblioteca,
-  Leitura, Importações, Configurações; atividade global discreta.
+  Importações e Configurações; leitura integrada à Biblioteca na linha e no painel
+  sobreposto; atividade global discreta. Composição aprovada na SPEC F5-UI;
+  as capacidades de leitura previstas para V1 permanecem obrigatórias.
 - **Operação local**: Node.js + TypeScript, interface web local; suporte-alvo Windows e
   Linux, instalação/execução reproduzível; funcionalidades que dependem da
   internet/serviços externos informam condição e falha.
@@ -52,8 +54,8 @@ memória/RAG/chat em V1.
 | Inspeção de vídeo unitário | **yt-dlp** com `--skip-download`; API pública/timeout para playlists | decisão do proprietário |
 | Download de mídia | Fora do V1 (Whisper fora do V1 obrigatório) | escopo |
 | Chat/RAG | V2 | escopo |
-| Banco | **A DEFINIR na SPEC de F2** (não decidir no escuro) | pendência declarada |
-| ORM | **A DEFINIR na SPEC de F2** | pendência declarada |
+| Banco | SQLite via `node:sqlite` nativo; driver isolado em `persistencia/banco.ts` | decisão final medida e registrada na SPEC F2 |
+| ORM | Sem ORM; repositórios próprios sobre o adaptador SQLite | SPEC F2 e implementação vigente |
 
 ## Não inferir sem nova decisão
 

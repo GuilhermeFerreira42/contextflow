@@ -11,15 +11,25 @@ platform/
 │   │   ├── persistencia/ # conexão, migrações, repositórios
 │   │   └── integracoes/  # ytdlp.ts (processo) · legendas.ts (normalização)
 │   ├── interface/        # frontend web local (servido pelo motor)
-│   │   ├── paginas/      # Biblioteca, Leitura, Importações, Configurações
-│   │   ├── componentes/  # tabela virtualizada, painel de leitura, atividade
-│   │   └── estilos/      # tema grafite escuro + azul
+│   │   └── publico/
+│   │       ├── index.html # Biblioteca, Importações, Configurações e sobreposições
+│   │       ├── js/       # módulos ES: biblioteca, leitura, árvore, importação
+│   │       └── estilos/  # tema grafite escuro + azul, CSS próprio
 │   └── compartilhado/    # tipos e contratos usados por motor e interface
 ├── testes/               # unitários, integração, E2E (CDP em navegador real)
 ├── scripts/              # dev, build, start, verificação por SO
 ├── package.json · tsconfig.json · *.config.*
-└── dados/                # runtime, FORA do Git (configurável pelo usuário)
+└── dist/                 # build gerado; dados de execução ficam fora do Git
 ```
+
+Dados: `CONTEXTFLOW_DADOS` ou padrão do sistema operacional
+(`%APPDATA%/ContextFlow` no Windows; `$XDG_DATA_HOME/ContextFlow` no Linux,
+com fallback `~/.local/share/ContextFlow`). SQLite via `node:sqlite`, sem ORM;
+decisão final na SPEC F2. A leitura integra a Biblioteca desde a F5-UI;
+detalhes da interface em `06b-arquitetura-da-interface.md`.
+
+As responsabilidades de resumos e configuração abaixo descrevem o alvo V1:
+geração por IA e configuração editável ainda não foram implementadas.
 
 **Uma única fonte de verdade por dado.** Nenhum módulo importa detalhes internos de
 outro: a comunicação passa por contratos explícitos exportados pela API pública do módulo.

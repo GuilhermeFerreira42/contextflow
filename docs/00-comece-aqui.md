@@ -8,6 +8,12 @@ não implementada.
 Base documental: pacote `ContextFlow_Pacote_Execucao_V1` (2026-11-18). Estado vivo em
 `docs/estado-atual.md`.
 
+**Direção vigente (21/11/2026):** Codex mantém documentação e atua como parceiro
+de raciocínio; comandos para a Arena são preparados com o proprietário.
+A revisão visual enviada como contexto já foi realizada pela Arena, segundo o
+proprietário; não repeti-la por inferência. F6 não deve ser iniciada nesta etapa.
+Relato de entrega e evidência local são distinguidos no estado de retomada.
+
 **Se você é um agente chegando agora (Codex ou outro):** leia
 `docs/handoff-codex.md` primeiro — ele diz o que verificar, em que ordem, e o
 que **não** fazer sem autorização.

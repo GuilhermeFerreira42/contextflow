@@ -1,4 +1,4 @@
-# Matriz inicial de aceite — adaptar por SPEC
+# Matriz de aceite — ContextFlow V1
 
 | # | Cenário | Ação | Resultado verificável |
 |---|---|---|---|
@@ -20,19 +20,25 @@
 
 ## Status de execução (atualizado a cada fatia)
 
-Atualização de 19/11/2026, commit F3 `c6b7db5`: **A1 e A3 aprovados com vídeos
+**Referência vigente (21/11/2026):** regressão Windows na base `0fdf6e8`,
+documentada em `estado-atual.md`: 177 testes aprovados, 6 ignorados, zero falhas;
+57/57 E2E; build/typecheck e fumaça aprovados. Evidências em
+`../Continuidade de Projeto/revisao-f5-ui-0fdf6e8/`.
+Nenhuma nova suíte foi executada na atualização exclusivamente documental.
+
+Validação real de 19/11/2026, commit F3 `c6b7db5`: **A1 e A3 aprovados com vídeos
 reais; A2 aprovado com en-orig explicitamente configurado**, após HTTP 429 da
 tradução pt. A7 repetido com reinício real e comparação completa. **A15: suíte
 Windows executada** (120 pass, 0 fail, 6 skips), E2E 17/17, build/fumaça OK;
 regressão Linux desta sessão não executada. Aceite humano da F3 pendente.
-Detalhes, URLs e evidências em `estado-atual.md`. A tabela abaixo preserva a
-situação da entrega F3 original, anterior a essa validação.
+Detalhes, URLs e evidências em `estado-atual.md`. Essa prova real não foi repetida
+na revisão F5-UI; a tabela abaixo distingue prova anterior e regressão controlada.
 
 | # | Status | Evidência |
 |---|---|---|
-| A1 (legenda manual) | 🟨 **verificado tecnicamente; prova real pendente** | `testes/integracao/ingestao.test.ts` (dublê) + `rotas-ingestao.test.ts`; falta importar um vídeo real |
-| A2 (legenda automática) | 🟨 **verificado tecnicamente; prova real pendente** | `testes/integracao/ingestao.test.ts` — caso "usa legenda automática quando não há manual" |
-| A3 (vídeo sem legenda) | 🟨 **verificado tecnicamente; prova real pendente** | `estado = indisponivel` + motivo + vídeo `parcial`; testado em unidade e rota |
+| A1 (legenda manual) | ✅ **prova real anterior aprovada; aceite humano pendente** | validação Windows F3 em `validacao-f3-2026-11-19/`, referenciada no estado |
+| A2 (legenda automática) | 🟨 **prova real com idioma original; ressalva na tradução pt** | F3 com `en-orig` explicitamente configurado após HTTP 429; não declarar tradução pt aprovada |
+| A3 (vídeo sem legenda) | ✅ **prova real anterior aprovada; aceite humano pendente** | F3: transcrição indisponível com motivo e vídeo parcial, sem fingir conteúdo |
 | A7 (reabertura do app) | ✅ **executado e aprovado** | processo morto com SIGKILL; outro processo releu os dados; mais `testes/integracao/ingestao.test.ts` reabrindo o arquivo do banco |
 | A14 (segurança local) | ✅ **executado e aprovado** (ampliado na F3) | travessia de path bloqueada; `spawn` com `shell:false`; teste de injeção de comando na URL; URL de outro domínio rejeitada |
 | A4 (playlist) | ✅ **executado e aprovado** | `testes/e2e` — playlist importada, itens classificados, filtro por playlist (F4) |
@@ -40,18 +46,22 @@ situação da entrega F3 original, anterior a essa validação.
 | A6 (cancelamento) | ✅ **executado e aprovado** | `testes/e2e` e integração: cancelamento pedido, encerramento, estado final |
 | A8 (volume) | ✅ **executado e aprovado** | 5.004 vídeos no E2E, DOM com menos de 150 linhas; rolagem até o índice 3.000 sem perder identidade |
 | A9 (seleção) | ✅ **executado e aprovado** | seleção por linha, selecionar visíveis, ações em lote, seleção fora do filtro |
-| A10 (leitura contínua) | 🟨 **implementada; homologação humana pendente** | resumo na linha + painel sobreposto com transcrição; a fluidez contínua de rolagem longa é avaliação do proprietário |
+| A10 (leitura contínua) | 🟨 **parcial; homologação humana pendente** | resumo na linha e painel com transcrição implementados; capacidades restantes de leitura avançada pertencem à F7 |
 | A11, A12 (IA, custos, segredos) | ⬜ não executado | F6–F8 |
 | A13 (migração da base original) | ⬜ não executado | F9 |
-| A15 (Windows e Linux) | 🟨 **Windows: app roda; suíte não executada lá** | F3 rodou em Windows pelo proprietário (`npm run dev`); falta rodar `npm test` no Windows |
+| A15 (Windows e Linux) | 🟨 **regressão Windows executada; instalação/entrega V1 ainda pendente** | Windows: 177 aprovados + 6 ignorados, 57 E2E; registro anterior Linux: 183/183 e 57/57; Linux não reexecutado nesta revisão |
 
 **Legenda:** ✅ executado e aprovado · 🟨 parcial ou verificado sem prova real · ⬜ não executado
 
 ### Aceite da F5-UI (reformulação da interface)
 
-Executado em 21/11/2026, commits `9e7ce02` e `3db2e48`. Todos os itens abaixo
-têm cenário automatizado em `testes/e2e/` — menos os marcados como visuais,
-que dependem de homologação humana por natureza.
+Implementação iniciada em `9e7ce02` e `3db2e48`, seguida pelos commits de
+polimento registrados no estado. Regressão Windows da base `0fdf6e8`: 57/57.
+O resultado verde não amplia o alcance das asserções existentes: por exemplo,
+o teste da barra usa clique programático e mede largura; não prova que o controle
+permanece alcançável pelo ponteiro após recolher. O proprietário informou que
+a Arena já realizou a revisão posterior; sua entrega adicional ainda não foi
+identificada na árvore local. Homologação humana continua separada.
 
 | # | Critério | Status |
 |---|---|---|
@@ -64,21 +74,21 @@ que dependem de homologação humana por natureza.
 | U7 | Fechar o painel preserva busca, filtros e posição | ✅ |
 | U8 | Árvore lista canais, playlists, datas e coleções | ✅ |
 | U9 | Nó da árvore filtra a Biblioteca | ✅ |
-| U10 | Barra lateral recolhe liberando espaço | ✅ |
+| U10 | Barra lateral recolhe liberando espaço | ✅ largura verificada; acessibilidade do controle e ciclos repetidos não comprovados por esse teste |
 | U11 | "Adicionar link" valida a URL antes de chamar o motor | ✅ |
-| U12 | Importação feita pela janela aparece em Importações | 🟨 depende de yt-dlp alcançar o YouTube (bloqueado neste ambiente) |
+| U12 | Importação feita pela janela aparece em Importações | 🟨 prova específica de envio pela janela não identificada nos 57 cenários; validação de URL coberta; fluxo clássico usa dublê no E2E |
 | U13 | Importações e Configurações mantêm todos os recursos | ✅ |
 | U14 | Seleção, ações em lote e coleções seguem funcionando | ✅ |
-| U15 | Sem regressão: `npm test` 182/182 e E2E 56/56 | ✅ |
+| U15 | Sem regressão na base `0fdf6e8`: 177 testes aprovados, 6 ignorados no Windows; 57/57 E2E | ✅ |
 | U16 | Sem erro de script no console em nenhuma tela | ✅ |
 | — | **Fidelidade visual aos mockups** | 🟨 **homologação humana pendente** |
 
 ### O que a F3 mudou nesta matriz
 
-A1, A2 e A3 deixaram de ser intenção e passaram a ter código e teste. O que
-ainda falta **não é implementação**: é a prova contra o YouTube real, que este
-ambiente não alcança. O roteiro está em `docs/roteiro-teste-f3.md` e é a
-primeira tarefa do Codex na máquina do proprietário.
+A1, A2 e A3 têm implementação, testes controlados e prova real anterior no
+Windows, com a ressalva de idioma acima. O roteiro em `roteiro-teste-f3.md`
+permanece referência para repetição, sem ser apresentado como tarefa nunca
+executada. A homologação humana da F3 permanece pendente.
 
 **Natureza:** especificações de comportamento, **não provas já realizadas**. Cada linha
 precisa de teste unitário, de integração ou E2E em **navegador real**.

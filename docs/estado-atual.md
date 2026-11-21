@@ -7,9 +7,41 @@
 ## Estado vigente — 21/11/2026 (revisado)
 
 **F5-UI (reformulação da interface) implementada, testada e commitada.
-Homologação humana pendente.** A próxima fatia autorizada é a **F6 (IA para
-resumos)**, conforme `docs/04-plano-mestre.md` — mas o proprietário determinou
-que a F6 **não** fosse iniciada nesta etapa.
+Homologação humana pendente.** A F6 (IA para resumos) está somente especificada
+e é a próxima na sequência do plano, mas o proprietário determinou que
+**não** fosse iniciada nesta etapa.
+
+### Direção vigente — atualização documental de 21/11/2026
+
+- **Pedido atual:** manter documentação e continuidade conforme o estado real.
+  Codex atua como parceiro de raciocínio; comandos de implementação serão
+  preparados com o proprietário para a Arena. Não refazer a revisão visual
+  enviada apenas como contexto e não iniciar F6.
+- **Relato do proprietário:** a Arena já concluiu a revisão visual/funcional
+  descrita no texto anexado, incluindo o pedido de corrigir a barra lateral.
+  Isso registra o relato, sem transformar o texto do pedido em evidência de aceite.
+- **Fato local:** branch `main`, base desta atualização `2c98678`; não há nova
+  alteração local em `platform/` nem commit adicional da Arena identificado
+  nesta retomada. A regressão disponível é a da base `0fdf6e8`, abaixo.
+  A conclusão da Arena não foi homologada nem revalidada aqui.
+- **Correções documentais:** README atualizado de F1 para F5-UI; navegação de
+  três telas e decisão SQLite/sem ORM reconciliadas com decisões já registradas;
+  arquitetura física, matriz de aceite e limite da F6 alinhados. Nenhuma nova
+  funcionalidade ou mudança de escopo foi decidida.
+- **Limites da prova:** os 57 E2E não comprovam o acesso real ao botão da barra
+  após recolher, pois o teste usa `.click()` programático. A tentativa posterior
+  com Agent Browser foi interrompida após o esclarecimento do proprietário e
+  seus comandos de reprodução falharam; não comprova defeito nem correção.
+  Detalhes em `../Continuidade de Projeto/qualidade-ui-2026-11-21/LEIA-ME.md`.
+- **Validação desta alteração documental:** conferência de referências locais,
+  confronto com código e logs existentes, `git diff --check`. Suítes não
+  reexecutadas: nenhum código, teste, dependência ou contrato foi alterado.
+- **Alterações preexistentes preservadas:** ZIP removido da raiz do Git;
+  `LEIA-ME.md`, `ESTADO-DA-ENTREGA-19-11-2026.md` e `iniciar.bat` avulsos,
+  não versionados. A orientação vigente está nos documentos versionados.
+- **Próxima ação:** incorporar a revisão e o relatório da Arena quando
+  disponíveis, identificando commit, cenários e evidências; então preparar
+  juntos o próximo comando de implementação. Homologação humana pendente.
 
 | Fase | Situação | Commit | Evidência |
 |---|---|---|---|
@@ -52,18 +84,18 @@ a prova anterior da F3 não foi repetida. Homologações humanas continuam pende
   original Python em `Desktop/contextflow`. O arquivo foi preservado.
 - A pasta de continuidade só continha evidências anteriores à F5-UI; a revisão
   acima e o índice externo agora identificam a base atual.
-- O escopo canônico ainda enumera quatro telas e banco/ORM a definir; a SPEC
+- Na revisão anterior, o escopo canônico enumerava quatro telas e banco/ORM a definir; a SPEC
   F5-UI e a implementação usam três telas, leitura integrada e SQLite já decidido.
-  Divergência registrada, sem renegociar nem reescrever escopo nesta revisão.
+  Divergência reconciliada na atualização documental atual com as decisões
+  já registradas, sem retirar capacidades de leitura previstas para V1.
 - A descrição antiga das capturas em `docs/mockups/evidencia/` afirma 5.000
   vídeos e 1.667 resumos, mas `biblioteca-com-resumos.png` exibe seis resultados.
   Essa captura não comprova o volume anunciado. O volume foi comprovado
   separadamente no E2E desta revisão; as métricas históricas de 1.667 resumos
   não foram reproduzidas.
 
-Próxima ação: reconciliar os pontos documentais de produto com o proprietário e
-homologar a F5-UI. F6 continua bloqueada pelo limite registrado nesta etapa;
-não interpretar a sequência do plano mestre como nova autorização.
+As próximas ações vigentes estão no início deste documento. F6 não deve ser
+iniciada; a sequência do plano mestre não constitui nova autorização.
 
 ### Registro anterior — Linux, Node v22
 

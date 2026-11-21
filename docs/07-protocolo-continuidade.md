@@ -85,6 +85,11 @@ Continuidade de Projeto/ → operacional, FORA do Git, irmã de contextflow2
 Nada de código em `docs/`. Nada de documentação canônica em `platform/`.
 Novo arquivo de configuração/build/teste do executável vai em `platform/`.
 
+Localização conferida no Windows em 21/11/2026: repositório em
+`Desktop/projeto/contextflow2`, continuidade em `Desktop/projeto/Continuidade de Projeto`.
+O original Python permanece em `Desktop/contextflow`, somente leitura; não está
+fisicamente ao lado do novo repositório após a reorganização do proprietário.
+
 ## 6. Antipadrões proibidos
 
 - Pesquisa infinita; documentação maior que o problema.
