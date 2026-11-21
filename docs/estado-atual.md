@@ -152,6 +152,29 @@ Reformulação centrada na Biblioteca, a partir dos dois mockups do proprietári
 
 ## Histórico
 
+### 21/11/2026 — revisão de layout e uso com Playwright
+
+Varredura com Playwright (Chrome do sandbox via `executablePath`, já que o
+download do Chromium é bloqueado) em todas as telas e controles, medindo o que
+a tela faz. Correções no commit `c5fa1a9`:
+
+| Defeito medido | Correção |
+|---|---|
+| colunas desencontradas até 33 px (`vertical-align: middle` + padding só em título/resumo) | respiro vertical igual em todas as células; desvio caiu a 5 px |
+| tabela cortava 53 px da última coluna | `min-width: 1180px` na `<table>` removido; larguras redistribuídas |
+| selo "Pronto" duas vezes na mesma linha | coluna de estado do vídeo removida (7 colunas); selo junto do título só quando exige atenção |
+| id cru do YouTube na sub-linha | sub-linha mostra coleções e data |
+| `#limpar-filtros` inalcançável com busca ativa (ficava dentro do painel fechado) | foi para a barra; aparece só com recorte aplicado |
+| 11 controles em duas faixas, 5 desabilitados | ações de lote só existem com seleção; barra em uma linha (68 → 33 px) |
+| árvore não desmarcava e somava recortes entre grupos | segundo clique desfaz o nó; uma seleção por vez |
+| árvore ocupava 256 px em telas onde não filtra | some fora da Biblioteca (`data-tela`) |
+| painel de leitura mostrava UUID da coleção e "pronto" minúsculo | mostra o título; estado capitalizado |
+| compacto truncava o título e ceifava a miniatura | duas linhas de título; miniatura de 72 px em 64 |
+
+Também entrou o atalho `/` para a busca (o mockup anuncia e o código não
+tinha). Verificação ao final: 183/183 unitários, 62/62 E2E, nenhum erro de
+console e sem transbordo horizontal em 1440/1280/980/420 px.
+
 ### Sessões anteriores a 21/11/2026
 
 Base documental: ZIP `ContextFlow_Pacote_Execucao_V1 (1).zip` (18/11/2026).
