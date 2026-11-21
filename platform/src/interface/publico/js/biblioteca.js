@@ -261,9 +261,11 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
 
     const texto = previas.get(video.id);
     if (!texto) {
+      // Sem resumo, a coluna de situação já diz isso. Aqui basta um traço
+      // discreto — repetir "Sem resumo" nas duas colunas polui a leitura.
       const vazio = document.createElement('span');
       vazio.className = 'resumo-vazio';
-      vazio.textContent = video.temResumo ? 'resumo ainda não carregado' : 'Sem resumo';
+      vazio.textContent = video.temResumo ? 'carregando…' : '—';
       bloco.append(vazio);
       return bloco;
     }
@@ -760,8 +762,8 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
       duracao: 'Duração',
       adicionado: 'Adicionado em',
       estado: 'Estado do vídeo',
-      resumo: 'Resumo (recorte)',
-      'resumo-estado': 'Estado do resumo',
+      resumo: 'Conteúdo do resumo',
+      'resumo-estado': 'Situação do resumo',
     };
     lista.replaceChildren(...ordemColunas.map(nome => {
       const rotulo = document.createElement('label');

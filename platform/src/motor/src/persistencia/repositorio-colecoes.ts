@@ -43,8 +43,16 @@ export class RepositorioColecoes {
   }
   canais(): { itens: { id: string; nome: string; contagem: number }[] } {
     const linhas = this.#banco.db.prepare(`SELECT canal_id id, MAX(canal_nome) nome, COUNT(*) contagem
-      FROM videos WHERE canal_id IS NOT NULL GROUP BY canal_id ORDER BY nome,canal_id`).all() as unknown as {id:string;nome:string|null;contagem:number}[];
-    return { itens: linhas.map(l => ({ ...l, nome: l.nome ?? l.id })) };
+      FROM videos WHERE canal_id IS NOT NULL GROUP BY canal_id`).all() as unknown as {id:string;nome:string|null;contagem:number}[];
+    // Ordenação natural em JS: em SQLite, comparar "Canal 10" com "Canal 2"
+    // como texto coloca o 10 antes do 2. `Intl.Collator` com `numeric` compara
+    // os pedaços numéricos como números — é a ordem que se espera numa lista.
+    const colacao = new Intl.Collator('pt-BR', { numeric: true, sensitivity: 'base' });
+    return {
+      itens: linhas
+        .map((l) => ({ ...l, nome: l.nome ?? l.id }))
+        .sort((a, b) => colacao.compare(a.nome, b.nome)),
+    };
   }
   /**
    * Meses de importação, para a árvore lateral. Agrupado no banco: derivar de
