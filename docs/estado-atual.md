@@ -4,7 +4,7 @@
 > `00-comece-aqui.md`. O que está abaixo da linha "Histórico" é registro, não
 > estado vigente.
 
-## Estado vigente — 21/11/2026
+## Estado vigente — 21/11/2026 (revisado)
 
 **F5-UI (reformulação da interface) implementada, testada e commitada.
 Homologação humana pendente.** A próxima fatia autorizada é a **F6 (IA para
@@ -18,14 +18,14 @@ que a F6 **não** fosse iniciada nesta etapa.
 | F3 — ingestão real | corrigida no Windows, **aceite humano pendente** | `c6b7db5` | teste real com YouTube |
 | F4 — fila persistente | implementada e testada | `5a13b3c` | SIGKILL, lease, fencing |
 | F5 — Biblioteca | implementada e testada | `7b58f32` | virtualização, filtros, lote, coleções |
-| **F5-UI** — reformulação | **implementada, aguardando homologação** | `9e7ce02`, `3db2e48` | **56/56 E2E** |
+| **F5-UI** — reformulação | **implementada, aguardando homologação** | `9e7ce02`, `3db2e48`, `909843a`, `6d571c3` | **57/57 E2E** |
 | F6 — IA para resumos | especificada, **não implementada** | `d9ef6a6` (spec) | — |
 
 ### Números desta máquina (Linux, Node v22)
 
 ```
-npm test          182/182
-npm run test:e2e   56/56
+npm test          183/183
+npm run test:e2e   57/57
 npm run typecheck  0 erros
 npm run build      OK
 ```
