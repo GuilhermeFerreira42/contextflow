@@ -288,3 +288,33 @@ test('resumo de vídeo inexistente devolve 404', async () => {
   const resposta = await fetch(`${base}/api/biblioteca/nao-existe/resumo`);
   assert.equal(resposta.status, 404);
 });
+
+/* ------------------------------------------------- meses (árvore F5-UI) -- */
+
+test('GET /api/biblioteca/meses agrupa por mês com contagem', async () => {
+  const resposta = await fetch(`${base}/api/biblioteca/meses`);
+  assert.equal(resposta.status, 200);
+  const corpo = (await resposta.json()) as {
+    dados: { itens: Array<{ id: string; nome: string; contagem: number }> };
+  };
+  assert.ok(Array.isArray(corpo.dados.itens));
+  for (const item of corpo.dados.itens) {
+    assert.match(item.id, /^\d{4}-\d{2}$/, 'id deve ser AAAA-MM');
+    assert.ok(item.contagem > 0);
+  }
+});
+
+test('filtro importadoDe/importadoAte recorta por data de importação', async () => {
+  const todos = (await (await fetch(`${base}/api/biblioteca?limite=1`)).json()) as {
+    dados: { total: number };
+  };
+  const dentro = (await (await fetch(
+    `${base}/api/biblioteca?limite=1&importadoDe=2000-01-01T00:00:00.000Z&importadoAte=2999-01-01T00:00:00.000Z`,
+  )).json()) as { dados: { total: number } };
+  assert.equal(dentro.dados.total, todos.dados.total);
+
+  const fora = (await (await fetch(
+    `${base}/api/biblioteca?limite=1&importadoDe=1990-01-01T00:00:00.000Z&importadoAte=1991-01-01T00:00:00.000Z`,
+  )).json()) as { dados: { total: number } };
+  assert.equal(fora.dados.total, 0);
+});

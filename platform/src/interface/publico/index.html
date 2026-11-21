@@ -23,19 +23,19 @@
             aria-label="Recolher barra lateral"
             title="Recolher barra lateral"
           >
-            <span aria-hidden="true">«</span>
+            <svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 7-5 5 5 5"/><path d="M19 4v16"/></svg>
           </button>
         </div>
 
         <nav class="navegacao" aria-label="Telas">
           <button class="nav-item ativo" data-aba="biblioteca" type="button">
-            <span class="nav-icone" aria-hidden="true">▤</span> Biblioteca
+            <span class="nav-icone"><svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="3" y="15" width="7" height="5" rx="1.5"/><rect x="14" y="15" width="7" height="5" rx="1.5"/></svg></span> Biblioteca
           </button>
           <button class="nav-item" data-aba="importacoes" type="button">
-            <span class="nav-icone" aria-hidden="true">↧</span> Importações
+            <span class="nav-icone"><svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M4 20h16"/></svg></span> Importações
           </button>
           <button class="nav-item" data-aba="configuracoes" type="button">
-            <span class="nav-icone" aria-hidden="true">⚙</span> Configurações
+            <span class="nav-icone"><svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.9 19.3a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.7 8.9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 15 4.7a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9v.09c.02.66.4 1.26 1.03 1.56H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1.03z"/></svg></span> Configurações
           </button>
         </nav>
 
@@ -44,7 +44,7 @@
           <div class="arvore-titulo">
             <span>Organizar por</span>
             <button type="button" class="botao-mini" id="recolher-arvore" aria-label="Recolher todos os grupos">
-              <span aria-hidden="true">⌃</span>
+              <svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg>
             </button>
           </div>
           <div id="arvore-grupos"></div>
@@ -74,7 +74,7 @@
             <div class="topo-acoes">
               <label class="campo-busca">
                 <span class="visualmente-oculto">Pesquisar na biblioteca</span>
-                <span class="busca-icone" aria-hidden="true">⌕</span>
+                <span class="busca-icone"><svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></span>
                 <input
                   type="search"
                   id="busca"
@@ -84,12 +84,12 @@
               </label>
 
               <button type="button" class="botao-secundario botao-filtros" id="abrir-filtros" aria-expanded="false">
-                <span aria-hidden="true">⛃</span> Filtros
+                <svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18"/><path d="M6 12h12"/><path d="M10 19h4"/></svg> Filtros
                 <span class="filtros-ativos" id="filtros-ativos" hidden></span>
               </button>
 
               <button type="button" class="botao-primario botao-adicionar" id="abrir-adicionar-link">
-                <span aria-hidden="true">＋</span> Adicionar link
+                <svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" stroke-width="2"><path d="M12 5v14"/><path d="M5 12h14"/></svg> Adicionar link
               </button>
             </div>
           </header>
@@ -144,7 +144,7 @@
 
             <div class="ferramentas-visual">
               <button type="button" class="botao-secundario" id="abrir-colunas" aria-expanded="false">
-                <span aria-hidden="true">▦</span> Colunas
+                <svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="M15 4v16"/></svg> Colunas
               </button>
               <div class="alternador-modo" role="group" aria-label="Densidade da linha">
                 <button type="button" class="modo-item ativo" data-modo="ampliado" title="Linhas ampliadas">
@@ -331,7 +331,7 @@
             <p class="painel-meta" id="painel-meta"></p>
           </div>
           <button type="button" class="botao-mini botao-fechar" id="fechar-painel" aria-label="Fechar painel">
-            <span aria-hidden="true">✕</span>
+            <svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" stroke-width="2"><path d="M6 6l12 12"/><path d="M18 6 6 18"/></svg>
           </button>
         </header>
 
@@ -348,6 +348,7 @@
               <div class="painel-acoes">
                 <a id="painel-link" class="botao-secundario" target="_blank" rel="noopener noreferrer">
                   Abrir no YouTube
+                  <svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6"/><path d="M20 4 10 14"/><path d="M19 14v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5"/></svg>
                 </a>
                 <button type="button" class="botao-secundario" id="painel-resumir" disabled>
                   Gerar resumo (F6)
@@ -383,7 +384,7 @@
         <header class="dialogo-topo">
           <h2 id="adicionar-titulo">Adicionar link</h2>
           <button type="button" class="botao-mini" id="fechar-adicionar" aria-label="Fechar">
-            <span aria-hidden="true">✕</span>
+            <svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" stroke-width="2"><path d="M6 6l12 12"/><path d="M18 6 6 18"/></svg>
           </button>
         </header>
         <p class="dialogo-descricao">

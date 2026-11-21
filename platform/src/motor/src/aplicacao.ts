@@ -151,6 +151,7 @@ export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}
     })
     .obter('/api/biblioteca/playlists', () => biblioteca.listarPlaylists())
     .obter('/api/biblioteca/canais', () => biblioteca.listarCanais())
+    .obter('/api/biblioteca/meses', () => biblioteca.listarMeses())
     .obter('/api/biblioteca/:id', async ({ requisicao }) => {
       const id = requisicao.caminho.split('/').at(-1)!;
       return biblioteca.obter(id);

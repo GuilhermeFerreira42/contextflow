@@ -146,8 +146,20 @@ body {
   justify-content: center;
   padding: 10px 0;
 }
-.aplicativo[data-barra='recolhida'] .botao-recolher span {
-  transform: rotate(180deg);
+
+
+/* Ícones SVG inline (sem fonte externa) */
+.icone {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  display: block;
+}
+
+.busca-icone .icone {
+  width: 14px;
+  height: 14px;
+  color: var(--texto-fraco);
 }
 
 /* ========================================================== barra lateral */
@@ -213,6 +225,9 @@ body {
   background: var(--grafite-800);
   color: var(--texto-forte);
 }
+.aplicativo[data-barra='recolhida'] .botao-recolher .icone {
+  transform: rotate(180deg);
+}
 
 .navegacao {
   display: flex;
@@ -250,9 +265,11 @@ body {
 }
 
 .nav-icone {
-  font-size: 13px;
-  width: 15px;
-  text-align: center;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
 }
 
@@ -476,9 +493,10 @@ body {
 }
 .busca-icone {
   position: absolute;
-  left: 10px;
+  left: 9px;
+  display: flex;
+  align-items: center;
   color: var(--texto-fraco);
-  font-size: 14px;
   pointer-events: none;
 }
 .campo-busca input {
@@ -506,7 +524,7 @@ body {
 .botao-secundario {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   padding: 8px 13px;
   border-radius: var(--raio);
   font: inherit;

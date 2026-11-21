@@ -3,6 +3,8 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 export async function exercitarBiblioteca({ app, base, avaliar, esperar, S, registrar, raiz }) {
+  // Pequena espera para transições de CSS (largura da barra, altura da linha).
+  const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
   const inserir=app.banco.db.prepare(`INSERT INTO videos(id,youtube_id,titulo,canal_id,canal_nome,duracao_segundos,url,estado,criado_em,atualizado_em)
     VALUES(?,?,?,?,?,?,?,?,'2026-11-01T00:00:00.000Z','2026-11-01T00:00:00.000Z')`);
   app.banco.executarTransacao(()=>{
@@ -118,6 +120,59 @@ export async function exercitarBiblioteca({ app, base, avaliar, esperar, S, regi
   await S('Page.navigate',{url:base});
   const persistiu=await esperar(`document.querySelector('th[data-ordenacao="titulo"]').getAttribute('aria-sort')==='descending'&&document.querySelector('#contador-selecao').textContent.startsWith('0 selecionados')`);
   registrar('F5: ordenação persiste na sessão e seleção é efêmera ao recarregar',desc&&persistiu);
+  // ------------------------------------------------ F5-UI: novos recursos --
+
+  // Colunas configuráveis (distintas de filtros e de ordenação)
+  await avaliar(`document.querySelector('#abrir-colunas').click()`);
+  const painelColunas=await esperar(`!document.querySelector('#painel-colunas').hidden`);
+  const canalVisivelAntes=await avaliar(`document.querySelector('#corpo-biblioteca td[data-coluna="canal"]').offsetParent!==null`);
+  await avaliar(`[...document.querySelectorAll('#colunas-lista input')].find(i=>i.parentElement.textContent.includes('Canal')).click()`);
+  const canalOculto=await esperar(`document.querySelector('#corpo-biblioteca td[data-coluna="canal"]').offsetParent===null`);
+  registrar('F5-UI: coluna pode ser ocultada pelo painel de colunas',painelColunas&&canalVisivelAntes&&canalOculto);
+  const persistiuColuna=await avaliar(`JSON.parse(localStorage.getItem('contextflow.biblioteca.visual')).colunas.canal===false`);
+  registrar('F5-UI: escolha de colunas persiste entre navegações',persistiuColuna);
+  await avaliar(`[...document.querySelectorAll('#colunas-lista input')].find(i=>i.parentElement.textContent.includes('Canal')).click()`);
+  await esperar(`document.querySelector('#corpo-biblioteca td[data-coluna="canal"]').offsetParent!==null`);
+  await avaliar(`document.querySelector('#abrir-colunas').click()`);
+
+  // Modo compacto altera a altura real da linha
+  const alturaAmpliada=await avaliar(`document.querySelector('#corpo-biblioteca tr[data-id]').getBoundingClientRect().height`);
+  await avaliar(`document.querySelector('[data-modo="compacto"]').click()`);
+  await dormir(400);
+  const alturaCompacta=await avaliar(`document.querySelector('#corpo-biblioteca tr[data-id]').getBoundingClientRect().height`);
+  registrar('F5-UI: modo compacto reduz a altura da linha',alturaAmpliada>alturaCompacta,`${Math.round(alturaAmpliada)}px -> ${Math.round(alturaCompacta)}px`);
+  await avaliar(`document.querySelector('[data-modo="ampliado"]').click()`);
+  await dormir(300);
+
+  // Botão "Adicionar link" (janela sobreposta) — validação local sem ir ao motor
+  await avaliar(`document.querySelector('#abrir-adicionar-link').click()`);
+  const dialogoAberto=await esperar(`!document.querySelector('#dialogo-adicionar').hidden`);
+  await avaliar(`document.querySelector('#adicionar-url').value='https://exemplo.com/x';document.querySelector('#confirmar-adicionar').click()`);
+  const rejeitou=await esperar(`document.querySelector('#adicionar-resultado').dataset.tipo==='erro'`);
+  registrar('F5-UI: adicionar link rejeita URL que não é do YouTube',dialogoAberto&&rejeitou);
+  await avaliar(`document.querySelector('#fechar-adicionar').click()`);
+  await esperar(`document.querySelector('#dialogo-adicionar').hidden`);
+
+  // Árvore lateral usa rotas existentes para filtrar
+  const grupos=await avaliar(`document.querySelectorAll('#arvore-grupos .grupo-arvore').length`);
+  registrar('F5-UI: árvore lista canais, playlists, datas e coleções',grupos===4,`grupos=${grupos}`);
+  await avaliar(`document.querySelector('#arvore-grupos .grupo-cabecalho').click()`);
+  await dormir(300);
+  const nos=await avaliar(`document.querySelectorAll('#arvore-grupos .no-arvore[data-grupo="canais"]').length`);
+  await avaliar(`document.querySelector('#arvore-grupos .no-arvore[data-grupo="canais"]').click()`);
+  const filtrouPorCanal=await esperar(`document.querySelector('#filtro-canal').value!=='' && Number(document.querySelector('#biblioteca-viewport').dataset.total)<5003`);
+  registrar('F5-UI: selecionar nó da árvore filtra a biblioteca',nos>0&&filtrouPorCanal,`nós=${nos}`);
+  await avaliar(`document.querySelector('#limpar-filtros').click()`);
+  await esperar(`document.querySelector('#biblioteca-viewport').dataset.total==='5003'`);
+
+  // Recolher a barra lateral
+  const larguraAntes=await avaliar(`document.querySelector('.barra-lateral').getBoundingClientRect().width`);
+  await avaliar(`document.querySelector('#recolher-barra').click()`);
+  await dormir(400);
+  const larguraDepois=await avaliar(`document.querySelector('.barra-lateral').getBoundingClientRect().width`);
+  registrar('F5-UI: barra lateral recolhe liberando espaço',larguraAntes>larguraDepois,`${Math.round(larguraAntes)}px -> ${Math.round(larguraDepois)}px`);
+  await avaliar(`document.querySelector('#recolher-barra').click()`);
+
   const captura=await S('Page.captureScreenshot',{format:'png'});
   writeFileSync(join(raiz,'testes','.tmp','interface-biblioteca-f5.png'),Buffer.from(captura.data,'base64'));
 }

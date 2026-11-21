@@ -27,21 +27,6 @@ export function criarArvore({ api, aoFiltrar, aoLimpar }) {
     } catch { /* idem */ }
   }
 
-  /** Agrupa a data de importação em "Novembro 2026", "Outubro 2026"… */
-  function agruparDatas(itens) {
-    const mapa = new Map();
-    for (const video of itens) {
-      const d = new Date(video.criadoEm);
-      if (Number.isNaN(d.getTime())) continue;
-      const chave = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      const rotulo = d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
-      const atual = mapa.get(chave) ?? { id: chave, nome: rotulo.charAt(0).toUpperCase() + rotulo.slice(1), contagem: 0 };
-      atual.contagem++;
-      mapa.set(chave, atual);
-    }
-    return [...mapa.values()].sort((a, b) => b.id.localeCompare(a.id));
-  }
-
   function criarGrupo(chave, rotulo, itens, aoSelecionarNo) {
     const grupo = document.createElement('div');
     grupo.className = 'grupo-arvore';
@@ -132,9 +117,11 @@ export function criarArvore({ api, aoFiltrar, aoLimpar }) {
     grupos.push(criarGrupo('playlists', 'Playlists', dados.playlists, (chave, item) => aoFiltrar('playlistId', item.id)));
 
     grupos.push(criarGrupo('datas', 'Data de importação', dados.datas, (chave, item) => {
-      // A API não tem filtro por data; filtramos por busca textual do período
-      // não sendo confiável. Então usamos a coleção de IDs carregados.
-      aoSelecionarData(item.id);
+      // `id` é AAAA-MM; a API espera um intervalo semiaberto em ISO.
+      const [ano, mes] = item.id.split('-').map(Number);
+      const inicio = new Date(Date.UTC(ano ?? 1970, (mes ?? 1) - 1, 1)).toISOString();
+      const fim = new Date(Date.UTC(ano ?? 1970, mes ?? 1, 1)).toISOString();
+      aoFiltrar('dataImportacao', { inicio, fim });
     }));
 
     grupos.push(criarGrupo('colecoes', 'Minhas coleções', dados.colecoes, (chave, item) => aoFiltrar('colecaoId', item.id)));
@@ -143,29 +130,19 @@ export function criarArvore({ api, aoFiltrar, aoLimpar }) {
     pintarSelecao();
   }
 
-  /** Selecionar data filtra a Biblioteca pelos vídeos daquele mês. */
-  function aoSelecionarData(chave) {
-    const [ano, mes] = chave.split('-').map(Number);
-    const inicio = new Date(ano, mes - 1, 1);
-    const fim = new Date(ano, mes, 1);
-    // O contrato de /api/biblioteca não tem recorte por data; o painel de
-    // filtros também não. Então o recorte é aplicado na lista já carregada e
-    // a Biblioteca avisa que é local — ver método aplicarRecorteData.
-    aoFiltrar('dataImportacao', { inicio: inicio.toISOString(), fim: fim.toISOString() });
-  }
-
   async function carregar() {
     try {
-      const [canais, playlists, colecoes, biblioteca] = await Promise.all([
+      const [canais, playlists, colecoes, meses] = await Promise.all([
         api('/api/biblioteca/canais'),
         api('/api/biblioteca/playlists'),
         api('/api/colecoes'),
-        api('/api/biblioteca?limite=500&ordenacao=criado_em&ordenacaoDirecao=desc'),
+        // Agrupado no banco: derivar de uma página daria contagem errada.
+        api('/api/biblioteca/meses'),
       ]);
       dados = {
         canais: canais.itens ?? [],
         playlists: playlists.itens ?? [],
-        datas: agruparDatas(biblioteca.itens ?? []),
+        datas: meses.itens ?? [],
         colecoes: colecoes.itens ?? [],
       };
       carregado = true;
