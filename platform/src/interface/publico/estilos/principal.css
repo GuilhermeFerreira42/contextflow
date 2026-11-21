@@ -187,6 +187,12 @@ body {
   color: var(--texto-fraco);
 }
 
+/* A árvore organiza a BIBLIOTECA: em Importações e Configurações ela não
+ * filtra nada e comia 256 px da largura útil. Some com a coluna inteira. */
+.aplicativo:not([data-tela='biblioteca']) .arvore {
+  display: none;
+}
+
 /* ========================================================== barra lateral */
 
 .barra-lateral {
@@ -535,9 +541,33 @@ body {
   color: var(--texto-fraco);
   pointer-events: none;
 }
+
+/* Tecla anunciada dentro da caixa de busca (o mockup faz o mesmo). A caixa é
+ * um <label class="campo-busca"> — o seletor tem de ser esse. */
+.dica-atalho {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 1px 5px;
+  font-family: var(--fonte-mono, monospace);
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--texto-fraco);
+  background: var(--grafite-850);
+  border: 1px solid var(--borda);
+  border-radius: 4px;
+  pointer-events: none;
+  transition: opacity 0.12s;
+}
+.campo-busca:focus-within .dica-atalho {
+  opacity: 0.4;
+}
 .campo-busca input {
   width: 100%;
-  padding: 8px 12px 8px 30px;
+  /* 38 px à direita: cabem o "x" nativo do type=search e a tecla `/` sem
+   * encostar no fim do texto digitado. */
+  padding: 8px 38px 8px 30px;
   background: var(--grafite-900);
   border: 1px solid var(--borda);
   border-radius: var(--raio);
@@ -715,10 +745,37 @@ body {
 .acoes-lote {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   flex-wrap: wrap;
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
+}
+/* Bloco que só aparece com seleção ativa. Fica na mesma linha das demais
+ * ações e some por completo (hidden) quando nada está marcado. */
+.grupo-colecao {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  background: var(--grafite-900);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-pequeno);
+}
+
+.acoes-selecao {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  /* Sem quebra: com seleção ativa a barra precisa continuar em uma linha.
+   * O texto longo de cada botão é o que estourava a largura — ver abaixo. */
+  flex-wrap: nowrap;
+  min-width: 0;
+  /* Nada de `flex: 1`: quando o bloco de seleção crescia, ele tomava a linha
+   * inteira e jogava as ferramentas de visualização para uma segunda faixa. */
+  flex: 0 0 auto;
+}
+.acoes-selecao[hidden] {
+  display: none;
 }
 /* Separador entre as ações de lote e as ferramentas de visualização. */
 .separador-acoes {
@@ -743,10 +800,10 @@ body {
   font-size: 11.5px;
   /* Largura mínima para o texto não pular quando o número muda de 0 para 1
    * ou 10; sem isso, a barra reflui a cada clique. */
-  min-width: 104px;
+  min-width: 84px;
 }
 .acoes-lote select {
-  max-width: 132px;
+  max-width: 112px;
   padding: 7px 9px;
   background: var(--grafite-850);
   border: 1px solid var(--borda);
@@ -758,6 +815,16 @@ body {
 .acoes-lote .botao-secundario {
   padding: 6px 10px;
   font-size: 11.5px;
+  white-space: nowrap;
+}
+/* Os rótulos das ações de lote são longos ("Selecionar visíveis", "Remover
+ * vínculo"); em 11,5 px cada botão fica com ~110 px e sete deles não cabem.
+ * Aqui eles encolhem de forma controlada, sem quebrar o texto em duas linhas. */
+.acoes-selecao .botao-secundario {
+  padding: 6px 9px;
+  font-size: 11px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .contador-selecao {
@@ -836,8 +903,10 @@ body {
 }
 
 .biblioteca-viewport {
-  /* 1000px é o teto do virtualizador; a altura real é a da janela. */
-  max-height: calc(100vh - 300px);
+  /* A barra de ferramentas encolheu para uma linha (era duas), então o
+   * `100vh - 300px` deixava ~110 px vazios embaixo e a sexta linha aparecia
+   * cortada no meio. O quadro usa todo o espaço que sobra da janela. */
+  max-height: calc(100vh - 190px);
   min-height: 320px;
   overflow-y: auto;
   position: relative;
@@ -845,7 +914,12 @@ body {
 
 .tabela-biblioteca {
   width: 100%;
-  min-width: 1180px; /* abaixo disso, rolagem horizontal em vez de colunas esmagadas */
+  /* O layout é fixo: as larguras em % dos `th` mandam. Um `min-width` na
+   * <table> somado a `table-layout: fixed` faz a tabela transbordar o quadro
+   * mesmo quando as colunas caberiam — era o que cortava a última coluna em
+   * 53 px. As colunas de leitura têm min-width próprio; se não couberem, o
+   * quadro rola (ver media query). */
+  min-width: 0;
   border-collapse: separate;
   border-spacing: 0;
   table-layout: fixed;
@@ -853,27 +927,25 @@ body {
 
 /* Larguras: a leitura (vídeo + resumo) domina; o resto é apoio discreto. */
 .tabela-biblioteca th[data-coluna='titulo'] {
-  width: 36%;
-  min-width: 320px;
+  width: 42%;
+  min-width: 300px;
 }
 .tabela-biblioteca th[data-coluna='canal'] {
-  width: 142px;
+  width: 132px;
 }
 .tabela-biblioteca th[data-coluna='duracao'] {
-  width: 96px;
+  width: 84px;
 }
 .tabela-biblioteca th[data-coluna='adicionado'] {
-  width: 126px;
-}
-.tabela-biblioteca th[data-coluna='estado'] {
-  width: 96px;
+  width: 108px;
 }
 .tabela-biblioteca th[data-coluna='resumo'] {
-  width: 25%;
-  min-width: 240px;
+  width: 26%;
+  min-width: 210px;
 }
+/* Selo do resumo: 104 px cabem "Sem resumo" (o rótulo mais longo). */
 .tabela-biblioteca th[data-coluna='resumo-estado'] {
-  width: 122px;
+  width: 104px;
 }
 
 .tabela-biblioteca thead th {
@@ -932,12 +1004,18 @@ body {
 }
 
 .tabela-biblioteca tbody td {
-  padding: 0 11px;
+  /* O respiro vertical é o MESMO em todas as colunas. Antes só título e resumo
+   * tinham 10px; canal/duração/data começavam no fio da linha e a planilha
+   * parecia torta, com o conteúdo de cada célula em alturas diferentes. */
+  padding: 10px 11px 0;
   height: var(--altura-linha);
   max-height: var(--altura-linha);
   border-bottom: 1px solid rgba(33, 44, 61, 0.65);
   color: var(--texto);
-  vertical-align: middle;
+  /* Tudo alinhado pela primeira linha de texto, como no mockup. Com `middle`,
+   * canal/duração/data flutuavam no meio de uma linha de 108 px e ficavam
+   * desencontrados da miniatura e do resumo, que começam no topo. */
+  vertical-align: top;
   overflow: hidden;
 }
 
@@ -982,10 +1060,10 @@ input[type='checkbox'] {
   overflow: hidden;
 }
 
+/* Título e resumo ocupam o miolo da linha; o respiro já vem do td base. */
 .tabela-biblioteca tbody td[data-coluna='titulo'],
 .tabela-biblioteca tbody td[data-coluna='resumo'] {
   vertical-align: top;
-  padding-top: 10px;
 }
 
 .miniatura {
@@ -1074,6 +1152,21 @@ input[type='checkbox'] {
   display: flex;
   flex-direction: column;
   gap: 5px;
+}
+
+.titulo-linha {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+.titulo-linha .titulo-video {
+  flex: 1;
+  min-width: 0;
+}
+.titulo-linha .selo {
+  flex-shrink: 0;
+  margin-top: 1px;
 }
 
 .titulo-video {
@@ -1178,7 +1271,9 @@ input[type='checkbox'] {
  * esticava a linha para 127 px — a virtualização via uma altura que o CSS
  * dizia ser outra. */
 .celula-resumo .resumo-linha {
-  -webkit-line-clamp: 4;
+  /* 3 linhas + o botão ficam dentro dos 108 px da linha. Com 4, cada linha
+   * esticava a tabela e a planilha perdia a densidade do mockup. */
+  -webkit-line-clamp: 3;
 }
 .celula-resumo .ver-mais {
   display: inline-block;
@@ -1253,17 +1348,36 @@ input[type='checkbox'] {
   --altura-linha: var(--altura-linha-compacto);
 }
 .aplicativo[data-modo='compacto'] .miniatura {
-  /* em linha de 64 px, miniatura de 96 px (16:9 = 54) tomava a altura toda.
-   * 76 px de largura deixa 43 de altura e sobra respiro. */
-  width: 76px;
+  /* Em linha de 64 px, miniatura de 96 px (16:9 = 54) tomava a altura toda e
+   * ainda era cortada pela borda. 72 px = 40 de altura deixa 10 px de folga
+   * em cima e embaixo. */
+  width: 72px;
 }
 .aplicativo[data-modo='compacto'] .celula-video {
   gap: 10px;
-  padding: 6px 0;
+  /* Sem padding vertical: a altura de 64 px já é apertada, e a miniatura
+   * precisa caber inteira (antes ela era ceifada embaixo). */
+  padding: 0;
+  align-items: center;
 }
+.aplicativo[data-modo='compacto'] .celula-video-texto {
+  justify-content: center;
+  gap: 2px;
+}
+/* Duas linhas mesmo no compacto: com uma só, "Dominando o depurador do
+ * navegador em 20 minutos" virava "Dominando o depurador do navegado…" — o
+ * modo compacto economiza altura alterando a densidade, não apagando o
+ * título. Duas linhas de 12,5px/1,35 = 34px, que cabem em 64. */
 .aplicativo[data-modo='compacto'] .titulo-video {
-  -webkit-line-clamp: 1;
+  -webkit-line-clamp: 2;
   font-size: 12.5px;
+  line-height: 1.35;
+}
+.aplicativo[data-modo='compacto'] .titulo-linha {
+  align-items: center;
+}
+.aplicativo[data-modo='compacto'] .titulo-linha .selo {
+  margin-top: 0;
 }
 .aplicativo[data-modo='compacto'] .trechos-linha,
 .aplicativo[data-modo='compacto'] .video-sub {
@@ -1282,7 +1396,6 @@ input[type='checkbox'] {
 .aplicativo[data-coluna-canal='oculta'] [data-coluna='canal'],
 .aplicativo[data-coluna-duracao='oculta'] [data-coluna='duracao'],
 .aplicativo[data-coluna-adicionado='oculta'] [data-coluna='adicionado'],
-.aplicativo[data-coluna-estado='oculta'] [data-coluna='estado'],
 .aplicativo[data-coluna-resumo='oculta'] [data-coluna='resumo'] {
   display: none;
 }
@@ -1909,6 +2022,34 @@ dialog p {
   .aplicativo {
     grid-template-columns: 1fr;
   }
+
+  /* Barra de ferramentas em 420 px: com os rótulos longos as ferramentas de
+   * visualização caíam numa terceira faixa e a planilha começava quase no
+   * meio da tela. Aqui o grupo inteiro cabe em duas faixas. */
+  .barra-ferramentas {
+    gap: 8px;
+  }
+  .acoes-lote {
+    gap: 5px;
+  }
+  /* O separador vertical só faz sentido quando os dois grupos dividem a
+   * mesma linha; em faixas empilhadas ele fica solto na borda. */
+  .separador-acoes {
+    display: none;
+  }
+  .ferramentas-visual {
+    width: 100%;
+    justify-content: flex-start;
+    gap: 6px;
+  }
+  .ferramentas-visual .botao-secundario,
+  .acoes-lote .botao-secundario {
+    padding: 6px 9px;
+    font-size: 11px;
+  }
+  .contador-selecao {
+    min-width: 0;
+  }
   /* A barra vira gaveta: sai do fluxo, então o conteúdo usa a tela inteira.
    * Antes, sem botão que reabrisse a gaveta, a navegação ficava
    * inalcançável abaixo de 900 px — e o `grid` ainda reservava os 256 px
@@ -1938,10 +2079,14 @@ dialog p {
   }
   .aplicativo[data-barra='recolhida'] .marca-nome,
   .aplicativo[data-barra='recolhida'] .nav-rotulo,
-  .aplicativo[data-barra='recolhida'] .arvore,
   .aplicativo[data-barra='recolhida'] .rodape-lateral .versao,
   .aplicativo[data-barra='recolhida'] .rodape-lateral .status-texto {
     display: revert;
+  }
+  /* A árvore fica fora desta lista: no mobile ela pertence à gaveta e deve
+   * reaparecer recolhida ou não — mas só na Biblioteca. */
+  .aplicativo:not([data-tela='biblioteca']) .arvore {
+    display: none;
   }
   .aplicativo[data-barra='recolhida'] .navegacao {
     padding: 0 8px 10px;
@@ -2025,8 +2170,6 @@ dialog p {
   .tabela-biblioteca td[data-coluna='adicionado'] {
     min-width: 104px;
   }
-  .tabela-biblioteca th[data-coluna='estado'],
-  .tabela-biblioteca td[data-coluna='estado'],
   .tabela-biblioteca th[data-coluna='resumo-estado'],
   .tabela-biblioteca td[data-coluna='resumo-estado'] {
     min-width: 96px;

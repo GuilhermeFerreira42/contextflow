@@ -87,6 +87,9 @@
                   placeholder="Pesquisar na biblioteca…"
                   autocomplete="off"
                 />
+                <!-- O mockup anuncia o atalho na própria caixa: sem a dica,
+                     ninguém descobre que `/` foca a busca. -->
+                <kbd class="dica-atalho" aria-hidden="true">/</kbd>
               </label>
 
               <button type="button" class="botao-secundario botao-filtros" id="abrir-filtros" aria-expanded="false">
@@ -129,28 +132,39 @@
               <input id="filtro-resumo" type="checkbox" />
               <span>Com resumo</span>
             </label>
-            <button id="limpar-filtros" type="button" class="botao-secundario">Limpar filtros</button>
           </div>
 
           <!-- Barra de ferramentas: seleção, colunas, modo -->
           <div class="barra-ferramentas">
             <div class="acoes-lote" id="acoes-biblioteca">
-              <span id="contador-selecao" class="contador-selecao" role="status">0 selecionados</span>
+              <!-- As ações de lote só existem quando há seleção: com nada
+                    marcado eram cinco botões apagados ocupando a barra e
+                    empurrando a planilha para baixo. -->
+              <div class="acoes-selecao" id="acoes-selecao" hidden>
+                <span id="contador-selecao" class="contador-selecao" role="status">Nada selecionado</span>
+                <button id="limpar-selecao" type="button" class="botao-secundario" disabled>Limpar</button>
+                <button id="reimportar-selecao" type="button" class="botao-secundario" disabled>Reimportar</button>
+                <button id="remover-selecao" type="button" class="botao-secundario" disabled>Remover</button>
+                <!-- Grupo de coleção: o select e os DOIS botões que agem sobre
+                     ele andam juntos, senão não se sabe o que "Adicionar" faz. -->
+                <span class="grupo-colecao">
+                  <select id="colecao-destino" aria-label="Coleção de destino">
+                    <option value="">Coleção…</option>
+                  </select>
+                  <button id="adicionar-colecao" type="button" class="botao-secundario" disabled title="Adicionar os vídeos selecionados à coleção escolhida">Adicionar</button>
+                  <button id="desvincular-colecao" type="button" class="botao-secundario" disabled title="Remover os vídeos selecionados da coleção escolhida">Desvincular</button>
+                </span>
+              </div>
               <button id="selecionar-visiveis" type="button" class="botao-secundario">Selecionar visíveis</button>
-              <button id="limpar-selecao" type="button" class="botao-secundario" disabled>Limpar</button>
-              <button id="reimportar-selecao" type="button" class="botao-secundario" disabled>Reimportar</button>
-              <button id="remover-selecao" type="button" class="botao-secundario" disabled>Remover</button>
-              <select id="colecao-destino" aria-label="Coleção de destino">
-                <option value="">Coleção…</option>
-              </select>
-              <button id="adicionar-colecao" type="button" class="botao-secundario" disabled>Adicionar</button>
-              <button id="desvincular-colecao" type="button" class="botao-secundario" disabled>Remover vínculo</button>
               <button id="nova-colecao" type="button" class="botao-secundario">Nova coleção</button>
             </div>
 
             <span class="separador-acoes" aria-hidden="true"></span>
 
             <div class="ferramentas-visual">
+              <button id="limpar-filtros" type="button" class="botao-secundario botao-limpar" hidden>
+                <svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg> Limpar busca e filtros
+              </button>
               <button type="button" class="botao-secundario" id="abrir-colunas" aria-expanded="false">
                 <svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="M15 4v16"/></svg> Colunas
               </button>
@@ -205,11 +219,8 @@
                   <th scope="col" data-ordenacao="criado_em" data-coluna="adicionado">
                     <button type="button">Adicionado <span class="seta-ordenacao"></span></button>
                   </th>
-                  <th scope="col" data-ordenacao="estado" data-coluna="estado">
-                    <button type="button">Estado <span class="seta-ordenacao"></span></button>
-                  </th>
-                  <th scope="col" data-coluna="resumo">Conteúdo do resumo</th>
-                  <th scope="col" data-coluna="resumo-estado">Resumo</th>
+                  <th scope="col" data-coluna="resumo">Resumo</th>
+                  <th scope="col" data-coluna="resumo-estado" title="Situação do resumo">Situação</th>
                 </tr>
               </thead>
               <tbody id="corpo-biblioteca"></tbody>

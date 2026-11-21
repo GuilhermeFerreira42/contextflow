@@ -89,6 +89,9 @@ function mostrarTela(nome) {
   if (!TELAS.includes(nome)) nome = 'biblioteca';
 
   estado.tela = nome;
+  // A tela é refletida no container: é o que permite ao CSS esconder a árvore
+  // de organização (que só filtra a Biblioteca) e ajustar o resto por tela.
+  document.querySelector('.aplicativo').dataset.tela = nome;
   $$('.nav-item').forEach((botao) => {
     const ativo = botao.dataset.aba === nome;
     botao.classList.toggle('ativo', ativo);
@@ -135,7 +138,8 @@ const arvoreUI = criarArvore({
   aoFiltrar: (parametro, valor) => {
     if (parametro === 'dataImportacao') {
       // A árvore de datas usa o filtro de intervalo da API (aditivo na F5-UI).
-      bibliotecaUI.aplicarIntervaloData(valor.inicio, valor.fim);
+      // `null` desfaz o recorte — é o que o clique no nó já ativo faz.
+      bibliotecaUI.aplicarIntervaloData(valor?.inicio, valor?.fim);
       return;
     }
     bibliotecaUI.aplicarFiltro(parametro, valor);

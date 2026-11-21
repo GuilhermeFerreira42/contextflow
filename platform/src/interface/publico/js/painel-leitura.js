@@ -14,6 +14,9 @@ export function criarPainel({ api }) {
   let videoAtual = null;
   let focoAnterior = null;
   let pedido = 0;
+  // Nomes das coleções para trocar o UUID cru da pílula por "Fundamentos".
+  // Carregado uma vez; a lista muda pouco e o painel abre com frequência.
+  let nomesColecoes = null;
 
   function escapar(texto) {
     return String(texto ?? '');
@@ -99,7 +102,7 @@ export function criarPainel({ api }) {
       ...fato('Duração', d ?? '—'),
       ...fato('Adicionado', dataLonga(video.criadoEm)),
       ...fato('Atualizado', dataLonga(video.atualizadoEm)),
-      ...fato('Estado', video.estado),
+      ...fato('Estado', ({ novo: 'Novo', importando: 'Importando', pronto: 'Pronto', parcial: 'Parcial', erro: 'Erro' })[video.estado] ?? video.estado),
       ...fato('YouTube', video.youtubeId ?? '—'),
     );
 
@@ -108,12 +111,22 @@ export function criarPainel({ api }) {
     colecoes.replaceChildren();
     const ids = video.colecaoIds ?? [];
     if (ids.length) {
-      for (const id of ids) {
-        const pilula = document.createElement('span');
-        pilula.className = 'pilula';
-        pilula.textContent = id;
-        colecoes.append(pilula);
-      }
+      // O UUID não diz nada a quem lê: mostra o título da coleção.
+      // Enquanto os nomes não chegam, cai para o id (nunca para o vazio).
+      void nomesDeColecoes().then(mapa => {
+        if (videoAtual?.id !== video.id) return;
+        const pilulas = ids.map(id => {
+          const pilula = document.createElement('span');
+          pilula.className = 'pilula';
+          pilula.textContent = mapa.get(id) ?? id;
+          if (!mapa.has(id)) {
+            pilula.title = 'Coleção ainda não carregada';
+            pilula.classList.add('pilula-ausente');
+          }
+          return pilula;
+        });
+        colecoes.replaceChildren(...pilulas);
+      });
     } else {
       const vazio = document.createElement('span');
       vazio.className = 'pilula-vazia';
@@ -128,6 +141,22 @@ export function criarPainel({ api }) {
     } else {
       link.hidden = true;
     }
+  }
+
+  /** id da coleção → título, com cache simples de sessão. */
+  async function nomesDeColecoes() {
+    if (nomesColecoes) return nomesColecoes;
+    nomesColecoes = new Map();
+    try {
+      const lista = await api('/api/colecoes');
+      const itens = Array.isArray(lista) ? lista : (lista.itens ?? []);
+      for (const c of itens) nomesColecoes.set(c.id, c.titulo ?? c.nome ?? 'coleção');
+    } catch {
+      // Falha ao listar coleções não pode impedir a leitura do vídeo;
+      // as pílulas caem para o id e a tela continua utilizável.
+      nomesColecoes = new Map();
+    }
+    return nomesColecoes;
   }
 
   async function renderizarResumo(video, geracao) {

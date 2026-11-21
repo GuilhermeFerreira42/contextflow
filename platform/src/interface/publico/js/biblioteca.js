@@ -32,7 +32,8 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
   const MARGEM_ABAIXO = 18; // linhas extras abaixo (suaviza a paginação)
   const PAGINA = 500;
 
-  const colunasPadrao = { canal: true, duracao: true, adicionado: true, estado: true, resumo: true, 'resumo-estado': true };
+  // 'estado' não é coluna: o selo do vídeo fica junto do título (ver `linha`).
+  const colunasPadrao = { canal: true, duracao: true, adicionado: true, resumo: true, 'resumo-estado': true };
   const ordemColunas = Object.keys(colunasPadrao);
 
   const selecionados = new Set();
@@ -60,7 +61,7 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
   let intervaloData = null; // recorte da árvore "Data de importação"
   const chaves = new Map();
   let linhasAtuais = new Map();
-  const TOTAL_COLUNAS = 8; // checkbox + vídeo + 6 colunas configuráveis
+  const TOTAL_COLUNAS = 7; // checkbox + vídeo + 5 colunas configuráveis
   const espacoSuperior = espaco(0);
   const espacoInferior = espaco(0);
 
@@ -156,6 +157,10 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
     // O total da consulta já está no cabeçalho da tela ("6 vídeos"). Repetir
     // aqui gastava 167 px da barra de lote e era o que fazia a linha quebrar.
     $('#contador-selecao').textContent = n === 0 ? 'Nada selecionado' : `${n} selecionado${n > 1 ? 's' : ''}`;
+    // O contador continua no DOM (contrato do E2E e leitor de tela), mas o
+    // bloco de ações só aparece quando há o que agir sobre.
+    const bloco = $('#acoes-selecao');
+    if (bloco) bloco.hidden = n === 0;
     $('#aviso-selecao').hidden = !n;
     for (const id of ['limpar-selecao', 'reimportar-selecao', 'remover-selecao']) $('#' + id).disabled = !n || ocupado;
     $('#adicionar-colecao').disabled = !n || ocupado || !$('#colecao-destino').value;
@@ -343,18 +348,33 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
     nome.rel = 'noopener noreferrer';
     // Impede que o clique no título use o link como "abrir painel".
     nome.addEventListener('click', evento => evento.stopPropagation());
-    blocoTexto.append(nome);
+    // Selo do vídeo junto do título, mas SÓ quando o vídeo exige atenção: um
+    // "Pronto" verde em cada linha não informa nada e duplicava o selo da
+    // última coluna. Erro, importação em andamento e resumo parcial são o que
+    // a pessoa precisa ver sem abrir o painel.
+    const linhaTitulo = document.createElement('div');
+    linhaTitulo.className = 'titulo-linha';
+    linhaTitulo.append(nome);
+    if (video.estado !== 'pronto') {
+      const marca = selo(video.estado);
+      marca.title = `Estado do vídeo: ${ROTULOS_ESTADO[video.estado] ?? video.estado}`;
+      linhaTitulo.append(marca);
+    }
+    blocoTexto.append(linhaTitulo);
 
     // A sub-linha não repete o que já tem coluna própria (canal, duração,
     // data adicionado). Mostra o que só existe aqui: o vínculo com coleções.
     const sub = document.createElement('div');
     sub.className = 'video-sub';
+    // O id do YouTube NÃO entra aqui: `nodets00001` não significa nada para
+    // quem usa a biblioteca, e ele estava ocupando a linha inteira embaixo de
+    // cada título. A sub-linha responde só o que a planilha não responde:
+    // a que coleções o vídeo pertence e quando entrou.
     const data = dataCurta(video.criadoEm);
     const partes = [];
     const nColecoes = (video.colecaoIds ?? []).length;
     if (nColecoes) partes.push(`${nColecoes} ${nColecoes === 1 ? 'coleção' : 'coleções'}`);
-    if (video.youtubeId) partes.push(video.youtubeId);
-    if (!partes.length && data !== '—') partes.push(`adicionado ${data}`);
+    if (data !== '—') partes.push(data);
     sub.textContent = partes.join(' · ');
     if (sub.textContent) blocoTexto.append(sub);
 
@@ -378,27 +398,23 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
     tdAdicionado.dataset.coluna = 'adicionado';
     tdAdicionado.classList.add('celula-data');
 
-    // 6. estado do vídeo
-    const tdEstado = document.createElement('td');
-    tdEstado.dataset.coluna = 'estado';
-    tdEstado.append(selo(video.estado));
-
-    // 7. resumo (recorte; a leitura real está na coluna vídeo e no painel)
+    // 6. resumo (recorte; a leitura real está no painel de leitura)
     const tdResumo = document.createElement('td');
     tdResumo.dataset.coluna = 'resumo';
     tdResumo.className = 'celula-resumo';
     tdResumo.append(resumoNaLinha(video));
 
-    // 8. estado do resumo — ÚLTIMA coluna (contrato do E2E: td:last-child === 'Pronto')
+    // 7. estado do resumo — ÚLTIMA coluna. Contrato do E2E: `td:last-child`
+    // casa com 'Pronto' ou 'Sem resumo'. É a fonte única do selo do resumo;
+    // a coluna de conteúdo não repete o mesmo texto.
     const tdResumoEstado = document.createElement('td');
     tdResumoEstado.dataset.coluna = 'resumo-estado';
-    // A coluna se chama "Transcrição": mostra o estado do vídeo, não do resumo
-    // (o resumo já tem o próprio selo na coluna Resumo).
+    tdResumoEstado.className = 'celula-resumo-estado';
     tdResumoEstado.append(
       video.temResumo ? selo('pronto', 'Pronto') : selo('sem', 'Sem resumo'),
     );
 
-    tr.append(tdCanal, tdDuracao, tdAdicionado, tdEstado, tdResumo, tdResumoEstado);
+    tr.append(tdCanal, tdDuracao, tdAdicionado, tdResumo, tdResumoEstado);
 
     if (selecionados.has(video.id)) tr.classList.add('selecionada');
     return tr;
@@ -670,6 +686,11 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
       || intervaloData !== null;
   }
 
+  /** Recorte aplicado por busca ou filtro — é o que o botão de limpar desfaz. */
+  function temRecorteAtivo() {
+    return temFiltroAtivo() || $('#busca').value.trim() !== '';
+  }
+
   /** Contador no botão "Filtros" — deixa visível que há filtro aplicado. */
   function atualizarResumoFiltros() {
     let n = 0;
@@ -683,6 +704,10 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
     selo.hidden = n === 0;
     selo.textContent = String(n);
     $('#abrir-filtros').classList.toggle('botao-filtros', true);
+    // O botão de limpar só existe na tela quando há o que limpar: um botão
+    // permanente que não faz nada é ruído na barra de ferramentas.
+    const limpar = $('#limpar-filtros');
+    if (limpar) limpar.hidden = !temRecorteAtivo();
   }
 
   // -------------------------------------------------------------- opções
@@ -785,8 +810,7 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
       canal: 'Canal',
       duracao: 'Duração',
       adicionado: 'Adicionado em',
-      estado: 'Estado do vídeo',
-      resumo: 'Conteúdo do resumo',
+      resumo: 'Resumo',
       'resumo-estado': 'Situação do resumo',
     };
     lista.replaceChildren(...ordemColunas.map(nome => {
@@ -853,6 +877,22 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
         if (entradas.some(e => e.isIntersecting)) void carregarMais(itens.length + PAGINA);
       }, { root: viewport, rootMargin: '600px' }).observe($('#sentinela-biblioteca'));
     }
+
+    // Atalho `/` da busca (o mockup mostra a tecla dentro da caixa). Ignora
+    // quando o foco já está num campo: digitar "/" numa URL não pode pular
+    // para a busca no meio da digitação.
+    document.addEventListener('keydown', evento => {
+      if (evento.key !== '/' || evento.ctrlKey || evento.metaKey || evento.altKey) return;
+      const alvo = evento.target;
+      const digitando = alvo instanceof HTMLElement
+        && (alvo.tagName === 'INPUT' || alvo.tagName === 'TEXTAREA' || alvo.tagName === 'SELECT' || alvo.isContentEditable);
+      if (digitando) return;
+      // Com uma janela aberta (adicionar link, coleção), o atalho não rouba o foco.
+      if (document.querySelector('#dialogo-adicionar:not([hidden]), dialog[open]')) return;
+      evento.preventDefault();
+      $('#busca').focus();
+      $('#busca').select();
+    });
 
     let debounce;
     $('#busca').addEventListener('input', () => {

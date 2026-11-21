@@ -83,6 +83,23 @@ export function criarArvore({ api, aoFiltrar, aoLimpar }) {
         no.setAttribute('aria-selected', 'true');
       }
       no.addEventListener('click', () => {
+        // Clicar no nó JÁ ativo desfaz o recorte. Sem isso a árvore era uma
+        // armadilha: escolher uma coleção deixava 2 vídeos na tela e não havia
+        // como voltar à biblioteca inteira por ali — o nó continuava "aceso"
+        // e clicar nele de novo não fazia nada.
+        const jaAtivo = selecionado && selecionado.grupo === chave && selecionado.chave === item.id;
+        if (jaAtivo) {
+          selecionado = null;
+          pintarSelecao();
+          limparFiltroDoNo(chave, item);
+          return;
+        }
+        // Uma seleção por vez: escolher "Fundamentos" e depois "DevTools"
+        // somava dois recortes (coleção E canal) e dava 0 vídeos sem explicar
+        // por quê. A árvore é um filtro, não uma pilha de filtros.
+        if (selecionado && selecionado.grupo !== chave) {
+          limparFiltroDoNo(selecionado.grupo, { id: selecionado.valor });
+        }
         selecionado = { grupo: chave, valor: item.id, chave: item.id };
         aoSelecionarNo(chave, item);
         pintarSelecao();
@@ -99,6 +116,18 @@ export function criarArvore({ api, aoFiltrar, aoLimpar }) {
 
     grupo.append(filhos);
     return grupo;
+  }
+
+  /**
+   * Desfaz o recorte de um nó. `aoLimpar` zeraria também a busca e os filtros
+   * do painel; aqui só o parâmetro daquele grupo sai.
+   */
+  function limparFiltroDoNo(chave, item) {
+    if (chave === 'datas') aoFiltrar('dataImportacao', null);
+    else if (chave === 'canais') aoFiltrar('canalId', '');
+    else if (chave === 'playlists') aoFiltrar('playlistId', '');
+    else if (chave === 'colecoes') aoFiltrar('colecaoId', '');
+    else aoLimpar();
   }
 
   function pintarSelecao() {
