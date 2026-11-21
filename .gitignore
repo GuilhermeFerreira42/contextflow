@@ -18,6 +18,10 @@ dados/
 testes/.tmp/
 coverage/
 playwright-report/
+
+# Miniaturas de demonstração: só existem para a base local de quem está
+# desenvolvendo. O produto busca miniatura no yt-dlp; não são assets do app.
+platform/src/interface/publico/miniaturas-teste/
 test-results/
 
 # Segredos e configuração local
