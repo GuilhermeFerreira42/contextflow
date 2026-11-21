@@ -10,19 +10,26 @@
   <body>
     <a class="pular-conteudo" href="#conteudo">Pular para o conteúdo</a>
 
-    <div class="aplicativo" data-tela="biblioteca">
-      <aside class="barra-lateral" aria-label="Navegação principal">
+    <div class="aplicativo" data-tela="biblioteca" data-barra="expandida">
+      <!-- ================================================== barra lateral -->
+      <aside class="barra-lateral" aria-label="Navegação e organização">
         <div class="marca">
           <span class="marca-simbolo" aria-hidden="true"></span>
           <span class="marca-nome">ContextFlow</span>
+          <button
+            type="button"
+            class="botao-recolher"
+            id="recolher-barra"
+            aria-label="Recolher barra lateral"
+            title="Recolher barra lateral"
+          >
+            <span aria-hidden="true">«</span>
+          </button>
         </div>
 
-        <nav class="navegacao">
+        <nav class="navegacao" aria-label="Telas">
           <button class="nav-item ativo" data-aba="biblioteca" type="button">
             <span class="nav-icone" aria-hidden="true">▤</span> Biblioteca
-          </button>
-          <button class="nav-item" data-aba="leitura" type="button">
-            <span class="nav-icone" aria-hidden="true">▦</span> Leitura
           </button>
           <button class="nav-item" data-aba="importacoes" type="button">
             <span class="nav-icone" aria-hidden="true">↧</span> Importações
@@ -31,6 +38,17 @@
             <span class="nav-icone" aria-hidden="true">⚙</span> Configurações
           </button>
         </nav>
+
+        <!-- Árvore de organização (Explorer) -->
+        <div class="arvore" id="arvore-organizacao" aria-label="Organizar por">
+          <div class="arvore-titulo">
+            <span>Organizar por</span>
+            <button type="button" class="botao-mini" id="recolher-arvore" aria-label="Recolher todos os grupos">
+              <span aria-hidden="true">⌃</span>
+            </button>
+          </div>
+          <div id="arvore-grupos"></div>
+        </div>
 
         <div class="rodape-lateral">
           <div class="status-motor" id="status-motor" role="status" aria-live="polite">
@@ -42,60 +60,148 @@
         </div>
       </aside>
 
+      <!-- ========================================================= conteúdo -->
       <main class="conteudo" id="conteudo">
-        <!-- Biblioteca -->
+        <!-- ---------------------------------------------------- Biblioteca -->
         <section class="tela" data-tela-nome="biblioteca">
-          <header class="cabecalho-tela">
-            <h1>Biblioteca</h1>
-            <p class="descricao">Seu catálogo local de vídeos, transcrições e resumos.</p>
+          <header class="topo-tela">
+            <div class="topo-titulo">
+              <h1>Biblioteca</h1>
+              <span class="pilula-contador" id="contador">—</span>
+              <p class="descricao">Seus vídeos, transcrições e resumos organizados em um só lugar.</p>
+            </div>
+
+            <div class="topo-acoes">
+              <label class="campo-busca">
+                <span class="visualmente-oculto">Pesquisar na biblioteca</span>
+                <span class="busca-icone" aria-hidden="true">⌕</span>
+                <input
+                  type="search"
+                  id="busca"
+                  placeholder="Pesquisar na biblioteca…"
+                  autocomplete="off"
+                />
+              </label>
+
+              <button type="button" class="botao-secundario botao-filtros" id="abrir-filtros" aria-expanded="false">
+                <span aria-hidden="true">⛃</span> Filtros
+                <span class="filtros-ativos" id="filtros-ativos" hidden></span>
+              </button>
+
+              <button type="button" class="botao-primario botao-adicionar" id="abrir-adicionar-link">
+                <span aria-hidden="true">＋</span> Adicionar link
+              </button>
+            </div>
           </header>
 
-          <div class="barra-ferramentas">
-            <label class="campo-busca">
-              <span class="visualmente-oculto">Pesquisar na biblioteca</span>
-              <input type="search" id="busca" placeholder="Pesquisar por título ou canal…" autocomplete="off" />
+          <!-- Filtros (painel que abre pelo botão) -->
+          <div class="painel-filtros" id="painel-filtros" hidden>
+            <label class="filtro-select">
+              <span>Estado</span>
+              <select id="filtro-estado">
+                <option value="">Todos</option>
+                <option value="pronto">Pronto</option>
+                <option value="parcial">Parcial</option>
+                <option value="erro">Erro</option>
+                <option value="importando">Importando</option>
+                <option value="novo">Novo</option>
+              </select>
             </label>
-            <span class="contador" id="contador">—</span>
-          </div>
-
-          <div class="barra-filtros" aria-label="Filtros da biblioteca">
-            <label class="filtro-select">Estado <select id="filtro-estado">
-              <option value="">Todos</option><option value="pronto">Pronto</option><option value="parcial">Parcial</option>
-              <option value="erro">Erro</option><option value="importando">Importando</option><option value="novo">Novo</option>
-            </select></label>
-            <label class="filtro-select">Canal <select id="filtro-canal"><option value="">Todos</option></select></label>
-            <label class="filtro-select">Playlist <select id="filtro-playlist"><option value="">Todas</option></select></label>
-            <label class="filtro-select">Coleção <select id="filtro-colecao"><option value="">Todas</option></select></label>
-            <label class="filtro-checkbox"><input id="filtro-resumo" type="checkbox" /> Com resumo</label>
+            <label class="filtro-select">
+              <span>Canal</span>
+              <select id="filtro-canal"><option value="">Todos</option></select>
+            </label>
+            <label class="filtro-select">
+              <span>Playlist</span>
+              <select id="filtro-playlist"><option value="">Todas</option></select>
+            </label>
+            <label class="filtro-select">
+              <span>Coleção</span>
+              <select id="filtro-colecao"><option value="">Todas</option></select>
+            </label>
+            <label class="filtro-checkbox">
+              <input id="filtro-resumo" type="checkbox" />
+              <span>Com resumo</span>
+            </label>
             <button id="limpar-filtros" type="button" class="botao-secundario">Limpar filtros</button>
           </div>
-          <div class="barra-acoes-lote" id="acoes-biblioteca">
-            <span id="contador-selecao" class="contador-selecao" role="status">0 selecionados</span>
-            <button id="selecionar-visiveis" type="button" class="botao-secundario">Selecionar tudo visível</button>
-            <button id="limpar-selecao" type="button" class="botao-secundario" disabled>Limpar seleção</button>
-            <button id="reimportar-selecao" type="button" class="botao-secundario" disabled>Reimportar pendentes</button>
-            <button id="remover-selecao" type="button" class="botao-secundario" disabled>Remover</button>
-            <label class="filtro-select"><span class="visualmente-oculto">Coleção de destino</span>
-              <select id="colecao-destino"><option value="">Escolha uma coleção</option></select>
-            </label>
-            <button id="adicionar-colecao" type="button" class="botao-secundario" disabled>Adicionar à coleção</button>
-            <button id="desvincular-colecao" type="button" class="botao-secundario" disabled>Remover da coleção atual</button>
-            <button id="nova-colecao" type="button" class="botao-secundario">Nova coleção</button>
+
+          <!-- Barra de ferramentas: seleção, colunas, modo -->
+          <div class="barra-ferramentas">
+            <div class="acoes-lote" id="acoes-biblioteca">
+              <span id="contador-selecao" class="contador-selecao" role="status">0 selecionados</span>
+              <button id="selecionar-visiveis" type="button" class="botao-secundario">Selecionar visíveis</button>
+              <button id="limpar-selecao" type="button" class="botao-secundario" disabled>Limpar</button>
+              <button id="reimportar-selecao" type="button" class="botao-secundario" disabled>Reimportar</button>
+              <button id="remover-selecao" type="button" class="botao-secundario" disabled>Remover</button>
+              <select id="colecao-destino" aria-label="Coleção de destino">
+                <option value="">Escolha uma coleção</option>
+              </select>
+              <button id="adicionar-colecao" type="button" class="botao-secundario" disabled>Adicionar à coleção</button>
+              <button id="desvincular-colecao" type="button" class="botao-secundario" disabled>Remover da coleção</button>
+              <button id="nova-colecao" type="button" class="botao-secundario">Nova coleção</button>
+            </div>
+
+            <div class="ferramentas-visual">
+              <button type="button" class="botao-secundario" id="abrir-colunas" aria-expanded="false">
+                <span aria-hidden="true">▦</span> Colunas
+              </button>
+              <div class="alternador-modo" role="group" aria-label="Densidade da linha">
+                <button type="button" class="modo-item ativo" data-modo="ampliado" title="Linhas ampliadas">
+                  Ampliado
+                </button>
+                <button type="button" class="modo-item" data-modo="compacto" title="Linhas compactas">
+                  Compacto
+                </button>
+              </div>
+            </div>
           </div>
-          <p id="aviso-selecao" class="contador" hidden>As ações incluem todos os IDs selecionados, inclusive fora do filtro atual.</p>
+
+          <!-- Painel de colunas -->
+          <div class="painel-colunas" id="painel-colunas" hidden>
+            <p class="painel-titulo">Colunas visíveis</p>
+            <div class="colunas-lista" id="colunas-lista"></div>
+            <p class="painel-nota">Isto muda o que aparece na linha. Para mudar quais vídeos aparecem, use Filtros.</p>
+          </div>
+
+          <p id="aviso-selecao" class="contador" hidden>
+            As ações incluem todos os IDs selecionados, inclusive fora do filtro atual.
+          </p>
           <p id="resultado-biblioteca" role="status" aria-live="polite"></p>
 
-          <div class="tabela-envoltorio biblioteca-viewport" id="biblioteca-viewport" tabindex="0" aria-label="Vídeos da biblioteca">
+          <div
+            class="tabela-envoltorio biblioteca-viewport"
+            id="biblioteca-viewport"
+            tabindex="0"
+            aria-label="Vídeos da biblioteca"
+          >
             <table class="tabela-biblioteca" aria-label="Biblioteca de vídeos">
               <thead>
                 <tr>
-                  <th scope="col" class="col-selecao"><input id="selecao-visivel" type="checkbox" aria-label="Selecionar todos os vídeos visíveis" /></th>
-                  <th scope="col" data-ordenacao="titulo"><button type="button">Vídeo <span class="seta-ordenacao"></span></button></th>
-                  <th scope="col" data-ordenacao="canal"><button type="button">Canal <span class="seta-ordenacao"></span></button></th>
-                  <th scope="col" data-ordenacao="duracao"><button type="button">Duração <span class="seta-ordenacao"></span></button></th>
-                  <th scope="col" data-ordenacao="criado_em"><button type="button">Adicionado <span class="seta-ordenacao"></span></button></th>
-                  <th scope="col" data-ordenacao="estado"><button type="button">Estado <span class="seta-ordenacao"></span></button></th>
-                  <th scope="col">Resumo</th>
+                  <th scope="col" class="col-selecao">
+                    <input
+                      id="selecao-visivel"
+                      type="checkbox"
+                      aria-label="Selecionar todos os vídeos visíveis"
+                    />
+                  </th>
+                  <th scope="col" data-ordenacao="titulo" data-coluna="titulo">
+                    <button type="button">Vídeo <span class="seta-ordenacao"></span></button>
+                  </th>
+                  <th scope="col" data-ordenacao="canal" data-coluna="canal">
+                    <button type="button">Canal <span class="seta-ordenacao"></span></button>
+                  </th>
+                  <th scope="col" data-ordenacao="duracao" data-coluna="duracao">
+                    <button type="button">Duração <span class="seta-ordenacao"></span></button>
+                  </th>
+                  <th scope="col" data-ordenacao="criado_em" data-coluna="adicionado">
+                    <button type="button">Adicionado <span class="seta-ordenacao"></span></button>
+                  </th>
+                  <th scope="col" data-ordenacao="estado" data-coluna="estado">
+                    <button type="button">Estado <span class="seta-ordenacao"></span></button>
+                  </th>
+                  <th scope="col" data-coluna="resumo">Resumo</th>
+                  <th scope="col" data-coluna="resumo-estado">Transcrição</th>
                 </tr>
               </thead>
               <tbody id="corpo-biblioteca"></tbody>
@@ -103,99 +209,94 @@
             <div class="vazio" id="vazio-biblioteca" hidden>
               <p class="vazio-titulo">Biblioteca vazia</p>
               <p class="vazio-texto">
-                Nenhum vídeo por aqui ainda. Use a aba Importações para trazer um vídeo
-                do YouTube. Nada é simulado nesta tela.
+                Nenhum vídeo por aqui ainda. Use <strong>Adicionar link</strong> ou a tela
+                de Importações para trazer um vídeo do YouTube. Nada é simulado nesta tela.
               </p>
             </div>
             <div id="sentinela-biblioteca" aria-hidden="true"></div>
           </div>
           <p id="carregamento-biblioteca" class="contador" role="status"></p>
+
+          <!-- Diálogos existentes -->
           <dialog id="confirmar-remocao" aria-labelledby="titulo-remocao">
-            <h2 id="titulo-remocao">Remover vídeos?</h2><p id="descricao-remocao"></p>
+            <h2 id="titulo-remocao">Remover vídeos?</h2>
+            <p id="descricao-remocao"></p>
             <p>Transcrições, resumos e vínculos dos vídeos serão removidos da biblioteca local.</p>
-            <div class="barra-ferramentas"><button id="cancelar-remocao" class="botao-secundario" type="button">Cancelar</button>
-              <button id="confirmar-remocao-botao" class="botao-primario" type="button">Confirmar remoção</button></div>
+            <div class="barra-ferramentas">
+              <button id="cancelar-remocao" class="botao-secundario" type="button">Cancelar</button>
+              <button id="confirmar-remocao-botao" class="botao-primario" type="button">
+                Confirmar remoção
+              </button>
+            </div>
           </dialog>
+
           <dialog id="criar-colecao" aria-labelledby="titulo-colecao">
-            <form id="formulario-colecao"><h2 id="titulo-colecao">Nova coleção</h2>
-              <label class="campo-url">Título<input id="nome-colecao" required maxlength="200" autocomplete="off" /></label>
+            <form id="formulario-colecao">
+              <h2 id="titulo-colecao">Nova coleção</h2>
+              <label class="campo-url">
+                Título
+                <input id="nome-colecao" required maxlength="200" autocomplete="off" />
+              </label>
               <p id="erro-colecao" role="status"></p>
-              <div class="barra-ferramentas"><button id="cancelar-colecao" class="botao-secundario" type="button">Cancelar</button>
-                <button class="botao-primario" type="submit">Criar coleção</button></div>
+              <div class="barra-ferramentas">
+                <button id="cancelar-colecao" class="botao-secundario" type="button">Cancelar</button>
+                <button class="botao-primario" type="submit">Criar coleção</button>
+              </div>
             </form>
           </dialog>
         </section>
 
-        <!-- Leitura -->
-        <section class="tela" data-tela-nome="leitura" hidden>
-          <header class="cabecalho-tela">
-            <h1>Leitura</h1>
-            <p class="descricao">Resumos, transcrições e ambos — em planilha, com expansão por linha.</p>
-          </header>
-          <div class="barra-ferramentas">
-            <span class="contador" id="contador-transcricoes">—</span>
-          </div>
-
-          <div class="lista-transcricoes" id="lista-transcricoes"></div>
-
-          <div class="vazio" id="vazio-transcricoes" hidden>
-            <p class="vazio-titulo">Nada para ler ainda</p>
-            <p class="vazio-texto">
-              As transcrições aparecem aqui depois de importar um vídeo na aba Importações.
-              Cada linha mostra o vídeo; clique para abrir os trechos com tempo.
-            </p>
-          </div>
-
-          <div class="leitor" id="leitor-transcricao" hidden>
-            <header class="leitor-cabecalho">
-              <div>
-                <h2 id="leitor-titulo"></h2>
-                <p class="leitor-meta" id="leitor-meta"></p>
-              </div>
-              <button type="button" class="botao-secundario" id="fechar-leitor">Fechar</button>
-            </header>
-            <ol class="segmentos" id="segmentos-transcricao"></ol>
-          </div>
-        </section>
-
-        <!-- Importações -->
+        <!-- -------------------------------------------------- Importações -->
         <section class="tela" data-tela-nome="importacoes" hidden>
-          <header class="cabecalho-tela">
-            <h1>Importações</h1>
-            <p class="descricao">URLs individuais e playlists, com fila, progresso e retomada segura.</p>
+          <header class="topo-tela">
+            <div class="topo-titulo">
+              <h1>Importações</h1>
+              <p class="descricao">Acompanhe a fila, o progresso e as falhas de cada importação.</p>
+            </div>
           </header>
 
-          <form class="formulario-importacao" id="formulario-importacao">
-            <label class="campo-url"><span>Importar</span>
-              <select id="tipo-importacao" aria-label="Tipo de importação">
-                <option value="importar-video">Vídeo</option>
-                <option value="importar-playlist">Playlist</option>
-              </select>
-            </label>
-            <label class="campo-url">
-              <span>URL do YouTube</span>
-              <input type="url" id="url-video" name="url" placeholder="https://www.youtube.com/watch?v=…" required />
-            </label>
-            <button type="submit" class="botao-primario" id="botao-importar">Importar vídeo</button>
-          </form>
-          <p class="resultado-validacao" id="resultado-validacao" role="status" aria-live="polite"></p>
-
-          <details class="importar-lote">
-            <summary>Importar vários vídeos</summary>
-            <form id="formulario-lote">
-              <label class="campo-url"><span>Uma URL de vídeo por linha</span>
-                <textarea id="urls-lote" rows="4" required placeholder="https://www.youtube.com/watch?v=…"></textarea>
+          <div class="cartao-importar">
+            <form class="formulario-importacao" id="formulario-importacao">
+              <label class="campo-url">
+                <span>Tipo</span>
+                <select id="tipo-importacao" aria-label="Tipo de importação">
+                  <option value="importar-video">Vídeo</option>
+                  <option value="importar-playlist">Playlist</option>
+                </select>
               </label>
-              <button type="submit" class="botao-secundario">Adicionar à fila</button>
+              <label class="campo-url campo-url-largo">
+                <span>URL do YouTube</span>
+                <input
+                  type="url"
+                  id="url-video"
+                  name="url"
+                  placeholder="https://www.youtube.com/watch?v=…"
+                  required
+                />
+              </label>
+              <button type="submit" class="botao-primario" id="botao-importar">Importar vídeo</button>
             </form>
-          </details>
+            <p class="resultado-validacao" id="resultado-validacao" role="status" aria-live="polite"></p>
+
+            <details class="importar-lote">
+              <summary>Importar vários vídeos</summary>
+              <form id="formulario-lote">
+                <label class="campo-url">
+                  <span>Uma URL de vídeo por linha</span>
+                  <textarea id="urls-lote" rows="4" required placeholder="https://www.youtube.com/watch?v=…"></textarea>
+                </label>
+                <button type="submit" class="botao-secundario">Adicionar à fila</button>
+              </form>
+            </details>
+          </div>
 
           <div class="diagnostico" id="diagnostico-ingestao" role="status" aria-live="polite">
             <span class="diagnostico-rotulo">Ingestão</span>
             <span class="diagnostico-texto" id="diagnostico-texto">Verificando…</span>
           </div>
 
-          <div class="barra-ferramentas"><h2>Trabalhos</h2>
+          <div class="barra-ferramentas">
+            <h2 class="subtitulo">Trabalhos</h2>
             <span id="atividade-importacoes" role="status"></span>
           </div>
           <p id="erro-trabalhos" role="status"></p>
@@ -203,19 +304,134 @@
           <button id="mais-trabalhos" class="botao-secundario" type="button" hidden>Carregar mais</button>
         </section>
 
-        <!-- Configurações -->
+        <!-- ------------------------------------------------ Configurações -->
         <section class="tela" data-tela-nome="configuracoes" hidden>
-          <header class="cabecalho-tela">
-            <h1>Configurações</h1>
-            <p class="descricao">Provedor, modelo, pasta de dados e preferências.</p>
+          <header class="topo-tela">
+            <div class="topo-titulo">
+              <h1>Configurações</h1>
+              <p class="descricao">Provedor, modelo, pasta de dados e preferências.</p>
+            </div>
           </header>
           <dl class="lista-config" id="lista-config"></dl>
           <div class="aviso-fase">
-            <strong>Parcial (F1).</strong> Os valores abaixo vêm do motor. Edição e segredos
-            entram na F8; chaves nunca são exibidas pela API.
+            <strong>Leitura (F1/F8).</strong> Os valores vêm do motor. Edição de provedor e
+            chaves entra na F6/F8; chaves nunca são exibidas pela API.
           </div>
         </section>
       </main>
+    </div>
+
+    <!-- ==================================================== painel de leitura -->
+    <div class="painel-leitura" id="painel-leitura" hidden role="dialog" aria-modal="true" aria-labelledby="painel-titulo">
+      <div class="painel-fundo" id="painel-fundo"></div>
+      <article class="painel-cartao" role="document">
+        <header class="painel-topo">
+          <div class="painel-topo-texto">
+            <h2 id="painel-titulo">—</h2>
+            <p class="painel-meta" id="painel-meta"></p>
+          </div>
+          <button type="button" class="botao-mini botao-fechar" id="fechar-painel" aria-label="Fechar painel">
+            <span aria-hidden="true">✕</span>
+          </button>
+        </header>
+
+        <div class="painel-corpo">
+          <div class="painel-lateral">
+            <div class="painel-miniatura" id="painel-miniatura"></div>
+            <dl class="painel-fatos" id="painel-fatos"></dl>
+            <div class="painel-secao">
+              <h3>Coleções</h3>
+              <div id="painel-colecoes" class="pilulas"></div>
+            </div>
+            <div class="painel-secao">
+              <h3>Ações</h3>
+              <div class="painel-acoes">
+                <a id="painel-link" class="botao-secundario" target="_blank" rel="noopener noreferrer">
+                  Abrir no YouTube
+                </a>
+                <button type="button" class="botao-secundario" id="painel-resumir" disabled>
+                  Gerar resumo (F6)
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="painel-conteudo">
+            <section class="painel-secao">
+              <div class="secao-cabecalho">
+                <h3>Resumo</h3>
+                <span class="selo" id="painel-resumo-estado"></span>
+              </div>
+              <div id="painel-resumo" class="texto-longo"></div>
+            </section>
+
+            <section class="painel-secao">
+              <div class="secao-cabecalho">
+                <h3>Transcrição</h3>
+                <span class="selo" id="painel-transcricao-estado"></span>
+              </div>
+              <ol class="segmentos" id="segmentos-transcricao"></ol>
+            </section>
+          </div>
+        </div>
+      </article>
+    </div>
+
+    <!-- ======================================================= adicionar link -->
+    <div class="dialogo-fundo" id="dialogo-adicionar" hidden>
+      <div class="dialogo" role="dialog" aria-modal="true" aria-labelledby="adicionar-titulo">
+        <header class="dialogo-topo">
+          <h2 id="adicionar-titulo">Adicionar link</h2>
+          <button type="button" class="botao-mini" id="fechar-adicionar" aria-label="Fechar">
+            <span aria-hidden="true">✕</span>
+          </button>
+        </header>
+        <p class="dialogo-descricao">
+          Cole a URL de um vídeo ou playlist do YouTube. O download e a transcrição
+          entram na fila e podem ser acompanhados em Importações.
+        </p>
+
+        <form id="formulario-adicionar">
+          <label class="campo-url">
+            <span>URL do conteúdo</span>
+            <input
+              type="url"
+              id="adicionar-url"
+              placeholder="https://www.youtube.com/watch?v=…"
+              required
+              autocomplete="off"
+            />
+          </label>
+
+          <label class="filtro-select">
+            <span>Tipo</span>
+            <select id="adicionar-tipo">
+              <option value="importar-video">Vídeo</option>
+              <option value="importar-playlist">Playlist</option>
+            </select>
+          </label>
+
+          <label class="filtro-select">
+            <span>Destino</span>
+            <select id="adicionar-colecao">
+              <option value="">Biblioteca principal (sem coleção)</option>
+            </select>
+          </label>
+
+          <label class="filtro-checkbox">
+            <input type="checkbox" id="adicionar-resumir" disabled />
+            <span>Gerar resumo com IA ao importar</span>
+            <span class="nota-fase">Disponível na F6</span>
+          </label>
+
+          <p class="resultado-validacao" id="adicionar-resultado" role="status" aria-live="polite"></p>
+
+          <div class="dialogo-acoes">
+            <button type="button" class="botao-secundario" id="cancelar-adicionar">Cancelar</button>
+            <button type="submit" class="botao-primario" id="confirmar-adicionar">Adicionar</button>
+          </div>
+        </form>
+      </div>
     </div>
 
     <script type="module" src="/js/aplicacao.js"></script>

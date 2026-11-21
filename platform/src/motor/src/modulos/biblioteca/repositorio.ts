@@ -16,6 +16,13 @@ export interface FiltroBiblioteca {
   playlistId?: string;
   /** F5: filtro por presença de resumo. */
   temResumo?: boolean;
+  /**
+   * F5-UI: recorte por data de importação, usado pela árvore lateral
+   * ("Data de importação" → Novembro 2026). ISO 8601, intervalo semiaberto
+   * `[inicio, fim)`. Aditivo: quem não passar continua vendo tudo.
+   */
+  importadoDe?: string;
+  importadoAte?: string;
   /** F5: campo de ordenação. */
   ordenacao?: 'criado_em' | 'titulo' | 'canal' | 'duracao' | 'estado';
   /** F5: direção da ordenação. */

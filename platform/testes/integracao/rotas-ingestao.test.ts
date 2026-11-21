@@ -266,3 +266,25 @@ test('validar continua sendo local: não exige yt-dlp nem rede', async () => {
   assert.equal(corpo.dados.valido, true);
   assert.equal(corpo.dados.youtubeId, 'runTxV0pyU8');
 });
+
+/* --------------------------------------------------- resumo (leitura F5-UI) -- */
+
+test('GET /api/biblioteca/:id/resumo devolve ausência declarada, não 500', async () => {
+  const lista = (await (await fetch(`${base}/api/biblioteca?limite=1`)).json()) as {
+    dados: { itens: Array<{ id: string }> };
+  };
+  const id = lista.dados.itens[0]!.id;
+
+  const resposta = await fetch(`${base}/api/biblioteca/${id}/resumo`);
+  assert.equal(resposta.status, 200);
+  const corpo = (await resposta.json()) as {
+    dados: { estado: string; texto: string | null };
+  };
+  assert.equal(corpo.dados.estado, 'pendente');
+  assert.equal(corpo.dados.texto, null);
+});
+
+test('resumo de vídeo inexistente devolve 404', async () => {
+  const resposta = await fetch(`${base}/api/biblioteca/nao-existe/resumo`);
+  assert.equal(resposta.status, 404);
+});

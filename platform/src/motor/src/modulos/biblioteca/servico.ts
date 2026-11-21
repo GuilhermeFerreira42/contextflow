@@ -28,6 +28,7 @@ export class ServicoBiblioteca {
   }
   async consultar(entrada: {
     busca?: string; estado?: string; canalId?: string; colecaoId?: string; playlistId?: string; temResumo?: boolean;
+    importadoDe?: string; importadoAte?: string;
     ordenacao?: string; ordenacaoDirecao?: string; cursor?: string; limite?: string;
   }): Promise<PaginaBiblioteca> {
     const limite = entrada.limite === undefined ? 50 : Number(entrada.limite);
@@ -41,6 +42,7 @@ export class ServicoBiblioteca {
       ...(entrada.canalId ? {canalId:entrada.canalId} : {}), ...(entrada.colecaoId ? {colecaoId:entrada.colecaoId} : {}),
       ...(entrada.playlistId ? {playlistId:entrada.playlistId} : {}),
       ...(entrada.temResumo !== undefined ? {temResumo:entrada.temResumo} : {}),
+      ...(entrada.importadoDe ? {importadoDe:entrada.importadoDe} : {}), ...(entrada.importadoAte ? {importadoAte:entrada.importadoAte} : {}),
       ...(entrada.ordenacao ? {ordenacao:entrada.ordenacao as FiltroBiblioteca['ordenacao']} : {}),
       ...(entrada.ordenacaoDirecao ? {ordenacaoDirecao:entrada.ordenacaoDirecao as FiltroBiblioteca['ordenacaoDirecao']} : {}),
     };
