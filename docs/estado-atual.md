@@ -175,6 +175,18 @@ Também entrou o atalho `/` para a busca (o mockup anuncia e o código não
 tinha). Verificação ao final: 183/183 unitários, 62/62 E2E, nenhum erro de
 console e sem transbordo horizontal em 1440/1280/980/420 px.
 
+**Correção crítica (`d22750a`).** O app abria com o conteúdo numa tira de
+~56 px e o resto da tela vazio, sem nada clicável. `.aplicativo[data-barra=
+'recolhida']` (que vale em qualquer largura) vencia, por especificidade, a
+regra da media query de 900 px que troca o grid para uma coluna. Quem tinha
+recolhido a barra no desktop — estado salvo em `localStorage` — abria a tela
+pequena com duas colunas: gaveta fora do fluxo e conteúdo espremido. A
+media query agora inclui o seletor de atributo. Reproduzido em 900, 880, 700,
+420 e 360 px; o teste E2E novo falha no CSS antigo (`conteúdo=56px de
+390px`) e passa no atual — **63/63**. Em telas com rolagem horizontal na
+planilha, a barra de rolagem fica visível e uma sombra indica o conteúdo à
+direita.
+
 ### Sessões anteriores a 21/11/2026
 
 Base documental: ZIP `ContextFlow_Pacote_Execucao_V1 (1).zip` (18/11/2026).
