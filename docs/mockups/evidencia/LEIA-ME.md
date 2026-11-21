@@ -1,5 +1,13 @@
 # Evidência visual — F5-UI
 
+> **Ressalva da revisão `0fdf6e8`:** a descrição de volume abaixo é um relato
+> histórico, não uma propriedade comprovada de todas as imagens. A captura
+> `biblioteca-com-resumos.png` mostra seis resultados, não 1.667. Não usá-la
+> como prova desse volume. O E2E Windows desta revisão comprovou 5.004 vídeos
+> separadamente; logs e captura em
+> `Continuidade de Projeto/revisao-f5-ui-0fdf6e8/`, fora do Git. A medição com
+> 1.667 resumos não foi reproduzida nesta revisão.
+
 Capturas feitas no navegador real (Chrome headless, 1600×1000, DPR 1) contra
 uma base local com **5.000 vídeos** e **1.667 resumos**. Não são montagens nem
 recortes do mockup: é a tela rodando.

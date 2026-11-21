@@ -35,8 +35,8 @@ Continuidade de Projeto/  → materiais operacionais FORA do Git
 > **Sobre os caminhos neste documento:** onde aparecer `/home/user/...`, leia como
 > o caminho da **máquina onde você está trabalhando**. Aquele prefixo é do
 > ambiente Linux onde o projeto foi desenvolvido; no Windows do proprietário o
-> projeto está em `C:\Users\Usuario\Desktop\contextflow2\` e a pasta
-> `Continuidade de Projeto` fica **ao lado** dele, em `Desktop`. O que importa é
+> projeto está em `C:\Users\Usuario\Desktop\projeto\contextflow2\` e a pasta
+> `Continuidade de Projeto` fica **ao lado** dele, em `Desktop/projeto`. O que importa é
 > a **relação** entre as pastas, não o prefixo.
 
 ## Ordem de leitura obrigatória

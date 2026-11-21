@@ -21,7 +21,51 @@ que a F6 **não** fosse iniciada nesta etapa.
 | **F5-UI** — reformulação | **implementada, aguardando homologação** | `9e7ce02`, `3db2e48`, `909843a`, `6d571c3`, `0b9a9bd`, `978401d` | **57/57 E2E** |
 | F6 — IA para resumos | especificada, **não implementada** | `d9ef6a6` (spec) | — |
 
-### Números desta máquina (Linux, Node v22)
+### Revisão local — Windows, base `0fdf6e8`
+
+Repositório conferido em `Desktop/projeto/contextflow2`, branch `main`.
+Revisão documental e regressão executadas após a reformulação; nenhum código
+do produto ou layout foi alterado nesta revisão. F6 permanece sem implementação.
+
+| Comando executado | Resultado real (Node v22.12.0, Windows) |
+|---|---|
+| `npm install` | saída 0; dependências atualizadas, 10 pacotes auditados, zero vulnerabilidades |
+| `npm test` | saída 0; 183 testes: 177 aprovados, 6 ignorados, zero falhas |
+| `npm run test:e2e` | saída 0; 57/57 cenários aprovados em navegador real |
+| `npm run verificar` | saída 0; nove verificações OK, `TUDO OK` |
+| `npm run build` | saída 0; inclui `npm run typecheck`, sem erros |
+
+Os seis testes ignorados usam scripts de shell/shebang incompatíveis com Windows;
+não são seis aprovações. Volume exercitado no E2E: 5.004 vídeos, 23 linhas no DOM;
+120 quadros com mediana 16,7 ms, p95 16,8 ms e máximo de 27 linhas.
+Dados descartáveis em `platform/testes/.tmp`, sem uso do banco pessoal.
+
+Evidências externas: `../Continuidade de Projeto/revisao-f5-ui-0fdf6e8/`
+contém os cinco logs completos e capturas geradas pela suíte. São provas da
+revisão indicada, não de futuras alterações. Importações contra YouTube real
+**não executadas nesta revisão**: a regressão usa processos/fixtures controlados;
+a prova anterior da F3 não foi repetida. Homologações humanas continuam pendentes.
+
+**Divergências encontradas na retomada:**
+- `LEIA-ME.md` avulso, não versionado, aponta para `~/contextflow/`, caminho
+  inexistente nesta máquina. Não seguir esse redirecionamento nem alterar o
+  original Python em `Desktop/contextflow`. O arquivo foi preservado.
+- A pasta de continuidade só continha evidências anteriores à F5-UI; a revisão
+  acima e o índice externo agora identificam a base atual.
+- O escopo canônico ainda enumera quatro telas e banco/ORM a definir; a SPEC
+  F5-UI e a implementação usam três telas, leitura integrada e SQLite já decidido.
+  Divergência registrada, sem renegociar nem reescrever escopo nesta revisão.
+- A descrição antiga das capturas em `docs/mockups/evidencia/` afirma 5.000
+  vídeos e 1.667 resumos, mas `biblioteca-com-resumos.png` exibe seis resultados.
+  Essa captura não comprova o volume anunciado. O volume foi comprovado
+  separadamente no E2E desta revisão; as métricas históricas de 1.667 resumos
+  não foram reproduzidas.
+
+Próxima ação: reconciliar os pontos documentais de produto com o proprietário e
+homologar a F5-UI. F6 continua bloqueada pelo limite registrado nesta etapa;
+não interpretar a sequência do plano mestre como nova autorização.
+
+### Registro anterior — Linux, Node v22
 
 ```
 npm test          183/183
@@ -32,8 +76,8 @@ npm run typecheck  0 erros
 npm run build      OK
 ```
 
-Os números do Windows do proprietário constam no histórico e são menores
-(157 testes, 26 cenários) porque seis testes de shell são pulados lá.
+Os antigos 157 testes e 26 cenários do Windows correspondem à F4, não à
+suíte atual. A contagem Windows desta revisão está registrada acima.
 
 ### O que a F5-UI mudou
 
@@ -102,13 +146,14 @@ Reformulação centrada na Biblioteca, a partir dos dois mockups do proprietári
 | `npm run dev` | servidor de desenvolvimento |
 | `npm run build` | typecheck + `dist` |
 | `npm start` | execução do build |
-| `npm test` | unidade + integração (182) |
-| `npm run test:e2e` | navegador real via CDP (56) |
+| `npm test` | unidade + integração (183; 6 ignorados no Windows) |
+| `npm run test:e2e` | navegador real via CDP (57) |
 | `npm run verificar` | fumaça de endpoints e estáticos |
 | `npm run typecheck` | só tipos |
 
-`CONTEXTFLOW_PORTA`, `CONTEXTFLOW_HOST`, `CONTEXTFLOW_PASTA_DADOS` e
-`CONTEXTFLOW_YTDLP` controlam o motor. Ver `docs/02-arquitetura.md`.
+`CONTEXTFLOW_PORTA`, `CONTEXTFLOW_HOST`, `CONTEXTFLOW_DADOS` e
+`CONTEXTFLOW_YTDLP` controlam o motor. Ver `docs/03-arquitetura-e-contratos.md`
+e `platform/src/motor/src/nucleo/configuracao.ts`.
 
 ## Histórico
 

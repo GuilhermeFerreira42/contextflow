@@ -68,9 +68,11 @@ apareceu na implementação.
 
 ### Resumo na linha
 
-A rota de lista devolve `temResumo` (booleano), não o texto. Para evitar 500
-requisições, `calcularPrevias()` busca os resumos **em lote**, só dos itens com
-`temResumo` verdadeiro e só até 60 por vez. O texto fica em memória na sessão.
+A rota de lista devolve `temResumo` (booleano), não o texto.
+`calcularPrevias()` seleciona até 60 itens carregados com `temResumo` verdadeiro
+e sem prévia em memória, fazendo **uma requisição por vídeo**, em paralelo.
+Não existe endpoint de lote nem restrição estrita à janela visível nessa função.
+O texto fica em memória na sessão.
 
 ## Painel de leitura
 

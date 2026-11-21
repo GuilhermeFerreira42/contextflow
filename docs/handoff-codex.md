@@ -1,5 +1,12 @@
 # Handoff — transferência do ContextFlow V1 para o Codex
 
+> **Retomada vigente:** o texto abaixo é histórico da transferência inicial.
+> F4, F5 e F5-UI já foram implementadas; não repetir a tarefa inicial como se
+> estivessem ausentes. Começar pelo estado e pela revisão Windows da base
+> `0fdf6e8` em `docs/estado-atual.md`. F5-UI aguarda homologação humana e F6
+> não deve ser iniciada nesta etapa. A pasta operacional é irmã do repositório,
+> atualmente em `Desktop/projeto/Continuidade de Projeto`.
+
 > **Atualização de 19/11/2026:** este é o handoff original, já executado nesta
 > máquina. F3 corrigida em `c6b7db5`: 120 testes aprovados, 6 skips Windows,
 > 17 E2E, build e fumaça OK; três vídeos reais importados. HTTP 429 na tradução
