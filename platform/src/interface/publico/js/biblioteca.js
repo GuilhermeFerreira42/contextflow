@@ -61,7 +61,9 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
   let intervaloData = null; // recorte da árvore "Data de importação"
   const chaves = new Map();
   let linhasAtuais = new Map();
-  const TOTAL_COLUNAS = 7; // checkbox + vídeo + 5 colunas configuráveis
+  // Colspan da linha de mensagem ("carregando") é o número REAL de colunas do
+  // cabeçalho: um valor fixo mente se o HTML for de outra versão.
+  const totalColunas = () => tabela.tHead?.rows[0]?.cells.length ?? 7;
   const espacoSuperior = espaco(0);
   const espacoInferior = espaco(0);
 
@@ -414,7 +416,18 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
       video.temResumo ? selo('pronto', 'Pronto') : selo('sem', 'Sem resumo'),
     );
 
-    tr.append(tdCanal, tdDuracao, tdAdicionado, tdResumo, tdResumoEstado);
+    // Cada célula é associada à sua coluna; a ordem final vem do cabeçalho.
+    const celulas = {
+      canal: tdCanal,
+      duracao: tdDuracao,
+      adicionado: tdAdicionado,
+      resumo: tdResumo,
+      'resumo-estado': tdResumoEstado,
+    };
+    for (const coluna of colunasDoCabecalho()) {
+      const celula = celulas[coluna];
+      if (celula) tr.append(celula);
+    }
 
     if (selecionados.has(video.id)) tr.classList.add('selecionada');
     return tr;
@@ -432,7 +445,7 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
     tr.dataset.espacador = '';
     tr.setAttribute('aria-hidden', 'true');
     const td = document.createElement('td');
-    td.colSpan = TOTAL_COLUNAS;
+    td.colSpan = totalColunas();
     td.style.height = `${px}px`;
     td.style.padding = '0';
     td.style.border = '0';
@@ -684,6 +697,23 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
     return ['filtro-estado', 'filtro-canal', 'filtro-playlist', 'filtro-colecao'].some(id => $('#' + id).value)
       || $('#filtro-resumo').checked
       || intervaloData !== null;
+  }
+
+  /**
+   * Colunas que a LINHA deve montar, na ordem, lidas do próprio cabeçalho.
+   *
+   * Escrever aqui uma lista fixa criava um modo de falha feio: com o HTML de
+   * outra versão (cache, deploy pela metade), o `<thead>` tinha 7 colunas e a
+   * linha montava 8 células — a última caía fora do cabeçalho e aparecia como
+   * uma segunda coluna "Pronto" sem título. O cabeçalho é a fonte única.
+   */
+  function colunasDoCabecalho() {
+    const colunasHtml = [...tabela.tHead?.rows[0]?.cells ?? []]
+      .map(celula => celula.dataset.coluna)
+      .filter(Boolean);
+    // Sem `th` (HTML antigo sem data-coluna), cai na lista conhecida: melhor
+    // uma tabela correta do que nenhuma.
+    return colunasHtml.length ? colunasHtml : ['titulo', 'canal', 'duracao', 'adicionado', 'resumo', 'resumo-estado'];
   }
 
   /** Recorte aplicado por busca ou filtro — é o que o botão de limpar desfaz. */
