@@ -66,7 +66,7 @@ export async function exercitarBiblioteca({ app, base, avaliar, esperar, S, regi
   await avaliar(`document.querySelector('#biblioteca-viewport').scrollTop=0`);
   assert.ok(await esperar(`!!document.querySelector('tr[data-id="massa-00000"]')`));
   await avaliar(`document.querySelector('tr[data-id="massa-00000"] input').click()`);
-  registrar('F5: seleção individual habilita ações com contador real',await avaliar(`document.querySelector('#contador-selecao').textContent.startsWith('1 selecionados')&&!document.querySelector('#remover-selecao').disabled`));
+  registrar('F5: seleção individual habilita ações com contador real',await avaliar(`document.querySelector('#contador-selecao').textContent==='1 selecionado'&&!document.querySelector('#remover-selecao').disabled`));
   await avaliar(`document.querySelector('tr[data-id="massa-00002"] input').dispatchEvent(new MouseEvent('click',{bubbles:true,shiftKey:true}))`);
   registrar('F5: shift seleciona o intervalo de três identidades',await avaliar(`document.querySelector('#contador-selecao').textContent.startsWith('3 selecionados')`));
 
@@ -132,7 +132,7 @@ export async function exercitarBiblioteca({ app, base, avaliar, esperar, S, regi
   const desc=await esperar(`document.querySelector('th[data-ordenacao="titulo"]').getAttribute('aria-sort')==='descending'`);
   await avaliar(`document.querySelector('#corpo-biblioteca tr[data-id] input').click()`);
   await S('Page.navigate',{url:base});
-  const persistiu=await esperar(`document.querySelector('th[data-ordenacao="titulo"]').getAttribute('aria-sort')==='descending'&&document.querySelector('#contador-selecao').textContent.startsWith('0 selecionados')`);
+  const persistiu=await esperar(`document.querySelector('th[data-ordenacao="titulo"]').getAttribute('aria-sort')==='descending'&&document.querySelector('#contador-selecao').textContent==='Nada selecionado'`);
   registrar('F5: ordenação persiste na sessão e seleção é efêmera ao recarregar',desc&&persistiu);
   // ------------------------------------------------ F5-UI: novos recursos --
 
@@ -179,13 +179,80 @@ export async function exercitarBiblioteca({ app, base, avaliar, esperar, S, regi
   await avaliar(`document.querySelector('#limpar-filtros').click()`);
   await esperar(`document.querySelector('#biblioteca-viewport').dataset.total==='5003'`);
 
-  // Recolher a barra lateral
-  const larguraAntes=await avaliar(`document.querySelector('.barra-lateral').getBoundingClientRect().width`);
+  // ------------------------------------------- barra lateral: ida e volta --
+  //
+  // O teste anterior só media a largura depois de recolher — passava mesmo com
+  // o botão de alternância inacessível, que é justamente o defeito que o
+  // proprietário relatou ("recolhe, mas não volta"). Aqui cada passo pergunta
+  // ao navegador quem está naquele pixel: se outro elemento cobre o botão, o
+  // ciclo reprova. Também confere que nada vaza da coluna recolhida e que a
+  // área de conteúdo acompanha a largura.
+  const medirBarra = `(() => {
+    const app = document.querySelector('.aplicativo');
+    const botao = document.querySelector('#recolher-barra');
+    const barra = document.querySelector('.barra-lateral');
+    const conteudo = document.querySelector('.conteudo');
+    const rb = botao.getBoundingClientRect();
+    const noPixel = document.elementFromPoint(rb.x + rb.width / 2, rb.y + rb.height / 2);
+    const rbarra = barra.getBoundingClientRect();
+    const transbordo = [...barra.querySelectorAll('*')].filter(el => {
+      const t = el.getBoundingClientRect();
+      return t.width > 0 && (t.right > rbarra.right + 0.5 || t.left < rbarra.left - 0.5);
+    }).length;
+    return {
+      estado: app.dataset.barra,
+      largura: Math.round(rbarra.width),
+      xConteudo: Math.round(conteudo.getBoundingClientRect().x),
+      botaoClicavel: !!(noPixel && noPixel.closest('#recolher-barra')),
+      rotulo: botao.getAttribute('aria-label'),
+      transbordo,
+    };
+  })()`;
+  const esperarBarra = ms => dormir(ms);
+
+  const ciclos=[];
+  let barraOk=true;
+  for (let volta=1; volta<=3; volta++){
+    await avaliar(`document.querySelector('#recolher-barra').click()`);
+    await esperarBarra(320);
+    const recolhida=await avaliar(medirBarra);
+    await avaliar(`document.querySelector('#recolher-barra').click()`);
+    await esperarBarra(320);
+    const expandida=await avaliar(medirBarra);
+    ciclos.push({volta,recolhida,expandida});
+    // Recolhida: mais estreita, botão clicável (agora com rótulo de expandir),
+    // nada vazando e o conteúdo começando junto da barra.
+    const recolhidaOk=recolhida.estado==='recolhida'
+      && recolhida.largura<expandida.largura
+      && recolhida.botaoClicavel
+      && recolhida.rotulo==='Expandir barra lateral'
+      && recolhida.transbordo===0
+      && recolhida.xConteudo===recolhida.largura;
+    const expandidaOk=expandida.estado==='expandida'
+      && expandida.botaoClicavel
+      && expandida.rotulo==='Recolher barra lateral'
+      && expandida.transbordo===0
+      && expandida.xConteudo===expandida.largura;
+    if (!recolhidaOk || !expandidaOk) barraOk=false;
+  }
+  const primeira=ciclos[0];
+  registrar('F5-UI: barra lateral recolhe e volta, com o botão acessível nos dois estados',barraOk,
+    `3 ciclos · ${primeira.recolhida.largura}px <-> ${primeira.expandida.largura}px · `+
+    `botão clicável recolhida=${primeira.recolhida.botaoClicavel} expandida=${primeira.expandida.botaoClicavel} · `+
+    `transbordo=${primeira.recolhida.transbordo}/${primeira.expandida.transbordo} · `+
+    `conteúdo x=${primeira.recolhida.xConteudo}/${primeira.expandida.xConteudo}`);
+  // O estado sobrevive a um recarregamento: era gravado no localStorage.
   await avaliar(`document.querySelector('#recolher-barra').click()`);
-  await dormir(400);
-  const larguraDepois=await avaliar(`document.querySelector('.barra-lateral').getBoundingClientRect().width`);
-  registrar('F5-UI: barra lateral recolhe liberando espaço',larguraAntes>larguraDepois,`${Math.round(larguraAntes)}px -> ${Math.round(larguraDepois)}px`);
+  await esperarBarra(320);
+  await S('Page.reload');
+  await esperar(`document.querySelector('.aplicativo')?.dataset.barra==='recolhida'`,10000);
+  const aposRecarregar=await avaliar(medirBarra);
+  registrar('F5-UI: barra recolhida sobrevive ao recarregamento e continua expansível',
+    aposRecarregar.estado==='recolhida'&&aposRecarregar.botaoClicavel,
+    `estado=${aposRecarregar.estado} · clicável=${aposRecarregar.botaoClicavel}`);
   await avaliar(`document.querySelector('#recolher-barra').click()`);
+  await esperarBarra(320);
+  await esperar(`document.querySelector('#biblioteca-viewport')?.dataset.total!=='0'`);
 
   // O resumo longo não estica a linha: abre o painel. A altura fixa é o que
   // sustenta a virtualização — se a linha crescer, a lista volta a pular.
@@ -216,4 +283,68 @@ export async function exercitarBiblioteca({ app, base, avaliar, esperar, S, regi
 
   const captura=await S('Page.captureScreenshot',{format:'png'});
   writeFileSync(join(raiz,'testes','.tmp','interface-biblioteca-f5.png'),Buffer.from(captura.data,'base64'));
+
+  // ---------------------------------------------- gaveta de navegação (mobile) --
+  //
+  // Abaixo de 900 px a barra sai do fluxo e vira gaveta. O CSS que a esconde
+  // existia desde a reformulação, mas sem controle para reabrir: no celular a
+  // navegação era inalcançável e o `grid` ainda reservava a coluna de 256 px.
+  await S('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+  await S('Page.navigate',{url:base});
+  await esperar(`document.querySelector('#biblioteca-viewport')?.dataset.total==='5003'`,15000);
+  await dormir(500);
+
+  const medirMobile=`(() => {
+    const app=document.querySelector('.aplicativo');
+    const barra=document.querySelector('.barra-lateral').getBoundingClientRect();
+    const conteudo=document.querySelector('.conteudo').getBoundingClientRect();
+    const menu=document.querySelector('#abrir-menu-mobile');
+    return {
+      aberta: app.dataset.barraMobile==='aberta',
+      barraLeft: Math.round(barra.left),
+      conteudoLargura: Math.round(conteudo.width),
+      menuVisivel: getComputedStyle(menu).display!=='none',
+      veuVisivel: !document.querySelector('#veu-mobile').hidden,
+      rolagemPagina: document.documentElement.scrollWidth-document.documentElement.clientWidth,
+    };
+  })()`;
+  const inicio=await avaliar(medirMobile);
+  registrar('Mobile: barra vira gaveta fechada e o conteúdo ocupa a tela',
+    !inicio.aberta&&inicio.barraLeft<=0&&inicio.menuVisivel&&inicio.rolagemPagina===0,
+    `barra.left=${inicio.barraLeft} · menu=${inicio.menuVisivel} · conteúdo=${inicio.conteudoLargura}px · rolagemH=${inicio.rolagemPagina}`);
+
+  await avaliar(`document.querySelector('#abrir-menu-mobile').click()`);
+  await dormir(400);
+  const gaveta=await avaliar(medirMobile);
+  const focoNaGaveta=await avaliar(`!!document.activeElement?.closest('.barra-lateral')`);
+  registrar('Mobile: menu abre a gaveta com véu e foco na navegação',
+    gaveta.aberta&&gaveta.barraLeft>=-1&&gaveta.veuVisivel&&focoNaGaveta,
+    `aberta=${gaveta.aberta} · left=${gaveta.barraLeft} · véu=${gaveta.veuVisivel} · foco=${focoNaGaveta}`);
+
+  await avaliar(`document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`);
+  await dormir(400);
+  const fechada=await avaliar(medirMobile);
+  const focoVoltou=await avaliar(`document.activeElement?.id==='abrir-menu-mobile'`);
+  registrar('Mobile: ESC fecha a gaveta e devolve o foco ao menu',
+    !fechada.aberta&&!fechada.veuVisivel&&focoVoltou,
+    `aberta=${fechada.aberta} · véu=${fechada.veuVisivel} · foco=${focoVoltou}`);
+
+  await avaliar(`document.querySelector('#abrir-menu-mobile').click()`);
+  await dormir(300);
+  await avaliar(`[...document.querySelectorAll('.nav-item')].find(b=>b.dataset.aba==='importacoes').click()`);
+  await dormir(600);
+  const navegou=await avaliar(`(() => {
+    const app=document.querySelector('.aplicativo');
+    const tela=document.querySelector('[data-tela-nome="importacoes"]');
+    return app.dataset.barraMobile!=='aberta' && tela?.offsetParent!==null;
+  })()`);
+  registrar('Mobile: escolher uma tela fecha a gaveta e troca o conteúdo',navegou);
+
+  // volta ao desktop para não contaminar capturas
+  await S('Emulation.clearDeviceMetricsOverride');
+  await S('Page.navigate',{url:base});
+  await esperar(`document.querySelector('#biblioteca-viewport')?.dataset.total==='5003'`,15000);
+  await dormir(600);
+  const capturaFinal=await S('Page.captureScreenshot',{format:'png'});
+  writeFileSync(join(raiz,'testes','.tmp','interface-biblioteca-f5.png'),Buffer.from(capturaFinal.data,'base64'));
 }

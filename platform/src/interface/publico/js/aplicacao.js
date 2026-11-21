@@ -436,7 +436,18 @@ async function carregarTrabalhos() {
       const linha = lista.querySelector(`.trabalho[data-id="${t.id}"]`);
       if (lista.children[i] !== linha) lista.insertBefore(linha, lista.children[i] ?? null);
     });
-    if (!itens.length) lista.textContent = 'Nenhuma importação na fila.';
+    if (!itens.length) {
+      // Estado vazio é convite para agir, não um aviso. Antes era uma frase
+      // solta no canto de uma área em branco.
+      const vazio = document.createElement('div');
+      vazio.className = 'estado-vazio';
+      const titulo = document.createElement('strong');
+      titulo.textContent = 'Nenhuma importação na fila';
+      const texto = document.createElement('span');
+      texto.textContent = 'Cole uma URL acima para importar um vídeo ou uma playlist. O progresso aparece aqui.';
+      vazio.append(titulo, texto);
+      lista.replaceChildren(vazio);
+    }
 
     for (const id of [...estado.pendentes]) {
       const t = itens.find(t => t.id === id) ?? await api(`/api/trabalhos/${id}`);
@@ -478,7 +489,11 @@ async function carregarConfiguracoes() {
       const dt = document.createElement('dt');
       dt.textContent = ROTULOS_CONFIG[chave] ?? chave;
       const dd = document.createElement('dd');
-      dd.textContent = valor === null || valor === '' ? 'Não definido' : String(valor);
+      const indefinido = valor === null || valor === '';
+      dd.textContent = indefinido ? 'Não definido' : String(valor);
+      // Valor ausente e valor presente não podem ter o mesmo peso visual:
+      // "Não definido" em texto normal parece um dado configurado.
+      if (indefinido) dd.classList.add('config-ausente');
       linhas.push(dt, dd);
     }
     lista.replaceChildren(...linhas);
@@ -537,6 +552,50 @@ function ligarEventos() {
   });
 
   window.addEventListener('hashchange', () => mostrarTela(telaDaUrl()));
+
+  // ------------------------------------------------- gaveta de navegação --
+  //
+  // Abaixo de 900 px a barra lateral sai do fluxo e vira gaveta. Antes existia
+  // só o CSS que a escondia com `translateX(-100%)` — nenhum controle para
+  // reabri-la, então a navegação era inalcançável no mobile.
+  const app = $('.aplicativo');
+  const menuMobile = $('#abrir-menu-mobile');
+  const veu = $('#veu-mobile');
+
+  function abrirGaveta() {
+    app.dataset.barraMobile = 'aberta';
+    menuMobile.setAttribute('aria-expanded', 'true');
+    menuMobile.setAttribute('aria-label', 'Fechar navegação');
+    veu.hidden = false;
+    // o foco vai para o primeiro item de navegação, não para o topo da página
+    $('.nav-item')?.focus();
+  }
+
+  function fecharGaveta({ devolverFoco = true } = {}) {
+    if (app.dataset.barraMobile !== 'aberta') return;
+    delete app.dataset.barraMobile;
+    menuMobile.setAttribute('aria-expanded', 'false');
+    menuMobile.setAttribute('aria-label', 'Abrir navegação');
+    veu.hidden = true;
+    if (devolverFoco) menuMobile.focus();
+  }
+
+  menuMobile.addEventListener('click', () => {
+    if (app.dataset.barraMobile === 'aberta') fecharGaveta();
+    else abrirGaveta();
+  });
+  veu.addEventListener('click', () => fecharGaveta());
+  document.addEventListener('keydown', (evento) => {
+    if (evento.key === 'Escape' && app.dataset.barraMobile === 'aberta') fecharGaveta();
+  });
+  // Escolher uma tela fecha a gaveta: o destino já está na frente.
+  $$('.nav-item').forEach((botao) => {
+    botao.addEventListener('click', () => fecharGaveta({ devolverFoco: false }));
+  });
+  // Girar o aparelho/redimensionar para o desktop não pode deixar o véu preso.
+  window.addEventListener('resize', () => {
+    if (window.innerWidth > 900) fecharGaveta({ devolverFoco: false });
+  });
 }
 
 async function iniciar() {

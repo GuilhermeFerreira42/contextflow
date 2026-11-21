@@ -18,22 +18,62 @@ que a F6 **não** fosse iniciada nesta etapa.
 | F3 — ingestão real | corrigida no Windows, **aceite humano pendente** | `c6b7db5` | teste real com YouTube |
 | F4 — fila persistente | implementada e testada | `5a13b3c` | SIGKILL, lease, fencing |
 | F5 — Biblioteca | implementada e testada | `7b58f32` | virtualização, filtros, lote, coleções |
-| **F5-UI** — reformulação | **implementada, aguardando homologação** | `9e7ce02`, `3db2e48`, `909843a`, `6d571c3`, `0b9a9bd`, `978401d` | **57/57 E2E** |
+| **F5-UI** — reformulação | **implementada, aguardando homologação** | `9e7ce02`, `3db2e48`, `909843a`, `6d571c3`, `0b9a9bd`, `978401d` | — |
+| **F5-QA** — revisão de qualidade | **implementada, aguardando homologação** | `F5-QA` (ver histórico) | **62/62 E2E** |
 | F6 — IA para resumos | especificada, **não implementada** | `d9ef6a6` (spec) | — |
 
 ### Números desta máquina (Linux, Node v22)
 
 ```
 npm test          183/183
-npm run test:e2e   57/57
+npm run test:e2e   62/62
 npm run verificar TUDO OK
 npm run build     OK
 npm run typecheck  0 erros
-npm run build      OK
 ```
 
 Os números do Windows do proprietário constam no histórico e são menores
 (157 testes, 26 cenários) porque seis testes de shell são pulados lá.
+
+### O que a F5-QA mudou
+
+Revisão de qualidade da interface com duas skills (`docs/skills/README.md`
+registra como cada uma foi usada e o que não pôde rodar).
+
+**O defeito relatado — barra recolhe e não volta.** A coluna recolhida tem
+56 px; a marca somava 87 px de conteúdo e o `.barra-lateral` tem
+`overflow: hidden`. O botão de alternância ficava 17 px fora do clipe:
+invisível e não clicável. `document.elementFromPoint` no centro dele devolvia
+`.conteudo`. Correção: rótulos viraram elementos que o CSS alcança, a marca
+empilha, e o botão (28×28) cabe nos 56 px. O teste de regressão pergunta ao
+navegador quem está naquele pixel em três ciclos e **reprova se não for o
+botão** — medir largura não pegava isso.
+
+**Defeitos que a inspeção no navegador encontrou além do relatado:**
+
+| Defeito | Efeito | Correção |
+|---|---|---|
+| Sem botão de menu abaixo de 900 px | navegação inalcançável no celular; o `grid` ainda reservava 256 px e deixava faixa vazia | gaveta com véu, foco, ESC e fechamento ao navegar |
+| Miniatura quebrada | ícone de imagem partida na linha e no painel | fallback para preenchimento, como quando nunca houve miniatura |
+| Linha real 127 px com CSS dizendo 104 | virtualização posicionava errado; rolagem pulava | altura derivada do clamp + botão; hoje 108 = 108 |
+| `max-height` em `td` | ignorado pelo algoritmo de tabela; só escondia o sintoma | removido; o teto é o clamp |
+| Texto "Biblio…" vazando da coluna recolhida | barra suja | rótulos envelopados e escondidos |
+| Versão e placeholder em 2,44:1 | abaixo do mínimo legível | cor trocada (6,06:1) |
+| "Trabalhos" colado a "Fila atualizada" | sem hierarquia | espaço + peso de subtítulo |
+| Fila vazia sem direção | área em branco | estado vazio que ensina o próximo passo |
+| Barra de lote em 2 linhas desalinhadas | planilha 40 px mais baixa | uma linha; rótulos e paddings enxutos |
+| Miniatura 96 px em linha compacta de 64 | transbordo | 76 px no compacto |
+| `font-size` duplicado no `.diagnostico` | lixo de manutenção | removido |
+
+**Preservado por decisão de produto:** paleta, tabela de alta densidade,
+colunas em caixa alta, painel lateral para o resumo (nunca linha expansível),
+azul de destaque. Nada de redesign — só refinamento.
+
+**Testes:** 183/183 e 62/62 (4 cenários novos de mobile + o ciclo da barra).
+Todos os controles das três telas foram exercitados no navegador real via
+Agent Browser: busca, ordenação, seleção, filtros, colunas, densidade, árvore,
+painéis sobrepostos, janela Adicionar link (inclusive recusa de URL fora do
+YouTube e devolução de foco) e navegação mobile.
 
 ### O que a F5-UI mudou
 

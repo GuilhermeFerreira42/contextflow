@@ -43,6 +43,34 @@ platform/src/interface/publico/
 A antiga tela `leitura` foi absorvida pela Biblioteca. `#leitura` na URL
 redireciona para `#biblioteca` para não quebrar link salvo; não existe aba.
 
+## Barra lateral: dois modos, uma regra
+
+A barra tem **dois comportamentos**, e cada um tem sua razão:
+
+| Largura da janela | Comportamento | Quem controla |
+|---|---|---|
+| > 900 px | fixa no fluxo; botão `#recolher-barra` a leva a 56 px e de volta | `data-barra` no `.aplicativo` |
+| ≤ 900 px | fora do fluxo, vira gaveta; botão `#abrir-menu-mobile` a abre | `data-barra-mobile` |
+
+**A regra que não pode ser quebrada:** tudo que mora dentro da coluna de 56 px
+precisa caber em 56 px. Foi a violação dessa regra que criou o defeito
+histórico — a marca somava 87 px de conteúdo numa coluna de 56 com
+`overflow: hidden`, então o botão de alternância ficava 17 px fora do clipe e
+o recolher era uma passagem só de ida. Hoje:
+
+- cada nav tem um `<span class="nav-rotulo">` que pode ser escondido (antes o
+  texto era nó solto e nenhum CSS o alcançava);
+- na recolhida, `.marca` empilha símbolo e botão em vez de usar
+  `margin-left: auto`, que empurrava o botão para fora;
+- `.botao-recolher` é 28×28 e está sempre dentro dos 56 px.
+
+O E2E pergunta ao navegador **quem está naquele pixel**
+(`document.elementFromPoint`) em três ciclos seguidos e reprova se o botão não
+for o elemento do topo — largura sozinha não pegaria o defeito.
+
+Abaixo de 900 px a tabela mantém uma largura mínima por coluna e rola **dentro
+do quadro virtualizado**; a página nunca rola na horizontal.
+
 ## Virtualização: a decisão mais importante
 
 A Biblioteca desenha **apenas a janela visível** de linhas, com dois

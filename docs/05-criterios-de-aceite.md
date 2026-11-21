@@ -64,14 +64,37 @@ que dependem de homologação humana por natureza.
 | U7 | Fechar o painel preserva busca, filtros e posição | ✅ |
 | U8 | Árvore lista canais, playlists, datas e coleções | ✅ |
 | U9 | Nó da árvore filtra a Biblioteca | ✅ |
-| U10 | Barra lateral recolhe liberando espaço | ✅ |
+| U10 | Barra lateral recolhe liberando espaço | ✅ — **corrigida na F5-QA**: recolher era passagem só de ida (botão saía do clipe) |
 | U11 | "Adicionar link" valida a URL antes de chamar o motor | ✅ |
 | U12 | Importação feita pela janela aparece em Importações | 🟨 depende de yt-dlp alcançar o YouTube (bloqueado neste ambiente) |
 | U13 | Importações e Configurações mantêm todos os recursos | ✅ |
 | U14 | Seleção, ações em lote e coleções seguem funcionando | ✅ |
-| U15 | Sem regressão: `npm test` 182/182 e E2E 56/56 | ✅ |
+| U15 | Sem regressão: `npm test` e E2E | ✅ — 183/183 e 62/62 na F5-QA |
 | U16 | Sem erro de script no console em nenhuma tela | ✅ |
 | — | **Fidelidade visual aos mockups** | 🟨 **homologação humana pendente** |
+
+### Critérios da F5-QA (revisão de qualidade)
+
+Acrescentados na revisão. Todos verificados no navegador real, não por leitura
+de código.
+
+| # | Critério | Situação |
+|---|---|---|
+| Q1 | A barra lateral recolhe e expande repetidamente (3 ciclos medidos) | ✅ |
+| Q2 | O botão de alternância é clicável nos dois estados — provado com `elementFromPoint` | ✅ |
+| Q3 | Nada vaza da coluna de 56 px (contagem de elementos fora do retângulo = 0) | ✅ |
+| Q4 | O conteúdo acompanha a barra: `conteudo.x === larguraDaBarra` nos dois estados | ✅ |
+| Q5 | A preferência de barra sobrevive ao recarregamento e continua expansível | ✅ |
+| Q6 | Transição sem sobreposição (12 amostras durante os 200 ms) | ✅ |
+| Q7 | Abaixo de 900 px existe gaveta: abre, tem véu, fecha com ESC, devolve foco | ✅ |
+| Q8 | Página nunca rola na horizontal; a tabela rola dentro do quadro | ✅ |
+| Q9 | Texto legível: nenhum par abaixo de 4,5:1 (exceto artefato medido à parte em 7,95:1) | ✅ |
+| Q10 | Foco visível em todos os controles (outline 2 px) | ✅ |
+| Q11 | Altura declarada da linha == altura real (108 px nos dois casos) | ✅ |
+| Q12 | Miniatura quebrada vira preenchimento, nunca ícone de imagem partida | ✅ |
+| Q13 | Painéis sobrepostos não saem da tela em 1600, 1024 e 390 px | ✅ |
+| Q14 | Janela Adicionar link: abre, recusa URL fora do YouTube, ESC/X fecham, foco volta ao gatilho | ✅ |
+| Q15 | Estado vazio da fila orienta o próximo passo | ✅ |
 
 ### O que a F3 mudou nesta matriz
 

@@ -12,7 +12,7 @@
 
     <div class="aplicativo" data-tela="biblioteca" data-barra="expandida">
       <!-- ================================================== barra lateral -->
-      <aside class="barra-lateral" aria-label="Navegação e organização">
+      <aside class="barra-lateral" id="barra-lateral" aria-label="Navegação e organização">
         <div class="marca">
           <span class="marca-simbolo" aria-hidden="true"></span>
           <span class="marca-nome">ContextFlow</span>
@@ -28,14 +28,14 @@
         </div>
 
         <nav class="navegacao" aria-label="Telas">
-          <button class="nav-item ativo" data-aba="biblioteca" type="button">
-            <span class="nav-icone"><svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="3" y="15" width="7" height="5" rx="1.5"/><rect x="14" y="15" width="7" height="5" rx="1.5"/></svg></span> Biblioteca
+          <button class="nav-item ativo" data-aba="biblioteca" type="button" title="Biblioteca">
+            <span class="nav-icone"><svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="3" y="15" width="7" height="5" rx="1.5"/><rect x="14" y="15" width="7" height="5" rx="1.5"/></svg></span><span class="nav-rotulo">Biblioteca</span>
           </button>
-          <button class="nav-item" data-aba="importacoes" type="button">
-            <span class="nav-icone"><svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M4 20h16"/></svg></span> Importações
+          <button class="nav-item" data-aba="importacoes" type="button" title="Importações">
+            <span class="nav-icone"><svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M4 20h16"/></svg></span><span class="nav-rotulo">Importações</span>
           </button>
-          <button class="nav-item" data-aba="configuracoes" type="button">
-            <span class="nav-icone"><svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.9 19.3a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.7 8.9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 15 4.7a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9v.09c.02.66.4 1.26 1.03 1.56H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1.03z"/></svg></span> Configurações
+          <button class="nav-item" data-aba="configuracoes" type="button" title="Configurações">
+            <span class="nav-icone"><svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.9 19.3a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.7 8.9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 15 4.7a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9v.09c.02.66.4 1.26 1.03 1.56H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1.03z"/></svg></span><span class="nav-rotulo">Configurações</span>
           </button>
         </nav>
 
@@ -61,6 +61,12 @@
       </aside>
 
       <!-- ========================================================= conteúdo -->
+      <button type="button" class="botao-menu-mobile" id="abrir-menu-mobile"
+              aria-label="Abrir navegação" aria-expanded="false" aria-controls="barra-lateral">
+        <svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/></svg>
+      </button>
+      <div class="veu-mobile" id="veu-mobile" hidden></div>
+
       <main class="conteudo" id="conteudo">
         <!-- ---------------------------------------------------- Biblioteca -->
         <section class="tela" data-tela-nome="biblioteca">
@@ -135,12 +141,14 @@
               <button id="reimportar-selecao" type="button" class="botao-secundario" disabled>Reimportar</button>
               <button id="remover-selecao" type="button" class="botao-secundario" disabled>Remover</button>
               <select id="colecao-destino" aria-label="Coleção de destino">
-                <option value="">Escolha uma coleção</option>
+                <option value="">Coleção…</option>
               </select>
-              <button id="adicionar-colecao" type="button" class="botao-secundario" disabled>Adicionar à coleção</button>
-              <button id="desvincular-colecao" type="button" class="botao-secundario" disabled>Remover da coleção</button>
+              <button id="adicionar-colecao" type="button" class="botao-secundario" disabled>Adicionar</button>
+              <button id="desvincular-colecao" type="button" class="botao-secundario" disabled>Remover vínculo</button>
               <button id="nova-colecao" type="button" class="botao-secundario">Nova coleção</button>
             </div>
+
+            <span class="separador-acoes" aria-hidden="true"></span>
 
             <div class="ferramentas-visual">
               <button type="button" class="botao-secundario" id="abrir-colunas" aria-expanded="false">

@@ -39,11 +39,13 @@
 
   /* Altura da linha da Biblioteca — FIXA por modo para a virtualização
      continuar sendo aritmética simples (ver SPEC §4). */
-  --altura-linha-ampliado: 136px;
+  --altura-linha-ampliado: 108px;
   --altura-linha-compacto: 64px;
   --altura-linha: var(--altura-linha-ampliado);
 
   --largura-barra: 256px;
+  /* Recolhida: cabe o ícone da nav (16) + padding (10*2) + folga = 56. */
+  --largura-barra-recolhida: 56px;
   --fonte: 'Inter', 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
   --mono: 'JetBrains Mono', 'Cascadia Code', ui-monospace, 'SF Mono', Consolas, monospace;
 }
@@ -129,22 +131,45 @@ body {
   grid-template-columns: var(--largura-barra) 1fr;
   height: 100vh;
   overflow: hidden;
-  transition: grid-template-columns 0.18s ease;
+  transition: grid-template-columns 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Sidebar recolhida: só a coluna de ícones */
+/* Sidebar recolhida: só a coluna de ícones.
+ *
+ * A largura é a mesma do token `--largura-barra-recolhida`, e TUDO que mora
+ * dentro dela precisa caber em 56 px. O defeito anterior era exatamente isso:
+ * a marca somava 14+26+9+24+14 = 87 px de conteúdo numa coluna de 56 px, com
+ * `overflow: hidden` na barra — o botão de alternância ficava com 17 px fora
+ * do clipe e não podia ser clicado. Recolher era uma passagem só de ida. */
 .aplicativo[data-barra='recolhida'] {
-  grid-template-columns: 56px 1fr;
+  grid-template-columns: var(--largura-barra-recolhida) 1fr;
 }
 .aplicativo[data-barra='recolhida'] .marca-nome,
-.aplicativo[data-barra='recolhida'] .nav-item span:not(.nav-icone),
+.aplicativo[data-barra='recolhida'] .nav-rotulo,
 .aplicativo[data-barra='recolhida'] .arvore,
-.aplicativo[data-barra='recolhida'] .rodape-lateral .versao {
+.aplicativo[data-barra='recolhida'] .rodape-lateral .versao,
+.aplicativo[data-barra='recolhida'] .rodape-lateral .status-texto {
   display: none;
 }
 .aplicativo[data-barra='recolhida'] .nav-item {
   justify-content: center;
+  gap: 0;
   padding: 10px 0;
+}
+.aplicativo[data-barra='recolhida'] .navegacao {
+  padding-left: 10px;
+  padding-right: 10px;
+}
+/* Na recolhida a marca empilha: símbolo em cima, botão embaixo, ambos na
+ * coluna de um item só. Nada de `margin-left: auto` — ele empurrava o botão
+ * para fora. */
+.aplicativo[data-barra='recolhida'] .marca {
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0 10px;
+}
+.aplicativo[data-barra='recolhida'] .botao-recolher {
+  margin-left: 0;
 }
 
 
@@ -213,17 +238,20 @@ body {
   border: 0;
   color: var(--texto-fraco);
   cursor: pointer;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   border-radius: var(--raio-pequeno);
   display: grid;
   place-items: center;
-  font-size: 13px;
   flex-shrink: 0;
+  transition: background 0.12s, color 0.12s;
 }
 .botao-recolher:hover {
   background: var(--grafite-800);
   color: var(--texto-forte);
+}
+.botao-recolher .icone {
+  transition: transform 0.18s ease;
 }
 .aplicativo[data-barra='recolhida'] .botao-recolher .icone {
   transform: rotate(180deg);
@@ -271,6 +299,12 @@ body {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+}
+
+.nav-rotulo {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ------------------------------------------------------------ árvore */
@@ -424,7 +458,9 @@ body {
 
 .versao {
   font-size: 10.5px;
-  color: var(--grafite-500);
+  /* grafite-500 dava 2,44:1 sobre o rodapé — abaixo do mínimo legível mesmo
+   * para texto auxiliar. texto-fraco dá 6,06:1. */
+  color: var(--texto-fraco);
 }
 
 /* =============================================================== conteúdo */
@@ -510,7 +546,10 @@ body {
   font-size: 12.5px;
 }
 .campo-busca input::placeholder {
-  color: var(--grafite-500);
+  /* Placeholder também é texto: 2,44:1 não se lê. 6,06:1 sem competir com o
+   * valor digitado, que usa texto-forte. */
+  color: var(--texto-fraco);
+  opacity: 1;
 }
 .campo-busca input:focus {
   border-color: var(--azul-forte);
@@ -608,12 +647,11 @@ body {
 }
 
 .painel-titulo {
-  margin: 0 0 2px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--texto-fraco);
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--texto-forte);
 }
 
 .painel-nota {
@@ -677,12 +715,38 @@ body {
 .acoes-lote {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 5px;
   flex-wrap: wrap;
   flex: 1;
   min-width: 0;
 }
+/* Separador entre as ações de lote e as ferramentas de visualização. */
+.separador-acoes {
+  width: 1px;
+  align-self: stretch;
+  min-height: 22px;
+  background: var(--borda);
+  flex-shrink: 0;
+}
+
+/* Barra de lote: nove controles no mesmo lugar. O padding padrão de botão
+ * (8/13) fazia a fila quebrar em duas linhas desalinhadas e empurrava a
+ * planilha 40 px para baixo. Aqui o alvo continua >= 30 px de altura. */
+.acoes-lote .botao-secundario,
 .acoes-lote select {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+.acoes-lote .contador-selecao {
+  margin-right: 4px;
+  white-space: nowrap;
+  font-size: 11.5px;
+  /* Largura mínima para o texto não pular quando o número muda de 0 para 1
+   * ou 10; sem isso, a barra reflui a cada clique. */
+  min-width: 104px;
+}
+.acoes-lote select {
+  max-width: 132px;
   padding: 7px 9px;
   background: var(--grafite-850);
   border: 1px solid var(--borda);
@@ -740,6 +804,8 @@ body {
 .subtitulo {
   margin: 0;
   font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   color: var(--texto-forte);
 }
 
@@ -919,13 +985,15 @@ input[type='checkbox'] {
 .tabela-biblioteca tbody td[data-coluna='titulo'],
 .tabela-biblioteca tbody td[data-coluna='resumo'] {
   vertical-align: top;
-  padding-top: 12px;
+  padding-top: 10px;
 }
 
 .miniatura {
   position: relative;
   flex-shrink: 0;
-  width: 138px;
+  /* 96 px = 16:9 de 54 px de altura. Em 138 px a miniatura sozinha obrigava a
+   * linha a 136 px, o dobro do mockup, e a planilha perdia a densidade. */
+  width: 96px;
   aspect-ratio: 16 / 9;
   border-radius: 6px;
   overflow: hidden;
@@ -941,10 +1009,23 @@ input[type='checkbox'] {
   display: block;
 }
 .miniatura .sem-miniatura {
-  font-size: 10px;
-  color: var(--grafite-500);
-  text-align: center;
-  padding: 0 8px;
+  /* Só o símbolo de vídeo: wordmark de texto em 96 px de largura vira ruído. */
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(120% 120% at 30% 20%, rgba(76, 154, 255, 0.10), transparent 60%),
+    linear-gradient(135deg, var(--grafite-700), var(--grafite-800));
+}
+.miniatura .sem-miniatura::after {
+  content: '';
+  width: 16px;
+  height: 16px;
+  opacity: 0.5;
+  background: currentColor;
+  color: var(--grafite-400);
+  clip-path: polygon(4% 0, 96% 50%, 4% 100%);
 }
 .miniatura .duracao-selo {
   position: absolute;
@@ -972,15 +1053,15 @@ input[type='checkbox'] {
 }
 .miniatura .abrir-painel::after {
   content: '';
-  width: 34px;
-  height: 34px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   background: rgba(0, 112, 243, 0.94);
   box-shadow: 0 3px 14px -2px rgba(0, 0, 0, 0.6);
-  border-left: 10px solid #fff;
-  border-top: 7px solid transparent;
-  border-bottom: 7px solid transparent;
-  margin-left: 4px;
+  border-left: 8px solid #fff;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  margin-left: 3px;
 }
 .miniatura:hover .abrir-painel,
 .miniatura .abrir-painel:focus-visible {
@@ -1085,18 +1166,28 @@ input[type='checkbox'] {
   line-height: 1.55;
   color: var(--texto);
   vertical-align: top;
-  /* A linha tem altura fixa (virtualização). O conteúdo da célula não pode
-     esticá-la: o corte é responsabilidade do clamp + overflow. */
-  max-height: calc(var(--altura-linha) - 20px);
-  overflow: hidden;
+  /* A célula NÃO ganha max-height: em `display: table-cell` o algoritmo de
+   * tabela ignora essa propriedade para calcular a altura da linha, e o valor
+   * só servia para esconder o sintoma. O teto de altura é o clamp do texto
+   * mais o botão, que somam menos que `--altura-linha`. */
+  min-width: 0;
 }
+/* O teto do resumo é DERIVADO da altura da linha, não um número solto.
+ * 104 px de linha - 20 de folga = 84 px de texto = 4 linhas de 12px/1.55
+ * (74 px) + o botão (17 px). Com 5 linhas, o clamp pedia 119 px e a célula
+ * esticava a linha para 127 px — a virtualização via uma altura que o CSS
+ * dizia ser outra. */
 .celula-resumo .resumo-linha {
-  -webkit-line-clamp: 5;
+  -webkit-line-clamp: 4;
 }
 .celula-resumo .ver-mais {
   display: inline-block;
-  margin-top: 2px;
+  margin-top: 1px;
   font-size: 11px;
+  line-height: 1.4;
+  /* Sem isso, o botão herda o line-height 1.55 do parágrafo e empurra a
+   * célula 2 px além do teto, reintroduzindo a altura ímpar. */
+  height: 16px;
 }
 
 /* --------------------------------------------------------- selos/estados */
@@ -1162,7 +1253,9 @@ input[type='checkbox'] {
   --altura-linha: var(--altura-linha-compacto);
 }
 .aplicativo[data-modo='compacto'] .miniatura {
-  width: 96px;
+  /* em linha de 64 px, miniatura de 96 px (16:9 = 54) tomava a altura toda.
+   * 76 px de largura deixa 43 de altura e sobra respiro. */
+  width: 76px;
 }
 .aplicativo[data-modo='compacto'] .celula-video {
   gap: 10px;
@@ -1344,11 +1437,10 @@ input[type='checkbox'] {
 
 .painel-secao h3 {
   margin: 0 0 8px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--texto-fraco);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--texto);
 }
 
 .pilulas {
@@ -1590,12 +1682,16 @@ dialog p {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 18px;
-  padding: 9px 13px;
+  margin-bottom: 20px;
+  padding: 9px 13px 9px 15px;
   border: 1px solid var(--borda);
+  border-left-width: 3px;
   border-radius: var(--raio);
   background: var(--grafite-900);
   font-size: 12px;
+  /* Sem estado (verificando), a faixa esquerda fica neutra em vez de sumir
+   * e desalinhar o texto em relação aos outros painéis. */
+  border-left-color: var(--borda-forte);
 }
 .diagnostico-rotulo {
   color: var(--texto-fraco);
@@ -1608,10 +1704,10 @@ dialog p {
   color: var(--texto);
 }
 .diagnostico[data-estado='ok'] {
-  border-left: 3px solid var(--sucesso);
+  border-left-color: var(--sucesso);
 }
 .diagnostico[data-estado='erro'] {
-  border-left: 3px solid var(--erro);
+  border-left-color: var(--erro);
 }
 .diagnostico[data-estado='erro'] .diagnostico-texto {
   color: var(--erro);
@@ -1731,6 +1827,12 @@ dialog p {
 .lista-config dd:last-of-type {
   border-bottom: 0;
 }
+/* Valor ausente: itálico e cor mais fraca, para não competir com o que está
+ * configurado. A palavra continua a mesma — só o peso muda. */
+.config-ausente {
+  color: var(--texto-fraco);
+  font-style: italic;
+}
 
 .aviso-fase {
   margin-top: 16px;
@@ -1772,21 +1874,162 @@ dialog p {
   }
 }
 
+/* O botão que abre a gaveta e o véu que fecha: escondidos no desktop. */
+.botao-menu-mobile {
+  display: none;
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  z-index: 60;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-pequeno);
+  background: var(--grafite-850);
+  color: var(--texto);
+  cursor: pointer;
+}
+.botao-menu-mobile:hover {
+  background: var(--grafite-800);
+  color: var(--texto-forte);
+}
+.veu-mobile {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  background: rgba(4, 7, 12, 0.66);
+  border: 0;
+}
+.veu-mobile[hidden] {
+  display: none;
+}
+
 @media (max-width: 900px) {
   .aplicativo {
     grid-template-columns: 1fr;
   }
+  /* A barra vira gaveta: sai do fluxo, então o conteúdo usa a tela inteira.
+   * Antes, sem botão que reabrisse a gaveta, a navegação ficava
+   * inalcançável abaixo de 900 px — e o `grid` ainda reservava os 256 px
+   * da coluna, deixando faixa vazia. */
   .barra-lateral {
     position: fixed;
     inset: 0 auto 0 0;
     width: var(--largura-barra);
     z-index: 50;
     transform: translateX(-100%);
-    transition: transform 0.2s;
+    transition: transform 0.2s ease;
     box-shadow: 0 0 40px rgba(0, 0, 0, 0.6);
+    /* recolhida no desktop não pode encolher a gaveta no mobile */
+    min-width: var(--largura-barra);
   }
   .aplicativo[data-barra-mobile='aberta'] .barra-lateral {
     transform: none;
+  }
+  /* dentro da gaveta a barra sempre mostra os rótulos */
+  .aplicativo[data-barra='recolhida'] .barra-lateral {
+    width: var(--largura-barra);
+  }
+  .aplicativo[data-barra='recolhida'] .marca {
+    flex-direction: row;
+    gap: 9px;
+    padding: 14px 14px 16px;
+  }
+  .aplicativo[data-barra='recolhida'] .marca-nome,
+  .aplicativo[data-barra='recolhida'] .nav-rotulo,
+  .aplicativo[data-barra='recolhida'] .arvore,
+  .aplicativo[data-barra='recolhida'] .rodape-lateral .versao,
+  .aplicativo[data-barra='recolhida'] .rodape-lateral .status-texto {
+    display: revert;
+  }
+  .aplicativo[data-barra='recolhida'] .navegacao {
+    padding: 0 8px 10px;
+  }
+  .aplicativo[data-barra='recolhida'] .nav-item {
+    justify-content: flex-start;
+    gap: 10px;
+    padding: 9px 11px;
+  }
+  .aplicativo[data-barra='recolhida'] .botao-recolher {
+    margin-left: auto;
+  }
+  .aplicativo[data-barra='recolhida'] .botao-recolher .icone {
+    transform: none;
+  }
+  /* O botão de recolher do desktop não faz sentido dentro da gaveta. */
+  .botao-recolher {
+    display: none;
+  }
+  .botao-menu-mobile {
+    display: grid;
+  }
+  /* Com a gaveta aberta o botão sai da frente da marca; o véu fecha. */
+  .aplicativo[data-barra-mobile='aberta'] .botao-menu-mobile {
+    opacity: 0;
+    pointer-events: none;
+  }
+  /* espaço para o botão não cobrir o título */
+  .conteudo {
+    padding-top: 64px;
+  }
+  .topo-titulo {
+    padding-left: 46px;
+  }
+  /* Em tela estreita, as ações de lote não podem empurrar a primeira linha
+   * para fora da dobra: viram uma faixa que rola na horizontal. */
+  .acoes-lote {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: thin;
+  }
+  .acoes-lote > * {
+    flex-shrink: 0;
+  }
+  .barra-ferramentas {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .contador-selecao {
+    flex-basis: 100%;
+  }
+  /* Colunas com largura mínima, não a tabela: `min-width` na <table> faz o
+   * navegador distribuir o excedente pelas colunas proporcionais e a coluna
+   * de vídeo encolhe até 32 px, esmagando a miniatura. Cada coluna ganha um
+   * piso próprio e o quadro rola na horizontal. */
+  /* `width: max-content` fazia a tabela assumir a largura do conteúdo
+   * completo (7.287 px com 5.000 linhas). O correto é `auto`: as colunas
+   * respeitam os pisos abaixo e param por aí. */
+  .tabela-biblioteca {
+    table-layout: auto;
+    width: 100%;
+  }
+  .tabela-biblioteca th[data-coluna='titulo'],
+  .tabela-biblioteca td[data-coluna='titulo'] {
+    min-width: 280px;
+  }
+  .tabela-biblioteca th[data-coluna='canal'],
+  .tabela-biblioteca td[data-coluna='canal'] {
+    min-width: 130px;
+  }
+  .tabela-biblioteca th[data-coluna='resumo'],
+  .tabela-biblioteca td[data-coluna='resumo'] {
+    min-width: 260px;
+  }
+  .tabela-biblioteca th[data-coluna='duracao'],
+  .tabela-biblioteca td[data-coluna='duracao'] {
+    min-width: 84px;
+  }
+  .tabela-biblioteca th[data-coluna='adicionado'],
+  .tabela-biblioteca td[data-coluna='adicionado'] {
+    min-width: 104px;
+  }
+  .tabela-biblioteca th[data-coluna='estado'],
+  .tabela-biblioteca td[data-coluna='estado'],
+  .tabela-biblioteca th[data-coluna='resumo-estado'],
+  .tabela-biblioteca td[data-coluna='resumo-estado'] {
+    min-width: 96px;
   }
   .painel-leitura {
     padding: 0;
@@ -1810,4 +2053,23 @@ dialog p {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ------------------------------------------------------------ estado vazio */
+
+.estado-vazio {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 28px 20px;
+  border: 1px dashed var(--borda-forte);
+  border-radius: var(--raio);
+  color: var(--texto-fraco);
+  font-size: 12px;
+  text-align: center;
+}
+.estado-vazio strong {
+  color: var(--texto);
+  font-size: 13px;
+  font-weight: 600;
 }

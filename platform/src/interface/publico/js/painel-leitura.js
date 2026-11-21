@@ -77,10 +77,18 @@ export function criarPainel({ api }) {
     caixa.replaceChildren();
     if (video.miniaturaUrl) {
       const img = document.createElement('img');
-      img.src = video.miniaturaUrl;
       img.alt = `Miniatura de ${video.titulo}`;
+      // Mesma regra da lista: URL morta vira preenchimento, não ícone
+      // quebrado com o texto alternativo em cima da imagem.
+      img.addEventListener('error', () => {
+        caixa.replaceChildren();
+        caixa.dataset.vazio = 'true';
+        caixa.textContent = 'sem miniatura';
+      }, { once: true });
+      img.src = video.miniaturaUrl;
       caixa.append(img);
     } else {
+      caixa.dataset.vazio = 'true';
       caixa.textContent = 'sem miniatura';
     }
 

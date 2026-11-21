@@ -153,7 +153,9 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
 
   function atualizarSelecao(visiveisCalculados) {
     const n = selecionados.size;
-    $('#contador-selecao').textContent = `${n} selecionados · ${total} resultados`;
+    // O total da consulta já está no cabeçalho da tela ("6 vídeos"). Repetir
+    // aqui gastava 167 px da barra de lote e era o que fazia a linha quebrar.
+    $('#contador-selecao').textContent = n === 0 ? 'Nada selecionado' : `${n} selecionado${n > 1 ? 's' : ''}`;
     $('#aviso-selecao').hidden = !n;
     for (const id of ['limpar-selecao', 'reimportar-selecao', 'remover-selecao']) $('#' + id).disabled = !n || ocupado;
     $('#adicionar-colecao').disabled = !n || ocupado || !$('#colecao-destino').value;
@@ -218,6 +220,14 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
 
   // ------------------------------------------------------------- linha
 
+  /** Preenchimento de miniatura ausente: mesmo visual, com ou sem URL. */
+  function preenchimentoVazio() {
+    const vazio = document.createElement('span');
+    vazio.className = 'sem-miniatura';
+    vazio.setAttribute('aria-hidden', 'true');
+    return vazio;
+  }
+
   /** Miniatura com botão de abrir painel — nunca abre por clique na linha. */
   function miniatura(video) {
     const caixa = document.createElement('div');
@@ -225,16 +235,20 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
 
     if (video.miniaturaUrl) {
       const img = document.createElement('img');
-      img.src = video.miniaturaUrl;
       img.alt = '';
       img.loading = 'lazy';
       img.decoding = 'async';
+      // Miniatura que não carrega (URL expirada, sem rede) deixa o ícone
+      // quebrado do navegador no meio da linha. Trocamos pelo mesmo
+      // preenchimento de quando o vídeo nunca teve miniatura.
+      img.addEventListener('error', () => {
+        img.remove();
+        caixa.prepend(preenchimentoVazio());
+      }, { once: true });
+      img.src = video.miniaturaUrl;
       caixa.append(img);
     } else {
-      const vazio = document.createElement('span');
-      vazio.className = 'sem-miniatura';
-      vazio.textContent = 'sem miniatura';
-      caixa.append(vazio);
+      caixa.append(preenchimentoVazio());
     }
 
     if (Number.isFinite(video.duracaoSegundos)) {
@@ -688,7 +702,7 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
       preencher('filtro-canal', canais.itens, 'Todos');
       preencher('filtro-playlist', playlists.itens, 'Todas');
       preencher('filtro-colecao', colecoes.itens, 'Todas');
-      preencher('colecao-destino', colecoes.itens, 'Escolha uma coleção');
+      preencher('colecao-destino', colecoes.itens, 'Coleção…');
       atualizarSelecao();
       return { canais: canais.itens, playlists: playlists.itens, colecoes: colecoes.itens };
     } catch (erro) {
