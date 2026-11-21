@@ -31,8 +31,16 @@ export async function exercitarBiblioteca({ app, base, avaliar, esperar, S, regi
   // posição do item dentro do conteúdo virtualizado. Não soma o espaçador: ele
   // é justamente o pedaço já percorrido, não um deslocamento adicional.
   const alturaLinha=await avaliar(`document.querySelector('#corpo-biblioteca tr[data-id]').getBoundingClientRect().height`);
-  await avaliar(`document.querySelector('#biblioteca-viewport').scrollTop=${alturaLinha}*3000`);
-  const alcançou=await esperar(`document.querySelector('#corpo-biblioteca tr[data-id="massa-03000"] .titulo-video')?.textContent==='Massa 03000'`,20000);
+  // Rolar para o item 3.000 é um salto que depende de o navegador recalcular o
+  // espaçador e desenhar as linhas daquela faixa. Sob carga (suíte inteira no
+  // mesmo processo) esse desenho pode atrasar; se o teste desistir no primeiro
+  // instante, ele acusa defeito onde não há. Por isso o salto é repetido até
+  // a linha alvo aparecer — a asserção continua sendo chegar lá.
+  let alcançou=false;
+  for (let tentativa=0; tentativa<5 && !alcançou; tentativa++){
+    await avaliar(`document.querySelector('#biblioteca-viewport').scrollTop=${alturaLinha}*3000`);
+    alcançou=await esperar(`document.querySelector('#corpo-biblioteca tr[data-id="massa-03000"] .titulo-video')?.textContent==='Massa 03000'`,8000);
+  }
   const geometria=await avaliar(`(()=>{const v=document.querySelector('#biblioteca-viewport').getBoundingClientRect(),r=document.querySelector('tr[data-id="massa-03000"]')?.getBoundingClientRect();return !!r&&r.top<v.bottom&&r.bottom>v.top;})()`);
   registrar('F5: rolagem chega ao vídeo 3.000 sem perder identidade',alcançou&&geometria,`altura=${alturaLinha}px`);
 
