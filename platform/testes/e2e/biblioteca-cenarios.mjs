@@ -313,6 +313,38 @@ export async function exercitarBiblioteca({ app, base, avaliar, esperar, S, regi
     !inicio.aberta&&inicio.barraLeft<=0&&inicio.menuVisivel&&inicio.rolagemPagina===0,
     `barra.left=${inicio.barraLeft} · menu=${inicio.menuVisivel} · conteúdo=${inicio.conteudoLargura}px · rolagemH=${inicio.rolagemPagina}`);
 
+  // Regressão: quem recolheu a barra no desktop ficava com ela "recolhida" no
+  // localStorage. Em tela estreita, a regra `.aplicativo` da media query
+  // perdia para `.aplicativo[data-barra='recolhida']` (mais específica) e o
+  // grid continuava com duas colunas: a gaveta fora do fluxo e o conteúdo
+  // espremido em 56 px. O app abria inutilizável — só um trecho estreito à
+  // esquerda e o resto vazio. Só reproduz com a barra RECOLHIDA, por isso o
+  // estado é forçado aqui em vez de depender do que ficou do teste anterior.
+  await avaliar(`localStorage.setItem('contextflow.biblioteca.barra','recolhida')`);
+  await S('Page.navigate',{url:base});
+  await esperar(`document.querySelector('#biblioteca-viewport')?.dataset.total==='5003'`,15000);
+  await dormir(500);
+  const recolhidaEmTelaEstreita=await avaliar(`(() => {
+    const app=document.querySelector('.aplicativo');
+    const conteudo=document.querySelector('.conteudo').getBoundingClientRect();
+    return {
+      dataBarra: app.dataset.barra,
+      colunas: getComputedStyle(app).gridTemplateColumns,
+      conteudoLargura: Math.round(conteudo.width),
+      janela: innerWidth,
+      transbordoPagina: document.documentElement.scrollWidth-document.documentElement.clientWidth,
+    };
+  })()`);
+  registrar('Mobile: barra recolhida salva não espreme o conteúdo ao abrir',
+    recolhidaEmTelaEstreita.dataBarra==='recolhida'
+      && recolhidaEmTelaEstreita.conteudoLargura>=recolhidaEmTelaEstreita.janela*0.9
+      && recolhidaEmTelaEstreita.transbordoPagina===0,
+    `barra=${recolhidaEmTelaEstreita.dataBarra} · colunas=${recolhidaEmTelaEstreita.colunas} · conteúdo=${recolhidaEmTelaEstreita.conteudoLargura}px de ${recolhidaEmTelaEstreita.janela}px · transbordo=${recolhidaEmTelaEstreita.transbordoPagina}`);
+  await avaliar(`localStorage.removeItem('contextflow.biblioteca.barra')`);
+  await S('Page.navigate',{url:base});
+  await esperar(`document.querySelector('#biblioteca-viewport')?.dataset.total==='5003'`,15000);
+  await dormir(400);
+
   await avaliar(`document.querySelector('#abrir-menu-mobile').click()`);
   await dormir(400);
   const gaveta=await avaliar(medirMobile);

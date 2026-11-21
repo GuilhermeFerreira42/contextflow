@@ -910,6 +910,17 @@ body {
   min-height: 320px;
   overflow-y: auto;
   position: relative;
+  /* Em telas estreitas a planilha não cabe (as colunas têm piso próprio) e o
+   * quadro rola na horizontal. Sem uma dica visual, a última coluna parece
+   * simplesmente cortada — a sombra aparece só do lado que ainda tem
+   * conteúdo, pela técnica dos gradientes de capa. */
+  background:
+    linear-gradient(to right, var(--grafite-900) 30%, rgba(13, 17, 26, 0)) left center / 32px 100% no-repeat,
+    linear-gradient(to left, var(--grafite-900) 30%, rgba(13, 17, 26, 0)) right center / 32px 100% no-repeat,
+    radial-gradient(farthest-side at 0 50%, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0)) left center / 12px 100% no-repeat,
+    radial-gradient(farthest-side at 100% 50%, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0)) right center / 12px 100% no-repeat,
+    var(--grafite-900);
+  background-attachment: local, local, scroll, scroll, local;
 }
 
 .tabela-biblioteca {
@@ -1398,6 +1409,28 @@ input[type='checkbox'] {
 .aplicativo[data-coluna-adicionado='oculta'] [data-coluna='adicionado'],
 .aplicativo[data-coluna-resumo='oculta'] [data-coluna='resumo'] {
   display: none;
+}
+
+/* Em telas onde a planilha rola na horizontal, a barra de rolagem fica
+ * visível o tempo todo: é ela que diz "há mais colunas à direita". */
+@media (max-width: 1180px) {
+  .biblioteca-viewport {
+    overflow-x: auto;
+  }
+  .biblioteca-viewport::-webkit-scrollbar {
+    height: 10px;
+  }
+  .biblioteca-viewport::-webkit-scrollbar-thumb {
+    background: var(--grafite-600);
+    border-radius: 6px;
+    border: 2px solid var(--grafite-900);
+  }
+  .biblioteca-viewport::-webkit-scrollbar-thumb:hover {
+    background: var(--grafite-500);
+  }
+  .biblioteca-viewport::-webkit-scrollbar-track {
+    background: var(--grafite-900);
+  }
 }
 
 /* ------------------------------------------------------------ vazio */
@@ -2019,7 +2052,14 @@ dialog p {
 }
 
 @media (max-width: 900px) {
-  .aplicativo {
+  /* A barra vira gaveta (position: fixed) e SAI do grid, então a coluna dela
+   * não pode existir. A regra precisa vencer `.aplicativo[data-barra=
+   * 'recolhida']`, que é mais específica e vale em qualquer largura: sem o
+   * seletor de atributo aqui, quem já havia recolhido a barra no desktop
+   * abria a tela pequena com duas colunas — a gaveta fora do fluxo e o
+   * conteúdo espremido em 56 px. Era o "monte de coisa estranha" ao abrir. */
+  .aplicativo,
+  .aplicativo[data-barra='recolhida'] {
     grid-template-columns: 1fr;
   }
 
