@@ -12,6 +12,8 @@ Base documental: pacote `ContextFlow_Pacote_Execucao_V1` (2026-11-18). Estado vi
 autorizou o Codex a implementar os refinamentos de alinhamento, leitura ampliada
 e controle da lateral no topo. Resultados e evidências em `docs/estado-atual.md`;
 SPEC em `docs/specs/f5-ui-refinamentos-leitura.md`. Homologação humana pendente.
+Na rodada seguinte, o proprietário solicitou altura por barra deslizante e
+larguras arrastáveis; implementadas conforme `docs/specs/f5-ui-dimensoes-grade.md`.
 F6 não deve ser iniciada nesta etapa.
 
 **Se você é um agente chegando agora (Codex ou outro):** leia

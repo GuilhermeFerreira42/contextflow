@@ -8,6 +8,8 @@
  * sendo aritmética simples — o que muda é o número. Texto longo usa limite de
  * linhas e expansão, nunca altura livre, para não quebrar a janela de linhas.
  */
+import { criarRedimensionamentoColunas } from './redimensionamento-colunas.js';
+
 export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
   const $ = seletor => document.querySelector(seletor);
 
@@ -25,15 +27,13 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
   /**
    * Altura ajustável do modo Ampliado.
    *
-   * Os limites existem para a linha continuar legível: abaixo de 88px a
-   * miniatura e duas linhas de título não cabem; acima de 200px cada vídeo
-   * ocupa quase a tela inteira. O valor é gravado em `--altura-linha-ampliado`
+   * A faixa permite da leitura densa à leitura longa na grade. O valor é
+   * gravado em `--altura-linha-ampliado`
    * no próprio `.aplicativo`, então o CSS e o virtualizador leem a MESMA
    * fonte — nenhuma altura por linha é escrita à mão.
    */
-  const ALTURA_MINIMA = 88;
-  const ALTURA_MAXIMA = 200;
-  const ALTURA_PASSO = 8;
+  const ALTURA_MINIMA = 64;
+  const ALTURA_MAXIMA = 600;
   function alturaDoCss() {
     const valor = getComputedStyle(document.querySelector('.aplicativo'))
       .getPropertyValue('--altura-linha').trim();
@@ -55,6 +55,8 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
   let carregando = false;
   let controle = null;
   let quadro = null;
+  let quadroAltura = null;
+  let ancoraAltura = null;
   let posicaoPendente = null;
   let ultimaSelecao = null;
   let ocupado = false;
@@ -67,6 +69,7 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
   let posicaoSalva = 0;
   let modo = 'ampliado';
   let colunas = { ...colunasPadrao };
+  let larguras = {};
   let previas = new Map(); // resumo curto por vídeo, buscado em lote
   let versaoPrevias = 0; // sobe quando chega resumo; invalida o cache de linhas
   let intervaloData = null; // recorte da árvore "Data de importação"
@@ -74,6 +77,17 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
   let linhasAtuais = new Map();
   const espacoSuperior = espaco(0);
   const espacoInferior = espaco(0);
+  const limitesLargura = nome => [nome === 'titulo' ? 180 : nome === 'resumo' ? 160 : 80, 1200];
+  const redimensionamento = criarRedimensionamentoColunas({
+    tabela, limites: limitesLargura, obterPreferencia: nome => larguras[nome] ?? null,
+    aoAlterar(nome, valor, { salvar }) {
+      if (valor === null) delete larguras[nome];
+      else larguras[nome] = valor;
+      ajustarLarguras();
+      agendar();
+      if (salvar) salvarVisual();
+    },
+  });
 
   // ------------------------------------------------------------ preferências
 
@@ -94,6 +108,15 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
           if (typeof visual.colunas[nome] === 'boolean') colunas[nome] = visual.colunas[nome];
         }
       }
+      if (visual?.larguras && typeof visual.larguras === 'object') {
+        for (const nome of ['titulo', ...ordemColunas]) {
+          const valor = visual.larguras[nome];
+          if (typeof valor === 'number' && Number.isFinite(valor)) {
+            const [minimo, maximo] = limitesLargura(nome);
+            larguras[nome] = Math.round(Math.min(maximo, Math.max(minimo, valor)));
+          }
+        }
+      }
     } catch { /* idem */ }
 
     try {
@@ -104,7 +127,7 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
 
   function salvarVisual() {
     try {
-      localStorage.setItem('contextflow.biblioteca.visual', JSON.stringify({ modo, colunas }));
+      localStorage.setItem('contextflow.biblioteca.visual', JSON.stringify({ modo, colunas, larguras }));
     } catch { /* armazenamento indisponível não impede o uso */ }
   }
 
@@ -112,24 +135,25 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
     return alturaDoCss() ?? ALTURAS_PADRAO[modo] ?? ALTURAS_PADRAO.ampliado;
   }
 
-  function alturaAmpliadaAtual() {
-    const app = document.querySelector('.aplicativo');
-    const valor = Number.parseFloat(
-      getComputedStyle(app).getPropertyValue('--altura-linha-ampliado'),
-    );
-    return Number.isFinite(valor) ? valor : ALTURAS_PADRAO.ampliado;
-  }
-
   function aplicarAlturaAmpliada(px, { salvar = true, renderizar: redesenhar = true } = {}) {
+    const alturaAnterior = alturaLinha();
+    const posicao = ancoraAltura ?? viewport.scrollTop;
+    const cabecalho = tabela.tHead?.offsetHeight ?? 38;
     const limite = Math.min(ALTURA_MAXIMA, Math.max(ALTURA_MINIMA, Math.round(px)));
     const app = document.querySelector('.aplicativo');
     app.style.setProperty('--altura-linha-ampliado', `${limite}px`);
+    app.dataset.alturaCurta = String(limite < 88);
     // Reserva respiro e a ação de leitura completa; a altura extra deve
     // revelar mais texto, em vez de manter o antigo teto de cinco linhas.
     const linhas = Math.max(1, Math.floor((limite - 34) / 19.2));
     app.style.setProperty('--linhas-resumo', String(linhas));
     const rotulo = $('#altura-valor');
     if (rotulo) rotulo.textContent = `${limite} px`;
+    const controleAltura = $('#altura-linhas');
+    if (controleAltura) {
+      controleAltura.value = String(limite);
+      controleAltura.setAttribute('aria-valuetext', `${limite} pixels`);
+    }
     const restaurar = $('#restaurar-altura');
     if (restaurar) restaurar.disabled = limite === ALTURAS_PADRAO.ampliado;
     if (salvar) {
@@ -141,9 +165,24 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
     // recalculadas a partir da mesma fonte. `renderizar` preserva a seleção
     // porque ela vive em `selecionados`, por id, não no DOM.
     if (redesenhar) {
+      const novaPosicao = posicao <= cabecalho ? posicao
+        : cabecalho + ((posicao - cabecalho) / alturaAnterior) * alturaLinha();
+      ancoraAltura = Math.min(novaPosicao, Math.max(0, total * alturaLinha() + cabecalho - viewport.clientHeight));
+      posicaoPendente = ancoraAltura;
       linhasAtuais = new Map();
       if (itens.length) renderizar();
-      agendar();
+      // Ao crescer muito, o navegador ainda pode limitar scrollTop à extensão
+      // anterior durante o reflow. Segura a âncora lógica até o próximo quadro.
+      if (quadroAltura !== null) cancelAnimationFrame(quadroAltura);
+      quadroAltura = requestAnimationFrame(() => {
+        quadroAltura = null;
+        posicaoPendente = ancoraAltura;
+        if (itens.length) renderizar();
+        viewport.scrollTop = ancoraAltura;
+        posicaoSalva = viewport.scrollTop;
+        ancoraAltura = null;
+        agendar();
+      });
     }
   }
 
@@ -470,6 +509,7 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
     // aplicarColunas sincroniza depois os dois espaçadores com a grade real.
     td.colSpan = 8;
     td.style.height = `${px}px`;
+    tr.style.height = `${px}px`;
     td.style.padding = '0';
     td.style.border = '0';
     tr.append(td);
@@ -481,7 +521,7 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
   function renderizar() {
     quadro = null;
     const altura = alturaLinha();
-    const posicao = posicaoPendente ?? viewport.scrollTop;
+    const posicao = ancoraAltura ?? posicaoPendente ?? viewport.scrollTop;
     posicaoPendente = null;
     const { inicio, fim } = intervalo(posicao);
     const exibidos = itens.slice(inicio, fim);
@@ -496,6 +536,7 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
 
 
     if (inicio > 0) {
+      espacoSuperior.style.height = `${inicio * altura}px`;
       espacoSuperior.firstElementChild.style.height = `${inicio * altura}px`;
       nodes.push(espacoSuperior);
     }
@@ -515,6 +556,7 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
 
     const restante = total - inicio - exibidos.length;
     if (restante > 0) {
+      espacoInferior.style.height = `${restante * altura}px`;
       espacoInferior.firstElementChild.style.height = `${restante * altura}px`;
       nodes.push(espacoInferior);
     }
@@ -578,7 +620,7 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
     if (quadro === null) {
       // Congela a posição no instante do agendamento; o quadro seguinte pode
       // rodar depois de vários eventos de scroll e desenharia a janela errada.
-      posicaoPendente = viewport.offsetParent === null ? posicaoSalva : viewport.scrollTop;
+      posicaoPendente = ancoraAltura ?? (viewport.offsetParent === null ? posicaoSalva : viewport.scrollTop);
       quadro = requestAnimationFrame(renderizar);
     }
   }
@@ -837,11 +879,8 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
     });
     };
     aplicarSalvo();
-    $('#diminuir-altura')?.addEventListener('click', () => {
-      aplicarAlturaAmpliada(alturaAmpliadaAtual() - ALTURA_PASSO);
-    });
-    $('#aumentar-altura')?.addEventListener('click', () => {
-      aplicarAlturaAmpliada(alturaAmpliadaAtual() + ALTURA_PASSO);
+    $('#altura-linhas')?.addEventListener('input', evento => {
+      aplicarAlturaAmpliada(Number(evento.target.value));
     });
     $('#restaurar-altura')?.addEventListener('click', () => {
       aplicarAlturaAmpliada(ALTURAS_PADRAO.ampliado);
@@ -893,19 +932,20 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
   }
 
   function ajustarLarguras() {
-    // Uma coluna de leitura permanece sem largura explícita para absorver
-    // a sobra. Se todas têm largura, table-layout:fixed amplia até o checkbox.
-    const apoio = { canal: 142, duracao: 96, adicionado: 126, estado: 96, 'resumo-estado': 122 };
-    let fixa = 46;
-    for (const [nome, largura] of Object.entries(apoio)) {
-      tabela.querySelector(`th[data-coluna="${nome}"]`).style.width = `${largura}px`;
-      if (colunas[nome]) fixa += largura;
-    }
-    const minima = fixa + 360 + (colunas.resumo ? 280 : 0);
-    tabela.style.minWidth = `${minima}px`;
-    tabela.querySelector('th[data-coluna="titulo"]').style.width = colunas.resumo
-      ? `${Math.round((Math.max(viewport.clientWidth, minima) - fixa) * 0.55)}px` : 'auto';
-    tabela.querySelector('th[data-coluna="resumo"]').style.width = 'auto';
+    const padrao = { titulo: 360, canal: 142, duracao: 96, adicionado: 126, estado: 96, resumo: 280, 'resumo-estado': 122 };
+    const visiveis = ['titulo', ...ordemColunas.filter(nome => colunas[nome])];
+    const medidas = Object.fromEntries(visiveis.map(nome => [nome, larguras[nome] ?? padrao[nome]]));
+    const livres = visiveis.filter(nome => ['titulo', 'resumo'].includes(nome) && larguras[nome] === undefined);
+    const soma = () => 46 + Object.values(medidas).reduce((total, valor) => total + valor, 0);
+    const sobra = Math.max(0, viewport.clientWidth - soma());
+    const pesos = livres.reduce((total, nome) => total + (nome === 'titulo' ? 0.55 : 0.45), 0);
+    for (const nome of livres) medidas[nome] += sobra * (nome === 'titulo' ? 0.55 : 0.45) / pesos;
+    for (const nome of visiveis) tabela.querySelector(`th[data-coluna="${nome}"]`).style.width = `${medidas[nome]}px`;
+    tabela.style.width = `${soma()}px`;
+    tabela.style.minWidth = `${soma()}px`;
+    const restaurar = $('#restaurar-larguras');
+    if (restaurar) restaurar.disabled = !Object.keys(larguras).length;
+    redimensionamento.sincronizar();
   }
 
   function aplicarModo(novoModo) {
@@ -930,6 +970,13 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
     montarColunas();
     montarAltura();
     aplicarModo(modo);
+    redimensionamento.ligar();
+    $('#restaurar-larguras').addEventListener('click', () => {
+      larguras = {};
+      ajustarLarguras();
+      agendar();
+      salvarVisual();
+    });
 
     viewport.addEventListener('scroll', () => {
       if (viewport.offsetParent !== null) posicaoSalva = viewport.scrollTop;

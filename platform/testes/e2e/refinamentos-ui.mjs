@@ -63,11 +63,17 @@ try {
   };
   const altura = async valor => {
     await painel();
-    let atual = Number((await page.locator('#altura-valor').innerText()).match(/\d+/)[0]);
-    while (atual !== valor) {
-      await page.locator(atual < valor ? '#aumentar-altura' : '#diminuir-altura').click();
-      atual = Number((await page.locator('#altura-valor').innerText()).match(/\d+/)[0]);
+    const slider = page.getByRole('slider', { name: 'Altura das linhas' });
+    if (valor === 64 || valor === 600) await slider.press(valor === 64 ? 'Home' : 'End');
+    else {
+      const caixa = await slider.boundingBox();
+      await slider.click({ position: { x: 8 + (caixa.width - 16) * (valor - 64) / 536, y: caixa.height / 2 } });
+      // Corrige a discretização por pixel com teclas reais, não eventos simulados.
+      for (let i = 0; i < 12 && Number(await slider.inputValue()) !== valor; i++) {
+        await slider.press(Number(await slider.inputValue()) < valor ? 'ArrowRight' : 'ArrowLeft');
+      }
     }
+    assert.equal(Number(await slider.inputValue()), valor);
     await frames();
   };
   const medir = () => page.locator('tr[data-id="volume-00000"]').evaluate(linha => {
@@ -104,7 +110,7 @@ try {
   await teste('três alturas aumentam imagem proporcional e texto visível', async () => {
     await colunas(['Conteúdo do resumo']);
     const medidas = [];
-    for (const valor of [88, 136, 200]) {
+    for (const valor of [64, 136, 600]) {
       await altura(valor);
       const m = await medir(); medidas.push(m);
       assert.ok(Math.abs(m.linha - valor) < 1, `linha ${m.linha}, esperado ${valor}`);
@@ -120,6 +126,81 @@ try {
     assert.ok(Math.abs((await medir()).linha - 64) < 1);
     await page.locator('[data-modo="ampliado"]').click();
     await altura(136);
+  });
+  await teste('barra deslizante por arraste, teclado, persistência e restauração', async () => {
+    await painel();
+    const slider = page.getByRole('slider', { name: 'Altura das linhas' });
+    await altura(64);
+    const caixa = await slider.boundingBox();
+    await page.mouse.move(caixa.x + 8, caixa.y + caixa.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(caixa.x + caixa.width * 0.8, caixa.y + caixa.height / 2, { steps: 18 });
+    await page.mouse.up();
+    const valor = Number(await slider.inputValue());
+    assert.ok(valor > 400 && valor <= 600, `arraste deve aumentar altura: ${valor}`);
+    await pronto(); await painel();
+    assert.equal(Number(await slider.inputValue()), valor);
+    await slider.press('Home'); assert.equal(await slider.inputValue(), '64');
+    await slider.press('End'); assert.equal(await slider.inputValue(), '600');
+    await page.locator('#restaurar-altura').click();
+    assert.equal(await slider.inputValue(), '136');
+    assert.ok(await page.locator('#restaurar-altura').isDisabled());
+  });
+  await teste('colunas por arraste e teclado, sem ordenar, com reload e restauração', async () => {
+    await colunas(['Canal', 'Conteúdo do resumo']);
+    const largura = nome => page.locator(`th[data-coluna="${nome}"]`).evaluate(el => el.getBoundingClientRect().width);
+    const controle = nome => page.locator(`th[data-coluna="${nome}"] .redimensionar-coluna`);
+    const arrastar = async (nome, delta) => {
+      const alvo = controle(nome); await alvo.scrollIntoViewIfNeeded();
+      const b = await alvo.boundingBox();
+      await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(b.x + b.width / 2 + delta, b.y + b.height / 2, { steps: 12 });
+      await page.mouse.up(); await frames();
+    };
+    const ordenacao = () => page.locator('th.ordenado').getAttribute('data-ordenacao');
+    const ordemAntes = await ordenacao();
+    const antes = await largura('titulo');
+    await arrastar('titulo', 100);
+    assert.ok(Math.abs(await largura('titulo') - antes - 100) < 2, 'arraste ajusta largura do vídeo');
+    assert.equal(await ordenacao(), ordemAntes, 'divisória não dispara ordenação');
+    await arrastar('resumo', -80);
+    const salvo = { titulo: await largura('titulo'), resumo: await largura('resumo') };
+    await pronto();
+    for (const [nome, valor] of Object.entries(salvo)) assert.ok(Math.abs(await largura(nome) - valor) < 2, 'largura restaurada no reload');
+    await colunas(['Canal']); await colunas(['Canal', 'Conteúdo do resumo']);
+    assert.ok(Math.abs(await largura('resumo') - salvo.resumo) < 2, 'ocultar preserva largura');
+    const alvoCancelar = controle('titulo');
+    await alvoCancelar.scrollIntoViewIfNeeded();
+    const bCancelar = await alvoCancelar.boundingBox();
+    await page.mouse.move(bCancelar.x + 5, bCancelar.y + 16);
+    await page.mouse.down();
+    await page.mouse.move(bCancelar.x + 65, bCancelar.y + 16, { steps: 6 });
+    await page.keyboard.press('Escape');
+    await page.mouse.up();
+    await page.waitForFunction(valor => Math.abs(document.querySelector('th[data-coluna="titulo"]').getBoundingClientRect().width - valor) < 2, salvo.titulo);
+    assert.ok(Math.abs(await largura('titulo') - salvo.titulo) < 2, 'Escape desfaz o arraste');
+    await controle('canal').focus(); await controle('canal').press('Home');
+    await page.waitForFunction(() => Math.abs(document.querySelector('th[data-coluna="canal"]').getBoundingClientRect().width - 80) < 1);
+    assert.ok(Math.abs(await largura('canal') - 80) < 1, `canal Home: ${await largura('canal')}`);
+    await controle('canal').press('ArrowRight');
+    await page.waitForFunction(() => Math.abs(document.querySelector('th[data-coluna="canal"]').getBoundingClientRect().width - 90) < 1);
+    assert.ok(Math.abs(await largura('canal') - 90) < 1);
+    await controle('canal').press('End');
+    await page.waitForFunction(() => Math.abs(document.querySelector('th[data-coluna="canal"]').getBoundingClientRect().width - 1200) < 1);
+    assert.ok(Math.abs(await largura('canal') - 1200) < 1);
+    await controle('canal').dblclick();
+    await page.waitForFunction(() => Math.abs(document.querySelector('th[data-coluna="canal"]').getBoundingClientRect().width - 142) < 1);
+    assert.ok(Math.abs(await largura('canal') - 142) < 1);
+    await page.locator('#biblioteca-viewport').evaluate(v => { v.scrollLeft = 0; });
+    await page.screenshot({ path: join(evidencia, 'colunas-redimensionadas.png') });
+    await painel(); await page.locator('#restaurar-larguras').click();
+    assert.ok(await page.locator('#restaurar-larguras').isDisabled());
+    assert.ok(Math.abs(await page.locator('th.col-selecao').evaluate(el => el.getBoundingClientRect().width) - 46) < 1);
+    const botaoTitulo = page.locator('th[data-coluna="titulo"] button');
+    await botaoTitulo.click();
+    await page.waitForFunction(() => document.querySelector('th.ordenado')?.dataset.ordenacao === 'titulo');
+    assert.equal(await ordenacao(), 'titulo', 'ordenação continua disponível pelo botão');
   });
   await teste('lateral no topo, logo estável em hover/foco e dez ciclos reais', async () => {
     const botao = page.locator('#recolher-barra');
@@ -172,7 +253,7 @@ try {
   await teste('rolagem de 5.000 vídeos preserva identidade e seleção nas alturas', async () => {
     await pronto();
     await page.locator('tr[data-id="volume-00000"] input[type="checkbox"]').check();
-    for (const valor of [88, 136, 200]) {
+    for (const valor of [64, 136, 600]) {
       await altura(valor);
       await page.locator('#biblioteca-viewport').evaluate((v, a) => { v.scrollTop = a * 3000; }, valor);
       await page.waitForFunction(() => {
@@ -181,10 +262,21 @@ try {
         return r && r.bottom > v.top && r.top < v.bottom;
       });
       assert.ok(await page.locator('tr[data-id]').count() < 100);
+      // O mesmo vídeo continua no recorte ao alterar a altura longe do topo.
+      const medirPosicao = () => page.locator('#biblioteca-viewport').evaluate(v => ({posicao:v.scrollTop,altura:getComputedStyle(document.querySelector('.aplicativo')).getPropertyValue('--altura-linha'),primeiro:v.querySelector('tr[data-id]')?.dataset.id,total:v.scrollHeight}));
+      console.log('  ancora antes', JSON.stringify(await medirPosicao()));
+      await altura(valor === 600 ? 64 : 600);
+      console.log('  ancora depois', JSON.stringify(await medirPosicao()));
+      await page.waitForFunction(() => {
+        const v = document.querySelector('#biblioteca-viewport').getBoundingClientRect();
+        const r = document.querySelector('tr[data-id="volume-03000"]')?.getBoundingClientRect();
+        return r && r.bottom > v.top && r.top < v.bottom;
+      });
       await page.locator('#biblioteca-viewport').evaluate(v => { v.scrollTop = 0; });
       await page.locator('tr[data-id="volume-00000"]').waitFor();
       assert.ok(await page.locator('tr[data-id="volume-00000"] input').isChecked());
     }
+    await altura(136);
   });
   await teste('larguras, navegação e gaveta sem transbordo da página', async () => {
     for (const largura of [1920, 1366, 960, 768, 390]) {

@@ -50,7 +50,7 @@ espaçadores (`tr[data-espacador]`) que simulam o resto do scroll.
 
 Três regras que precisam ser mantidas juntas, porque cada uma já causou defeito:
 
-1. **Altura uniforme por modo.** Ampliado ajustável de 88 a 200 px (padrão
+1. **Altura uniforme por modo.** Ampliado ajustável de 64 a 600 px (padrão
    136 px), compacto 64 px. Miniatura e quantidade visível de resumo acompanham
    o ajuste; a altura não varia por conteúdo nem por linha. Texto longo usa
    `-webkit-line-clamp` + botão "ver mais", nunca altura livre.
@@ -70,6 +70,12 @@ apareceu na implementação.
 Os espaçadores usam `colSpan` igual à quantidade de colunas visíveis. O seletor
 fica em 46 px e uma coluna de leitura permanece flexível para absorver a sobra;
 larguras e piso são recalculados ao mudar colunas ou redimensionar o viewport.
+`redimensionamento-colunas.js` implementa as divisórias por ponteiro/teclado;
+medidas manuais permanecem na Biblioteca e no objeto visual do localStorage.
+Sem medidas manuais, as colunas de leitura absorvem a sobra. Com ambas
+dimensionadas manualmente, respeita-se a soma das larguras, com rolagem interna.
+Espaçadores têm altura explícita na linha e célula; uma âncora lógica atravessa
+o reflow ao mover a barra deslizante, preservando o vídeo que estava no recorte.
 `overflow-anchor: none` no viewport impede a ancoragem nativa de deslocar o
 índice virtual durante a paginação. A Biblioteca usa toda a largura disponível,
 inclusive acima de 1600 px; as demais telas preservam seu limite anterior.

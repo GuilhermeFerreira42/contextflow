@@ -1,6 +1,9 @@
 # SPEC — Refinamentos de leitura e controle da lateral
 
 Status: implementada e validada no Windows; homologação humana pendente.
+Alturas e controles deste documento são históricos: a rodada posterior
+`f5-ui-dimensoes-grade.md` amplia para 64–600 px com barra deslizante e
+acrescenta redimensionamento das larguras.
 Implementação autorizada pelo proprietário nesta sessão, sobre `da4cf1b`.
 Complementa `f5-ui-correcoes-2026-11-21.md`; não substitui seus resultados históricos.
 

@@ -184,19 +184,19 @@
           <div class="painel-colunas" id="painel-colunas" hidden>
             <p class="painel-titulo">Colunas visíveis</p>
             <div class="colunas-lista" id="colunas-lista"></div>
-            <p class="painel-nota">Isto muda o que aparece na linha. Para mudar quais vídeos aparecem, use Filtros.</p>
+            <p class="painel-nota">Arraste as divisórias do cabeçalho para ajustar a largura. Duplo clique restaura uma coluna.</p>
+            <button type="button" class="botao-secundario" id="restaurar-larguras">Restaurar larguras</button>
 
             <!-- Altura das linhas do modo Ampliado. Fica junto de "Colunas"
                  porque é a mesma família de ajuste: como a linha se apresenta. -->
             <div class="ajuste-altura" id="ajuste-altura">
-              <p class="painel-titulo">Altura das linhas</p>
+              <label class="painel-titulo" for="altura-linhas">Altura das linhas</label>
               <div class="altura-linha-controle">
-                <button type="button" class="botao-mini-ajuste" id="diminuir-altura" aria-label="Diminuir altura das linhas" title="Diminuir">−</button>
-                <span class="altura-valor" id="altura-valor" role="status" aria-live="polite">136 px</span>
-                <button type="button" class="botao-mini-ajuste" id="aumentar-altura" aria-label="Aumentar altura das linhas" title="Aumentar">+</button>
+                <input type="range" id="altura-linhas" min="64" max="600" step="1" value="136" aria-describedby="altura-ajuda" />
+                <output class="altura-valor" id="altura-valor" for="altura-linhas">136 px</output>
                 <button type="button" class="botao-secundario botao-restaurar-altura" id="restaurar-altura">Padrão</button>
               </div>
-              <p class="painel-nota">Vale para o modo Ampliado. O modo Compacto mantém 64 px.</p>
+              <p class="painel-nota" id="altura-ajuda">De 64 a 600 px no modo Ampliado. O modo Compacto mantém 64 px.</p>
             </div>
           </div>
 

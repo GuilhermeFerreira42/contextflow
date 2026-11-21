@@ -20,6 +20,12 @@
 
 ## Status de execução (atualizado a cada fatia)
 
+**Dimensões da grade (base `027c7df`):** 9/9 grupos Playwright agora incluem
+barra de altura 64–600 px, divisórias arrastáveis, teclado, cancelamento,
+persistência e conservação do vídeo ao mudar altura longe do topo. CDP 57/57,
+177 testes aprovados e seis ignorados no Windows. Resultados atuais no estado;
+as contagens de rodadas anteriores abaixo permanecem históricas.
+
 **Refinamentos após a entrega da Arena (`da4cf1b`):** o proprietário autorizou
 implementação pelo Codex. Playwright versionado em `testes/e2e/refinamentos-ui.mjs`
 cobre 7 grupos, com cliques reais, dez ciclos da lateral, logo/ícone no topo,

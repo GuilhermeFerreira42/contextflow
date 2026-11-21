@@ -36,6 +36,8 @@ presente em `da4cf1b`. O proprietário autorizou explicitamente o Codex a
 implementar os refinamentos subsequentes, limitados pela SPEC
 `specs/f5-ui-refinamentos-leitura.md`. Não repetir a entrega anterior por
 inferência nem iniciar F6. Evidências e próxima ação no estado de retomada.
+O pedido subsequente de altura deslizante e colunas redimensionáveis foi
+implementado conforme `specs/f5-ui-dimensoes-grade.md`, sem antecipar F6.
 
 ### Ajuste de escopo registrado na F3
 

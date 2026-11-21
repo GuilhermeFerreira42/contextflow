@@ -11,7 +11,55 @@ Homologação humana pendente.** A F6 (IA para resumos) está somente especifica
 e é a próxima na sequência do plano, mas o proprietário determinou que
 **não** fosse iniciada nesta etapa.
 
-### Rodada vigente — refinamentos sobre a entrega atualizada da Arena
+### Rodada vigente — altura deslizante e larguras redimensionáveis
+
+Pedido explícito do proprietário sobre `main`, base `027c7df`, árvore limpa.
+Implementação pelo Codex, limitada a dimensões da grade; F6 não iniciada.
+SPEC: `specs/f5-ui-dimensoes-grade.md`.
+
+- Altura ampliada de **64 a 600 px**, passo de 1 px, por barra deslizante no
+  painel Colunas; padrão 136 px restaurável. Compacto mantém 64 px. Miniatura
+  e quantidade de resumo acompanham altura e largura disponíveis.
+- Divisórias arrastáveis nos cabeçalhos de dados, com captura de ponteiro,
+  setas/Home/End pelo teclado, Escape para cancelar e duplo clique para restaurar
+  uma coluna. Botão Restaurar larguras para voltar ao dimensionamento automático.
+  Seleção permanece fixa em 46 px. Larguras salvas no objeto de preferências
+  visuais existente, compatível com valores anteriores e com colunas ocultas.
+- Módulo novo `redimensionamento-colunas.js` cuida apenas dos controles;
+  Biblioteca continua dona das medidas/preferências. Sem dependências novas,
+  alteração de banco, backend ou conteúdo. Após medidas manuais, a tabela
+  respeita essas medidas e pode rolar horizontalmente dentro do viewport.
+- Ajustar altura longe do topo mantém o vídeo/posição lógica e a seleção.
+  Para isso, os espaçadores da tabela agora atualizam altura da linha e célula,
+  e a âncora é preservada durante o reflow. Dados estreitos não esticam as linhas.
+
+**Verificações executadas no Windows (Node v22.12.0):**
+
+| Comando | Resultado |
+|---|---|
+| `npm test` | 183 testes: 177 aprovados, 6 ignorados, zero falhas; saída 0 |
+| `npm run test:e2e` | 57/57 cenários CDP; saída 0 |
+| `npm run test:e2e:refinamentos` | 9/9 grupos Playwright; saída 0 |
+| `npm run build` | build e typecheck aprovados; saída 0 |
+| `npm run verificar` | nove verificações OK, TUDO OK; saída 0 |
+
+Playwright exercitou ponteiro e teclado na barra, extremos 64/600, padrão,
+arraste de colunas, limites 80/1200 de apoio, Escape, reload, ocultar/restaurar,
+duplo clique, ordenação após resize, leitura e navegação. Rolagem com 5.000
+vídeos conservou o vídeo 3.000 no recorte ao alternar alturas, incluindo
+64→600 e 600→64. Fixture: 1/5/29 linhas visíveis de resumo em 64/136/600 px,
+com imagem proporcional. Dados sintéticos, sem banco pessoal ou serviços externos.
+
+Evidências: `../Continuidade de Projeto/dimensoes-grade-027c7df/`:
+`playwright-final.log`, `npm-e2e-final.log`, `npm-test.log`, `npm-build.log`,
+`npm-verificar.log`; capturas em `capturas/`. Logs de diagnóstico e `falha-*`
+são tentativas intermediárias, não resultado final. Não executados: YouTube real,
+provedores de IA e regressão Linux. Nenhuma nova instalação necessária.
+
+**Próxima ação:** homologação humana do controle deslizante e das divisórias.
+Outras funcionalidades e F6 exigem nova autorização. Rodadas abaixo são histórico.
+
+### Rodada anterior — refinamentos sobre a entrega atualizada da Arena
 
 **Autorização:** após trazer o repositório atualizado, o proprietário pediu ao
 Codex que implementasse os refinamentos combinados. Esse pedido substitui,

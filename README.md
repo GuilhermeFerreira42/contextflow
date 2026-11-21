@@ -8,7 +8,7 @@ web própria. Monólito modular. Chat sobre conteúdo é V2.
 
 > **Estado:** F1–F5 implementadas; reformulação F5-UI implementada, com
 > homologação humana pendente. Última regressão local: 177 testes aprovados,
-> 6 ignorados no Windows, 57/57 cenários E2E e 7/7 grupos Playwright de refinamentos.
+> 6 ignorados no Windows, 57/57 cenários E2E e 9/9 grupos Playwright de refinamentos.
 > F6 somente especificada;
 > não iniciar nesta etapa. Estado e limites vigentes em
 > [`docs/estado-atual.md`](docs/estado-atual.md).
@@ -33,7 +33,7 @@ integrada à Biblioteca, com resumo na linha e painel sobreposto.
 | `npm run build` | typecheck + compila para `dist/` |
 | `npm test` | unidade + integração; resultados por ambiente no estado atual |
 | `npm run test:e2e` | interface em navegador real (precisa de Chrome — ver abaixo) |
-| `npm run test:e2e:refinamentos` | Playwright: lateral, colunas, altura e leitura com 5.000 vídeos descartáveis |
+| `npm run test:e2e:refinamentos` | Playwright: lateral, arraste de colunas/altura e leitura com 5.000 vídeos descartáveis |
 | `npm run verificar` | fumaça: sobe, confere endpoints e estáticos, derruba |
 
 ### E2E (navegador real)
