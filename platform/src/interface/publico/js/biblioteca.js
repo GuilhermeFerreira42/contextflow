@@ -55,8 +55,8 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
   let posicaoSalva = 0;
   let modo = 'ampliado';
   let colunas = { ...colunasPadrao };
-  let expandidos = new Set();
   let previas = new Map(); // resumo curto por vídeo, buscado em lote
+  let versaoPrevias = 0; // sobe quando chega resumo; invalida o cache de linhas
   let intervaloData = null; // recorte da árvore "Data de importação"
   const chaves = new Map();
   let linhasAtuais = new Map();
@@ -270,22 +270,24 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
 
     const paragrafo = document.createElement('p');
     paragrafo.className = 'resumo-linha';
-    if (expandidos.has(video.id)) paragrafo.classList.add('expandido');
     paragrafo.textContent = texto;
     bloco.append(paragrafo);
 
-    // Só oferece "ver mais" quando o texto realmente passa do limite.
-    if (texto.length > 180) {
+    /*
+     * "ver mais" abre o painel, em vez de esticar a linha.
+     *
+     * Motivo: a virtualização depende de altura FIXA (SPEC §4). Expandir a
+     * linha para 530 px desmontaria a aritmética do scroll e a lista voltaria a
+     * pular — o mesmo defeito já corrigido nesta fase. O painel mostra o texto
+     * inteiro com conforto, e é uma camada: a posição da lista não muda.
+     */
+    if (texto.length > 120) {
       const botao = document.createElement('button');
       botao.type = 'button';
       botao.className = 'ver-mais';
-      const aberto = expandidos.has(video.id);
-      botao.textContent = aberto ? 'ver menos' : 'ver mais';
-      botao.addEventListener('click', () => {
-        if (aberto) expandidos.delete(video.id);
-        else expandidos.add(video.id);
-        agendar();
-      });
+      botao.dataset.para = video.id;
+      botao.textContent = 'ver resumo completo';
+      botao.addEventListener('click', () => aoAbrirPainel?.(video.id));
       bloco.append(botao);
     }
 
@@ -433,10 +435,12 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
     exibidos.forEach((video, i) => {
       const indice = inicio + i;
       const anterior = linhasAtuais.get(video.id);
-      const elemento = anterior?.video === video && anterior.indice === indice && anterior.altura === altura
-        ? anterior.elemento
-        : linha(video, indice);
-      proximas.set(video.id, { video, indice, elemento, altura });
+      const reutilizavel = anterior?.video === video
+        && anterior.indice === indice
+        && anterior.altura === altura
+        && anterior.versaoPrevias === versaoPrevias;
+      const elemento = reutilizavel ? anterior.elemento : linha(video, indice);
+      proximas.set(video.id, { video, indice, elemento, altura, versaoPrevias });
       nodes.push(elemento);
       if (indice >= primeiroVisivel && indice < ultimoVisivel) visiveis.push(elemento);
     });
@@ -473,6 +477,32 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
 
     if (fim >= itens.length && itens.length < total && cursor && !carregando && !falhaPagina) {
       void carregarMais(fim + PAGINA);
+    }
+
+    // Esconde o "ver mais" das linhas que não truncaram de fato.
+    medirCortes();
+  }
+
+  /**
+   * Confere, no DOM, quais resumos foram cortados de fato.
+   *
+   * Não dá para comparar scrollHeight com clientHeight: em elemento com
+   * `-webkit-box` + `line-clamp`, o Chrome devolve os dois iguais. Medimos a
+   * altura REAL do texto removendo o clamp por um instante — a leitura de
+   * `scrollHeight` força o layout, então não há flash visual.
+   */
+  function medirCortes() {
+    for (const bloco of corpo.querySelectorAll('.celula-resumo')) {
+      const paragrafo = bloco.querySelector('.resumo-linha');
+      const botao = bloco.querySelector('.ver-mais');
+      if (!paragrafo || !botao) continue;
+      const alturaComClamp = paragrafo.clientHeight;
+      const clampAnterior = paragrafo.style.webkitLineClamp;
+      paragrafo.style.webkitLineClamp = 'unset';
+      const alturaReal = paragrafo.clientHeight;
+      paragrafo.style.webkitLineClamp = clampAnterior;
+      // 2px de folga para arredondamento de linha.
+      botao.hidden = alturaReal - alturaComClamp <= 2;
     }
   }
 
@@ -528,6 +558,10 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
   async function calcularPrevias() {
     const faltando = itens.filter(v => v.temResumo && !previas.has(v.id)).slice(0, 60);
     if (!faltando.length) return;
+    // Uma requisição por vídeo, em paralelo — mas cada uma devolve o texto mais
+    // COMPLETO daquele vídeo (um vídeo pode ter resumo de mais de um modelo).
+    // A rota /resumo devolve o "melhor" por estado/data, que pode ser um resumo
+    // curto; aqui interessa o que vai ser lido na coluna e no painel.
     await Promise.all(faltando.map(async video => {
       try {
         const resumo = await api(`/api/biblioteca/${encodeURIComponent(video.id)}/resumo`);
@@ -535,6 +569,11 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
         else previas.set(video.id, '');
       } catch { previas.set(video.id, ''); }
     }));
+    // O resumo chegou DEPOIS do primeiro desenho. Sem mudar a versão, o cache
+    // de linhas (que compara apenas o objeto `video`) reutilizaria a linha
+    // antiga e o resumo nunca apareceria na tela.
+    versaoPrevias++;
+    linhasAtuais = new Map();
     agendar();
   }
 
@@ -552,7 +591,6 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
       posicaoSalva = 0;
       ultimaSelecao = null;
       previas = new Map();
-      expandidos = new Set();
     }
     viewport.setAttribute('aria-busy', 'true');
     $('#carregamento-biblioteca').textContent = 'Carregando vídeos…';
@@ -804,6 +842,9 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
       $('#busca').value = '';
       for (const id of ['filtro-estado', 'filtro-canal', 'filtro-playlist', 'filtro-colecao']) $('#' + id).value = '';
       $('#filtro-resumo').checked = false;
+      // O recorte da árvore também é filtro: limpar filtros precisa zerá-lo,
+      // senão o botão deixaria a lista parcial sem explicação visível.
+      intervaloData = null;
       void carregar({ reset: true });
     });
 

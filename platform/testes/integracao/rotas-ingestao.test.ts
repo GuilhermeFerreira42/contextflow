@@ -318,3 +318,36 @@ test('filtro importadoDe/importadoAte recorta por data de importação', async (
   )).json()) as { dados: { total: number } };
   assert.equal(fora.dados.total, 0);
 });
+
+/* ------------------------------------------- prévia de resumo (F5-UI) -- */
+
+test('prévia escolhe o resumo mais completo quando há mais de um provedor', async () => {
+  const { RepositorioResumosLeituraSqlite } = await import(
+    '../../src/motor/src/persistencia/repositorio-resumos-leitura.ts'
+  );
+  const repo = new RepositorioResumosLeituraSqlite(app.banco.db as never);
+  const exemploId = 'video-com-dois-resumos';
+  app.banco.db
+    .prepare(
+      `INSERT INTO videos (id,youtube_id,titulo,canal_id,canal_nome,duracao_segundos,url,estado,criado_em,atualizado_em,tem_resumo)
+       VALUES (?, 'yid-dois-resumos', 'Dois resumos', NULL, 'Canal', 60, 'https://www.youtube.com/watch?v=x', 'pronto', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', 1)`,
+    )
+    .run(exemploId);
+  const curto = 'curto'.repeat(3);
+  const longo = 'resumo bem mais completo '.repeat(30);
+  app.banco.db
+    .prepare(
+      `INSERT INTO resumos (video_id,provedor,modelo,versao_prompt,revisao_transcricao,texto,estado,erro,criado_em,atualizado_em)
+       VALUES (?, 'p', 'm', 'v', 'r', ?, 'pronto', NULL, '2026', '2026')`,
+    )
+    .run(exemploId, curto);
+  app.banco.db
+    .prepare(
+      `INSERT INTO resumos (video_id,provedor,modelo,versao_prompt,revisao_transcricao,texto,estado,erro,criado_em,atualizado_em)
+       VALUES (?, 'p', 'm2', 'v', 'r', ?, 'pronto', NULL, '2026', '2026')`,
+    )
+    .run(exemploId, longo);
+
+  const mapa = await repo.previaPorVideo([exemploId]);
+  assert.equal(mapa.get(exemploId)?.length, 700, 'a prévia deve vir do resumo mais longo, cortada em 700');
+});
