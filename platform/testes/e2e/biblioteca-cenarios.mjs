@@ -13,6 +13,10 @@ export async function exercitarBiblioteca({ app, base, avaliar, esperar, S, regi
       inserir.run('massa-'+sufixo,youtubeId,'Massa '+sufixo,'volume-'+i%4,'Canal de volume '+i%4,i%400,
         'https://www.youtube.com/watch?v='+youtubeId,i%2?'parcial':'pronto');
       if(i<5)app.banco.db.prepare(`INSERT INTO resumos VALUES(?,'teste','modelo','p1','r1','Resumo de teste','pronto',NULL,'2026','2026')`).run('massa-'+sufixo);
+      // Um resumo longo de verdade: o corte por clamp e o "ver resumo completo"
+      // não podem ser testados com uma frase curta.
+      if(i===4)app.banco.db.prepare(`INSERT INTO resumos VALUES(?,'teste','modelo','p2','r1',?,'pronto',NULL,'2026','2026')`).run('massa-'+sufixo,
+        'Este resumo longo existe para exercitar o corte visual do clamp na coluna de resumo. '.repeat(12));
     }
   });
   await S('Page.navigate',{url:base});
@@ -110,6 +114,8 @@ export async function exercitarBiblioteca({ app, base, avaliar, esperar, S, regi
   registrar('F5: filtro de resumo usa badge persistido sem perdê-lo na reimportação',await esperar(`document.querySelector('#biblioteca-viewport').dataset.total==='1'`) && await avaliar(`document.querySelector('#corpo-biblioteca tr[data-id] td:last-child').textContent==='Pronto'`));
   await avaliar(`document.querySelector('#limpar-filtros').click()`);
   assert.ok(await esperar(`document.querySelector('#biblioteca-viewport').dataset.total==='5003'`));
+  // limpa o estado de filtro deixado pelo cenário de resumo acima
+  await avaliar(`document.querySelector('#filtro-resumo').checked=false;document.querySelector('#filtro-resumo').dispatchEvent(new Event('change'))`);
   await avaliar(`document.querySelector('#filtro-playlist').value='PLteste';document.querySelector('#filtro-playlist').dispatchEvent(new Event('change'))`);
   registrar('F5: classificação por playlist usa os itens importados na F4',await esperar(`document.querySelector('#biblioteca-viewport').dataset.total==='2'`));
   await avaliar(`document.querySelector('#limpar-filtros').click()`);
@@ -172,6 +178,33 @@ export async function exercitarBiblioteca({ app, base, avaliar, esperar, S, regi
   const larguraDepois=await avaliar(`document.querySelector('.barra-lateral').getBoundingClientRect().width`);
   registrar('F5-UI: barra lateral recolhe liberando espaço',larguraAntes>larguraDepois,`${Math.round(larguraAntes)}px -> ${Math.round(larguraDepois)}px`);
   await avaliar(`document.querySelector('#recolher-barra').click()`);
+
+  // O resumo longo não estica a linha: abre o painel. A altura fixa é o que
+  // sustenta a virtualização — se a linha crescer, a lista volta a pular.
+  // Garante que estamos na Biblioteca com dados antes de medir: os cenários
+  // anteriores mexeram em barra, colunas e filtros.
+  await avaliar(`document.querySelector('[data-aba="biblioteca"]').click()`);
+  await esperar(`document.querySelector('#biblioteca-viewport').dataset.total!=='0'`);
+  // Filtra por "com resumo": só cinco vídeos, e o único com resumo longo é o
+  // que tem botão. Sem isso o teste dependeria de qual faixa a janela desenhou.
+  await avaliar(`document.querySelector('#filtro-resumo').checked=true;document.querySelector('#filtro-resumo').dispatchEvent(new Event('change'))`);
+  await esperar(`document.querySelector('#biblioteca-viewport').dataset.total==='5'`);
+  await dormir(900);
+  const temVerResumo=await avaliar(`!![...document.querySelectorAll('.ver-mais')].find(b=>!b.hidden)`);
+  // A medição de altura é feita na LINHA que tem o botão, não na primeira.
+  const alturaAntesDeAbrir=await avaliar(`(()=>{const b=[...document.querySelectorAll('.ver-mais')].find(x=>!x.hidden);
+    return b?Math.round(b.closest('tr').getBoundingClientRect().height):-1;})()`);
+  await avaliar(`[...document.querySelectorAll('.ver-mais')].find(b=>!b.hidden)?.click()`);
+  const painelPeloResumo=await esperar(`!document.querySelector('#painel-leitura').hidden && document.querySelector('#painel-resumo')?.textContent?.length>50`,8000);
+  const alturaDepoisDeAbrir=await avaliar(`(()=>{const b=[...document.querySelectorAll('.ver-mais')].find(x=>!x.hidden);
+    return b?Math.round(b.closest('tr').getBoundingClientRect().height):-1;})()`);
+  registrar('F5-UI: "ver resumo completo" abre o painel sem esticar a linha',
+    temVerResumo&&painelPeloResumo&&alturaAntesDeAbrir===alturaDepoisDeAbrir,
+    `${alturaAntesDeAbrir}px -> ${alturaDepoisDeAbrir}px · botão=${temVerResumo} · painel=${painelPeloResumo} · len=${await avaliar(`document.querySelector('#painel-resumo')?.textContent?.length`)} · aberto=${await avaliar(`!document.querySelector('#painel-leitura').hidden`)}`);
+  await avaliar(`document.querySelector('#fechar-painel').click()`);
+  await dormir(300);
+  await avaliar(`document.querySelector('#limpar-filtros').click()`);
+  await esperar(`document.querySelector('#biblioteca-viewport').dataset.total==='5003'`);
 
   const captura=await S('Page.captureScreenshot',{format:'png'});
   writeFileSync(join(raiz,'testes','.tmp','interface-biblioteca-f5.png'),Buffer.from(captura.data,'base64'));

@@ -787,27 +787,27 @@ body {
 
 /* Larguras: a leitura (vídeo + resumo) domina; o resto é apoio discreto. */
 .tabela-biblioteca th[data-coluna='titulo'] {
-  width: 38%;
+  width: 36%;
   min-width: 320px;
 }
 .tabela-biblioteca th[data-coluna='canal'] {
-  width: 130px;
+  width: 142px;
 }
 .tabela-biblioteca th[data-coluna='duracao'] {
-  width: 84px;
+  width: 96px;
 }
 .tabela-biblioteca th[data-coluna='adicionado'] {
-  width: 104px;
+  width: 126px;
 }
 .tabela-biblioteca th[data-coluna='estado'] {
-  width: 100px;
+  width: 96px;
 }
 .tabela-biblioteca th[data-coluna='resumo'] {
-  width: 26%;
+  width: 25%;
   min-width: 240px;
 }
 .tabela-biblioteca th[data-coluna='resumo-estado'] {
-  width: 108px;
+  width: 122px;
 }
 
 .tabela-biblioteca thead th {
@@ -821,7 +821,7 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.07em;
   text-align: left;
-  padding: 0 12px;
+  padding: 0 10px;
   height: 38px;
   border-bottom: 1px solid var(--borda);
   white-space: nowrap;
@@ -854,6 +854,7 @@ body {
   font-size: 9px;
   line-height: 1;
   opacity: 0.35;
+  flex-shrink: 0;
   transition: opacity 0.15s, transform 0.15s;
 }
 .tabela-biblioteca thead th.ordenado .seta-ordenacao {
@@ -865,8 +866,9 @@ body {
 }
 
 .tabela-biblioteca tbody td {
-  padding: 0 12px;
+  padding: 0 11px;
   height: var(--altura-linha);
+  max-height: var(--altura-linha);
   border-bottom: 1px solid rgba(33, 44, 61, 0.65);
   color: var(--texto);
   vertical-align: middle;
@@ -875,6 +877,8 @@ body {
 
 .tabela-biblioteca tbody tr {
   transition: background 0.1s;
+  /* Também fixa a altura: `tr` com conteúdo maior esticaria a tabela. */
+  height: var(--altura-linha);
 }
 .tabela-biblioteca tbody tr:hover td {
   background: var(--grafite-850);
@@ -908,6 +912,8 @@ input[type='checkbox'] {
   gap: 13px;
   min-width: 0;
   padding: 0;
+  max-height: calc(var(--altura-linha) - 20px);
+  overflow: hidden;
 }
 
 .tabela-biblioteca tbody td[data-coluna='titulo'],
@@ -919,7 +925,7 @@ input[type='checkbox'] {
 .miniatura {
   position: relative;
   flex-shrink: 0;
-  width: 148px;
+  width: 138px;
   aspect-ratio: 16 / 9;
   border-radius: 6px;
   overflow: hidden;
@@ -1029,10 +1035,6 @@ input[type='checkbox'] {
   -webkit-line-clamp: var(--linhas-resumo, 5);
   -webkit-box-orient: vertical;
 }
-.resumo-linha.expandido {
-  -webkit-line-clamp: unset;
-  display: block;
-}
 .resumo-vazio {
   font-size: 11.5px;
   color: var(--grafite-500);
@@ -1080,16 +1082,21 @@ input[type='checkbox'] {
 
 .celula-resumo {
   font-size: 12px;
-  line-height: 1.6;
+  line-height: 1.55;
   color: var(--texto);
   vertical-align: top;
+  /* A linha tem altura fixa (virtualização). O conteúdo da célula não pode
+     esticá-la: o corte é responsabilidade do clamp + overflow. */
+  max-height: calc(var(--altura-linha) - 20px);
+  overflow: hidden;
 }
 .celula-resumo .resumo-linha {
   -webkit-line-clamp: 5;
 }
 .celula-resumo .ver-mais {
   display: inline-block;
-  margin-top: 3px;
+  margin-top: 2px;
+  font-size: 11px;
 }
 
 /* --------------------------------------------------------- selos/estados */

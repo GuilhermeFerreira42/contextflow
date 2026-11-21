@@ -43,6 +43,9 @@ export class RepositorioResumosLeituraSqlite implements RepositorioResumosLeitur
            FROM resumos
           WHERE video_id = ?
           ORDER BY CASE estado WHEN 'pronto' THEN 0 WHEN 'processando' THEN 1 ELSE 2 END,
+                   -- Entre resumos prontos, o mais completo é o que a interface
+                   -- deve exibir: é o que o usuário vai ler na linha e no painel.
+                   length(COALESCE(texto,'')) DESC,
                    atualizado_em DESC
           LIMIT 1`,
       )
@@ -66,19 +69,29 @@ export class RepositorioResumosLeituraSqlite implements RepositorioResumosLeitur
 
   /**
    * Prévia em lote: uma consulta para N vídeos, em vez de N consultas.
-   * Corta em 400 caracteres: a linha mostra pouco, e não vale trafegar texto
-   * inteiro para 500 linhas.
+   *
+   * O corte em 400 caracteres é no BANCO, para não trafegar texto inteiro em
+   * 500 linhas. Mas ele precisa ser maior que o que a coluna mostra: com 400,
+   * a interface recebia um texto que o clamp não truncava visualmente e o
+   * botão "ver resumo completo" nunca aparecia. 700 cobre com folga as cinco
+   * linhas da coluna mais larga.
    */
   async previaPorVideo(videoIds: string[]): Promise<Map<string, string>> {
     const mapa = new Map<string, string>();
     if (videoIds.length === 0) return mapa;
 
     const marcadores = videoIds.map(() => '?').join(',');
+    // Agregação explícita em vez de `ORDER BY` + primeiro-que-chega: um vídeo
+    // pode ter resumo de mais de um provedor/modelo (a chave é composta), e a
+    // prévia precisa ser o texto mais completo — o "ver resumo completo" só
+    // faz sentido se o texto exibido for o que será lido no painel.
     const linhas = this.#db
       .prepare(
-        `SELECT video_id, substr(texto, 1, 400) AS texto
+        `SELECT video_id, substr(MAX(texto), 1, 700) AS texto
            FROM resumos
-          WHERE estado = 'pronto' AND texto IS NOT NULL AND video_id IN (${marcadores})`,
+          WHERE estado = 'pronto' AND texto IS NOT NULL AND video_id IN (${marcadores})
+          GROUP BY video_id
+          ORDER BY length(MAX(texto)) DESC`,
       )
       .all(...videoIds) as unknown as Array<{ video_id: string; texto: string }>;
 
