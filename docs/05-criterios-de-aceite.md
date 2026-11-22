@@ -20,6 +20,15 @@
 
 ## Status de execução (atualizado a cada fatia)
 
+**Miniatura adaptativa (base `76e57d1`, Windows):** 232 testes, 226 aprovados e
+seis ignorados; CDP 57/57; Playwright 4/4 miniatura, 13/13 pós-F6, 9/9
+refinamentos e 7/7 resumos. Build/typecheck e nove verificações de fumaça OK.
+Regressão nova falhou antes da correção: imagem diminuía ao aumentar a linha.
+Depois: crescimento sem recuo, título abaixo e contido, 45 combinações de
+altura/largura/conteúdo, seleção, Compacto e reload. Dados descartáveis; capturas
+inspecionadas; homologação humana/Linux/serviços reais não executados nesta rodada.
+Evidências em `../Continuidade de Projeto/miniatura-adaptativa-76e57d1/`.
+
 **Correção LiteLLM (base `8434a25`):** 198 testes, 192 aprovados e seis ignorados;
 7/7 grupos Playwright F6. Conexão real ao LiteLLM local sem chave e listagem de
 modelos aprovadas; geração real não solicitada. Proxy controlado comprovou salvar,

@@ -1041,85 +1041,51 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel, aoResumir })
     if (itens.length) renderizar();
   }
 
-  /**
-   * Decide, por linha visível, entre miniatura lateral e empilhada.
-   *
-   * A regra vem das medidas reais, não de um breakpoint de tela:
-   *
-   *   larguraDesejada = (alturaLinha - 24) * 1.24   // 16:9 da sobra vertical
-   *   precisa = larguraDesejada + GAP + TEXTO_MINIMO
-   *
-   * Se a coluna do vídeo é mais estreita que `precisa`, o lado a lado
-   * esmagaria o texto — então o título desce. Reduzir a altura reduz
-   * `larguraDesejada`, e o lado a lado volta sozinho.
-   *
-   * Roda depois de renderizar e no resize da coluna; usa
-   * `requestAnimationFrame` para não medir durante o layout.
-   */
+  /** Compara a imagem que cabe em cada disposição, sem teto fixo ou recuo ao empilhar. */
   function ajustarLayoutMiniaturas() {
-    const celulas = corpo.querySelectorAll('.celula-video');
+    const celulas = [...corpo.querySelectorAll('.celula-video')];
     if (!celulas.length) return;
     const altura = alturaLinha();
-    const GAP = 13;
-    /*
-     * Largura mínima para o texto ao lado da miniatura.
-     *
-     * 170px é o ponto em que o título ainda cabe em duas ou três palavras por
-     * linha e o resumo não vira uma coluna de uma palavra. Com 190px a
-     * alternância disparava cedo demais (numa coluna de 392px, 180px de altura
-     * já empilhava sem necessidade — medido no app real).
-     *
-     * Não é um breakpoint de tela: entra na conta junto com a largura que a
-     * imagem quer ocupar, então continua respondendo ao arraste da coluna.
-     */
-    const TEXTO_MINIMO = 170;
     const PROPORCAO = 16 / 9;
+    if (modo === 'compacto') {
+      for (const celula of celulas) celula.dataset.layout = 'lateral';
+      return;
+    }
 
-    /*
-     * A imagem deve ocupar toda a sobra vertical da linha: 16:9 de
-     * `altura - 24` (o respiro que o CSS já reserva).
-     *
-     * O defeito anterior estava aqui: existia um teto fixo de 420px e um
-     * `max-width: 55%`. Numa coluna larga e linha alta, a imagem parava em
-     * 420 (ou em 55% da coluna) e **sobrava vazio embaixo**; pior, como
-     * `55% + gap + texto` sempre "cabia", o modo lado a lado nunca era
-     * abandonado e o título jamais descia. Medido no app do proprietário.
-     *
-     * Agora não há teto arbitrário: a largura desejada vem da altura, e quem
-     * decide o modo é o espaço REAL que sobra para a imagem ao lado do texto.
-     */
-    const sobraVertical = Math.max(40, altura - 24);
-    const larguraPelaAltura = sobraVertical * PROPORCAO;
-
+    // Primeiro disponibilizar toda a largura ao texto, depois medir sua altura.
+    // A leitura de todas as linhas vem antes das escritas finais: um reflow por
+    // janela virtual, não um por célula. O estado transitório não chega à pintura.
     for (const celula of celulas) {
+      celula.dataset.layout = 'empilhado';
+      celula.style.maxHeight = 'none';
+    }
+    const medidas = celulas.map(celula => {
       const td = celula.closest('td');
-      if (!td) continue;
-      const larguraColuna = td.clientWidth - 20; // descontar o padding lateral
-      if (!larguraColuna) continue;
-
-      // Espaço máximo que a imagem pode ocupar mantendo o texto ao lado.
-      const espacoLateral = larguraColuna - GAP - TEXTO_MINIMO;
-
-      if (larguraPelaAltura <= espacoLateral) {
-        // Cabe ao lado do texto: a imagem cresce com a altura, sem teto fixo.
-        celula.dataset.layout = 'lateral';
-        celula.style.setProperty('--miniatura-largura', `${Math.round(larguraPelaAltura)}px`);
-        celula.style.removeProperty('--miniatura-empilhada');
-      } else {
-        /*
-         * O lado a lado limitaria a imagem (ela ficaria mais baixa do que a
-         * linha permite e sobraria espaço vazio). Então o título desce e a
-         * imagem usa a largura da coluna — limitada pela altura restante
-         * depois do título, para não engolir a linha inteira.
-         */
-        const larguraMaximaPorAltura = Math.max(80, (altura - 66) * PROPORCAO);
-        celula.dataset.layout = 'empilhado';
-        celula.style.setProperty(
-          '--miniatura-empilhada',
-          `${Math.round(Math.min(larguraColuna, larguraMaximaPorAltura))}px`,
-        );
-        celula.style.removeProperty('--miniatura-largura');
-      }
+      const texto = celula.querySelector('.celula-video-texto');
+      const titulo = texto?.querySelector('.titulo-video');
+      if (!td || !texto || !titulo) return null;
+      const estilo = getComputedStyle(td);
+      const largura = celula.getBoundingClientRect().width;
+      const respiro = parseFloat(estilo.paddingTop) + parseFloat(estilo.paddingBottom)
+        + parseFloat(estilo.borderTopWidth) + parseFloat(estilo.borderBottomWidth);
+      const disponivel = Math.max(0, altura - respiro);
+      const alturaTexto = texto.getBoundingClientRect().height;
+      // Reserva legível ao lado, relativa à tipografia usada pelo próprio título.
+      const minimoTexto = Math.min(parseFloat(getComputedStyle(titulo).fontSize) * 12,
+        Math.max(0, largura - 13 - Math.min(disponivel * PROPORCAO, largura / 3)));
+      const lateral = Math.min(disponivel * PROPORCAO, Math.max(0, largura - 13 - minimoTexto));
+      const empilhada = Math.min(largura, Math.max(0, disponivel - alturaTexto - 8) * PROPORCAO);
+      const empilhar = empilhada > lateral + 1;
+      return { celula, empilhar, disponivel,
+        largura: Math.max(0, Math.floor(empilhar ? empilhada : lateral)) };
+    });
+    for (const medida of medidas) {
+      if (!medida) continue;
+      medida.celula.dataset.layout = medida.empilhar ? 'empilhado' : 'lateral';
+      medida.celula.style.setProperty('--miniatura-largura', `${medida.largura}px`);
+      medida.celula.style.setProperty('--altura-conteudo-video', `${medida.disponivel}px`);
+      medida.celula.style.removeProperty('--miniatura-empilhada');
+      medida.celula.style.removeProperty('max-height');
     }
   }
 

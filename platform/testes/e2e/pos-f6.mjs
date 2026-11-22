@@ -9,7 +9,7 @@
  * preferências, Markdown seguro, tamanho de fonte e layout adaptativo.
  */
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
@@ -126,7 +126,8 @@ try {
   const executavel = [process.env.CHROME_BIN,
     '/home/user/.cache/cdp/chrome-bin',
     chromium.executablePath(),
-    '/usr/bin/chromium', '/usr/bin/google-chrome'].find(p => p && p.length > 0);
+    'C:/Program Files/Google/Chrome/Application/chrome.exe',
+    '/usr/bin/chromium', '/usr/bin/google-chrome'].find(p => p && existsSync(p));
   browser = await chromium.launch({
     executablePath: executavel,
     args: ['--no-sandbox', '--disable-dev-shm-usage'],
@@ -443,8 +444,8 @@ try {
   const media = (await ajustarAltura(200), await medirLinha());
   verificar(media.miniAltura > baixa.miniAltura,
     `layout: miniatura deveria crescer com a altura (${baixa.miniAltura} → ${media.miniAltura})`);
-  verificar(media.miniAltura > 120,
-    `layout: com 200px de linha a miniatura ficou pequena (${media.miniAltura}px de altura)`);
+  verificar(!media.sobreposicao,
+    'layout: crescer a imagem não pode sobrepor o título na linha de 200px');
 
   const alta = (await ajustarAltura(560), await medirLinha());
   verificar(alta.miniDireita <= alta.celulaDireita + 1,

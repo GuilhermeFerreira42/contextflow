@@ -4,7 +4,67 @@
 > `00-comece-aqui.md`. O que está abaixo da linha "Histórico" é registro, não
 > estado vigente.
 
-## Estado vigente — 22/11/2026 — Ajustes pós-F6 (F6-A)
+## Estado vigente — 22/11/2026 — correção da miniatura adaptativa
+
+Branch `main`; base `76e57d1`, árvore limpa antes deste pedido. O proprietário
+trouxe a entrega atualizada da Arena e pediu corrigir miniatura/título (item 8),
+usando o comando pós-F6 e a captura como contexto. Os demais sete ajustes foram
+preservados. SPEC prévia: `specs/f6a-miniatura-adaptativa.md`. F7 não iniciada.
+
+**Investigação:** a base recebida já retirava o antigo teto de 420 px, e seu
+cenário de linha 600/coluna 700 já empilhava. Ainda havia uma falha reproduzida
+com controles reais: subir a linha de 296 para 304 px fazia a imagem encolher
+de 484 para 423 px ao empilhar. A troca usava uma reserva fixa de 66 px e não
+comparava a imagem possível em cada disposição. Não atribuir a captura antiga
+ao comportamento integral do HEAD recebido nem declarar o teste antigo suficiente.
+
+**Correção:** `biblioteca.js` compara os espaços viáveis lateral/empilhado;
+mede título e subtexto na largura da coluna, reservando sua altura natural.
+Agrupa medidas/escritas na janela virtual e retira o limite de altura apenas
+durante a medição, sem pintar o estado intermediário. Essa retirada evita medir
+texto comprimido em zero nas linhas mínimas. O empilhado só é escolhido quando
+permite imagem maior; Compacto permanece lateral. CSS mantém 16:9 e padding,
+sem teto fixo de imagem ou reserva fixa para o texto. Nenhuma mudança de banco,
+backend, preferências, dependências ou dados pessoais.
+
+**Prova executada no Windows, Node v22.12.0, dados descartáveis:**
+
+| Comando | Resultado, saída 0 |
+|---|---|
+| `npm test` | 232 testes: 226 aprovados, seis ignorados, zero falhas |
+| `npm run test:e2e:miniatura` | 4/4 novos grupos Playwright; imagem crescente, título abaixo/sem sobreposição, arraste/slider reais, larguras 180–1100, alturas 64/136/600, título longo/curto, fallback, Compacto, seleção e reload |
+| `npm run test:e2e:pos-f6` | 13 cenários, zero falhas |
+| `npm run test:e2e:refinamentos` | 9/9, incluindo 5.000 vídeos e conservação da posição/seleção ao mudar altura |
+| `npm run test:e2e:resumos` | 7/7, provedor HTTP controlado |
+| `npm run test:e2e` | 57/57 CDP |
+| `npm run build` | typecheck e build aprovados |
+| `npm run verificar` | nove verificações OK, TUDO OK |
+
+Com linha 600 px e coluna 1100 px, mediu-se imagem **905×509 px**, título abaixo
+e bloco inteiro dentro da linha. Coluna 700 usa **678×381 px**: depois de atingir
+a largura útil da coluna, a imagem precisa parar de crescer para manter 16:9.
+Isso é limite geométrico, não teto artificial. Captura após reload inspecionada
+visualmente. O novo teste falhou antes da correção pela diminuição da imagem.
+
+O roteiro pós-F6 tinha caminho Linux escolhido sem conferir existência; agora
+seleciona um executável existente também no Windows. Seu limite fixo de imagem
+maior que 120 px numa linha de 200 foi substituído pela ausência de sobreposição:
+nessa coluna, imagem maior cortaria o título/subtexto. A matriz nova exige
+crescimento, proporção e limites reais, sem relaxar esses critérios.
+
+Evidências fora do Git em `../Continuidade de Projeto/miniatura-adaptativa-76e57d1/`:
+`LEIA-ME.md`, logs finais, `antes/` e `depois/` (capturas e `medidas.json`). Logs
+intermediários com falha são diagnóstico, não resultado final.
+Não executados: nova regressão Linux, YouTube/LLM reais, alteração do banco pessoal
+ou homologação humana. O texto de contexto relata F6 funcionando em uso real;
+isso é relato do proprietário, não uma nova geração real nesta rodada.
+
+**Próxima ação:** conferir visualmente na instalação do proprietário após
+recarregar a página (ou reconstruir/reiniciar se estiver usando `dist/`), incluindo
+seu par altura/largura. Preservar os oito ajustes e não iniciar F7 por inferência.
+O commit desta correção contém este registro; consultar `git log -1`.
+
+## Entrega anterior recebida — F6-A da Arena (histórico)
 
 **Branch de trabalho:** `arena/735d302d-contextflow` (a partir de `e11a748d`).
 Base local antes desta rodada: `71b64b4`. F7 **não iniciada**, por instrução.

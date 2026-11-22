@@ -8,6 +8,11 @@ com provedores HTTP controlados no Windows**; homologação com provedor real pe
 Base documental: pacote `ContextFlow_Pacote_Execucao_V1` (2026-11-18). Estado vivo em
 `docs/estado-atual.md`.
 
+**Rodada mais recente (22/11/2026):** entrega pós-F6 da Arena incorporada em
+`5dbb7e0`/`76e57d1`; correção da miniatura/título conforme
+`docs/specs/f6a-miniatura-adaptativa.md`, validada no Windows. Os outros sete
+ajustes foram preservados. F7 não iniciada; resultados atuais no estado.
+
 **Direção vigente (21/11/2026):** após trazer a entrega da Arena, o proprietário
 autorizou o Codex a implementar os refinamentos de alinhamento, leitura ampliada
 e controle da lateral no topo. Resultados e evidências em `docs/estado-atual.md`;

@@ -58,6 +58,13 @@ Três regras que precisam ser mantidas juntas, porque cada uma já causou defeit
    o ajuste; a altura não varia por conteúdo nem por linha. Texto longo usa
    `-webkit-line-clamp` + botão "ver mais", nunca altura livre.
 
+   A miniatura compara espaço lateral e empilhado, medindo altura natural do
+   título/subtexto na largura real da coluna. Empilha somente se isso permitir
+   imagem maior; respeita 16:9, padding e altura uniforme. Diminuir a linha pode
+   restaurar o lateral; Compacto é lateral. Sem teto fixo de miniatura ou reserva
+   fixa de 66 px. Leitura/escrita de medidas é agrupada por janela virtual;
+   o estado temporário usado para medir o texto não é pintado.
+
 2. **A altura vem do CSS, não de uma constante em JS.** O JS lê
    `--altura-linha` de `.aplicativo`. Uma cópia em JS já divergiu do CSS e fez a
    lista pular ao rolar — o virtualizador calculava a janela com o número errado.

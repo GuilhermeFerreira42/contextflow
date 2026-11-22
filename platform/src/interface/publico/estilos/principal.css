@@ -1305,8 +1305,8 @@ input[type='checkbox'] {
  *    a coluna tinha e o texto era esmagado (ou a imagem estourava);
  *  - em coluna larga, sobrava espaço vertical ao lado da imagem.
  *
- * Agora o layout é decidido pelo ESPAÇO REAL, via container query, não por um
- * número escolhido a dedo. Dois estados:
+ * O JS compara o espaço REAL para imagem e texto, incluindo a altura medida
+ * do título/subtexto. O CSS apresenta os dois estados:
  *
  *   lateral    — miniatura à esquerda, texto à direita (linha baixa/média ou
  *                coluna larga);
@@ -1322,7 +1322,7 @@ input[type='checkbox'] {
   gap: 13px;
   min-width: 0;
   padding: 0;
-  max-height: calc(var(--altura-linha) - 20px);
+  max-height: var(--altura-conteudo-video, calc(var(--altura-linha) - 20px));
   overflow: hidden;
 }
 
@@ -1341,6 +1341,9 @@ input[type='checkbox'] {
   text-align: left;
   vertical-align: top;
   padding-top: 12px;
+}
+.tabela-biblioteca tbody td[data-coluna='titulo'] {
+  padding-bottom: 12px;
 }
 
 /*
@@ -1364,7 +1367,7 @@ input[type='checkbox'] {
   width: var(--miniatura-largura, calc((var(--altura-linha) - 24px) * 16 / 9));
   max-width: 100%;
   aspect-ratio: 16 / 9;
-  max-height: calc(var(--altura-linha) - 24px);
+  /* Largura calculada com a sobra vertical real; aspect-ratio define a altura. */
   border-radius: 6px;
   overflow: hidden;
   background: linear-gradient(135deg, var(--grafite-700), var(--grafite-800));
@@ -1374,22 +1377,15 @@ input[type='checkbox'] {
 }
 
 /*
- * Empilhado: quando a célula fica mais alta do que larga o suficiente para o
- * par lado a lado, o texto desce.
- *
- * A condição é a razão entre largura e a altura que o texto precisa. O valor
- * 1,9 sai das medidas reais: 13px de gap + ~180px de texto mínimo legível
- * contra a altura que a imagem ocupa (altura - 24 em 16:9). Abaixo disso o
- * lado a lado deixaria o texto com menos de ~180px, que é onde o título
- * começa a quebrar em uma palavra por linha.
+ * Empilhado: o texto desce quando isso permite uma miniatura maior do que
+ * ao lado. Sua altura natural fica reservada antes de dimensionar a imagem.
  */
 /*
  * Estado "empilhado": o JS mede a coluna e a altura e grava
  * `data-layout="empilhado"` na célula. O CSS só desenha o resultado.
  *
- * O limite NÃO é um breakpoint de tela: é a conta
- *   largura da miniatura (cresce com a altura) + respiro + texto mínimo
- * comparada à largura real da coluna.
+ * A conta considera largura da coluna, altura da linha, padding e texto;
+ * a troca não pode fazer a imagem encolher ao aumentar a altura da linha.
  * Por isso arrastar a coluna muda o estado na hora, e diminuir a altura
  * devolve o lado a lado — sem recarregar nada.
  */
@@ -1401,12 +1397,11 @@ input[type='checkbox'] {
 .celula-video[data-layout='empilhado'] .miniatura {
   /* A imagem passa a ser limitada pela coluna — nunca a ultrapassa — e pela
      sobra vertical da linha, para o título caber embaixo. */
-  width: var(--miniatura-empilhada, 100%);
+  width: var(--miniatura-largura, 100%);
   max-width: 100%;
-  max-height: calc(var(--altura-linha) - 66px);
 }
 .celula-video[data-layout='empilhado'] .celula-video-texto {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   min-height: 0;
 }
 .miniatura img {
@@ -1693,6 +1688,9 @@ input[type='checkbox'] {
 .aplicativo[data-modo='compacto'] .tabela-biblioteca tbody td[data-coluna='titulo'],
 .aplicativo[data-modo='compacto'] .tabela-biblioteca tbody td[data-coluna='resumo'] {
   padding-top: 6px;
+}
+.aplicativo[data-modo='compacto'] .tabela-biblioteca tbody td[data-coluna='titulo'] {
+  padding-bottom: 6px;
 }
 .aplicativo[data-modo='compacto'] .titulo-video {
   -webkit-line-clamp: 1;

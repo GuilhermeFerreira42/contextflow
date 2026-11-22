@@ -233,7 +233,11 @@ E o cálculo do modo lateral comparava `min(desejada, 55%) + gap + texto` com a
 largura da coluna: como `55% + 170` sempre cabia, o modo empilhado **nunca era
 alcançado** em coluna larga.
 
-**Correção:** o CSS deixa de impor teto e passa a consumir `--miniatura-largura`
+**Registro histórico de `76e57d1`:** a regra abaixo foi posteriormente substituída
+pela comparação das duas disposições com altura de texto medida, conforme
+`f6a-miniatura-adaptativa.md`. A reserva fixa de 66 px não é mais vigente.
+
+**Correção inicial:** o CSS deixa de impor teto e passa a consumir `--miniatura-largura`
 escrita pelo JS. O JS decide por espaço real:
 
 ```
