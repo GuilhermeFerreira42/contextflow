@@ -12,6 +12,7 @@ import { MIGRACAO_TRABALHOS } from './migracao-trabalhos.ts';
 import { MIGRACAO_F5_BIBLIOTECA } from './migracao-f5-biblioteca.ts';
 import { MIGRACAO_F5_PROJECOES } from './migracao-f5-projecoes.ts';
 import { MIGRACAO_F6_RESUMOS } from './migracao-f6-resumos.ts';
+import { MIGRACAO_6_MINIATURAS } from './migracao-6-miniaturas.ts';
 
 /**
  * Tipo mínimo do driver, para os repositórios não dependerem do pacote do Node.
@@ -115,7 +116,14 @@ const MIGRACAO_1: Migracao = {
   },
 };
 
-export const MIGRACOES: readonly Migracao[] = [MIGRACAO_1, MIGRACAO_TRABALHOS, MIGRACAO_F5_BIBLIOTECA, MIGRACAO_F5_PROJECOES, MIGRACAO_F6_RESUMOS];
+export const MIGRACOES: readonly Migracao[] = [
+  MIGRACAO_1,
+  MIGRACAO_TRABALHOS,
+  MIGRACAO_F5_BIBLIOTECA,
+  MIGRACAO_F5_PROJECOES,
+  MIGRACAO_F6_RESUMOS,
+  MIGRACAO_6_MINIATURAS,
+];
 
 export interface OpcoesBanco {
   /** Caminho do arquivo. `:memory:` é aceito para testes. */

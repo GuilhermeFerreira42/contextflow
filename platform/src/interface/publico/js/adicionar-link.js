@@ -30,11 +30,33 @@ export function criarAdicionarLink({ api, aoEnfileirar }) {
     else delete alvo.dataset.tipo;
   }
 
+  /**
+   * Estado do botão de envio.
+   *
+   * `aria-busy` + `data-estado` dão ao leitor de tela e ao CSS a mesma
+   * informação, e o rótulo descreve a etapa ("Enviando…" durante a
+   * requisição, "Na fila" ao concluir). Antes o botão só ficava desabilitado:
+   * quem olhava não sabia se estava processando ou travado.
+   */
+  function estadoBotao(etapa, rotulo) {
+    const botao = $('#confirmar-adicionar');
+    if (!botao) return;
+    if (etapa) botao.dataset.estado = etapa;
+    else delete botao.dataset.estado;
+    botao.setAttribute('aria-busy', etapa === 'enviando' ? 'true' : 'false');
+    // O texto original vive no HTML; guardar uma vez evita que "Adicionar
+    // vídeo" vire "Enviando…" e nunca volte.
+    if (!botao.dataset.rotuloOriginal) botao.dataset.rotuloOriginal = botao.textContent.trim();
+    botao.textContent = rotulo ?? botao.dataset.rotuloOriginal;
+  }
+
   function abrir() {
     focoAnterior = document.activeElement;
     fundo.hidden = false;
     document.body.style.overflow = 'hidden';
     avisar('', null);
+    estadoBotao(null);
+    $('#confirmar-adicionar').disabled = false;
     $('#adicionar-url').value = '';
     $('#adicionar-tipo').value = 'importar-video';
     $('#adicionar-url').focus();
@@ -96,7 +118,11 @@ export function criarAdicionarLink({ api, aoEnfileirar }) {
     }
 
     const botao = $('#confirmar-adicionar');
+    // Trava de clique repetido: `disabled` já impede, mas o guarda fecha a
+    // janela entre o submit e a resposta (duplo Enter, por exemplo).
+    if (botao.dataset.estado === 'enviando') return;
     botao.disabled = true;
+    estadoBotao('enviando', 'Enviando…');
     avisar('Enviando para a fila…', 'pendente');
 
     try {
@@ -105,8 +131,9 @@ export function criarAdicionarLink({ api, aoEnfileirar }) {
         body: JSON.stringify({ url, tipo, chaveRequisicao: crypto.randomUUID() }),
       });
       const id = trabalho?.id ?? trabalho?.trabalhoId;
+      estadoBotao('na-fila', 'Na fila');
       avisar(
-        'Importação adicionada à fila. Acompanhe em Importações.',
+        'Importação adicionada à fila. Você acompanha o andamento em Importações.',
         'ok',
       );
       if (id) aoEnfileirar?.(id);
@@ -127,9 +154,12 @@ export function criarAdicionarLink({ api, aoEnfileirar }) {
         if (!fundo.hidden) fechar();
       }, 900);
     } catch (erro) {
-      avisar(erro.message, 'erro');
+      estadoBotao('erro');
+      avisar(`Não foi possível enfileirar: ${erro.message}`, 'erro');
     } finally {
+      // Reabilita sempre: um erro de rede não pode deixar a janela travada.
       botao.disabled = false;
+      if (botao.dataset.estado !== 'na-fila') estadoBotao(null);
     }
   }
 

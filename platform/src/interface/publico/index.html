@@ -151,19 +151,47 @@
 
           <!-- Barra de ferramentas: seleção, colunas, modo -->
           <div class="barra-ferramentas">
+            <!--
+              Hierarquia da barra (ajuste pós-F6, item 7).
+
+              Antes eram 11 botões e um seletor na mesma linha, todos com o
+              mesmo peso. Agora há três grupos visuais:
+
+                1. seleção  — sempre visível; é o estado da lista;
+                2. lote     — SÓ aparece com seleção ativa, agrupado por
+                              assunto (vídeo | coleção), com o destrutivo
+                              separado dos demais;
+                3. aparência — colunas, densidade e fonte, à direita.
+
+              Nenhum controle foi removido. `#nova-colecao` continua aqui e
+              também no painel de lote: é a ação que cria o destino usado pelo
+              seletor ao lado.
+            -->
             <div class="acoes-lote" id="acoes-biblioteca">
-              <span id="contador-selecao" class="contador-selecao" role="status">0 selecionados</span>
-              <button id="selecionar-visiveis" type="button" class="botao-secundario">Selecionar visíveis</button>
-              <button id="limpar-selecao" type="button" class="botao-secundario" disabled>Limpar</button>
-              <button id="reimportar-selecao" type="button" class="botao-secundario" disabled>Reimportar</button>
-              <button id="gerar-resumos-selecao" type="button" class="botao-secundario" disabled>Gerar resumos</button>
-              <button id="remover-selecao" type="button" class="botao-secundario" disabled>Remover</button>
-              <select id="colecao-destino" aria-label="Coleção de destino">
-                <option value="">Escolha uma coleção</option>
-              </select>
-              <button id="adicionar-colecao" type="button" class="botao-secundario" disabled>Adicionar à coleção</button>
-              <button id="desvincular-colecao" type="button" class="botao-secundario" disabled>Remover da coleção</button>
-              <button id="nova-colecao" type="button" class="botao-secundario">Nova coleção</button>
+              <div class="grupo-selecao" role="group" aria-label="Seleção">
+                <span id="contador-selecao" class="contador-selecao" role="status">0 selecionados</span>
+                <button id="selecionar-visiveis" type="button" class="botao-secundario">Selecionar visíveis</button>
+                <button id="limpar-selecao" type="button" class="botao-secundario" disabled>Limpar</button>
+              </div>
+
+              <div class="grupo-lote" id="grupo-lote" hidden>
+                <div class="grupo-lote-bloco" role="group" aria-label="Ações sobre os vídeos selecionados">
+                  <span class="grupo-rotulo">Vídeos</span>
+                  <button id="reimportar-selecao" type="button" class="botao-secundario" disabled>Reimportar</button>
+                  <button id="gerar-resumos-selecao" type="button" class="botao-secundario" disabled>Gerar resumos</button>
+                  <button id="remover-selecao" type="button" class="botao-secundario botao-perigo-suave" disabled>Remover</button>
+                </div>
+
+                <div class="grupo-lote-bloco" role="group" aria-label="Coleções">
+                  <span class="grupo-rotulo">Coleção</span>
+                  <select id="colecao-destino" aria-label="Coleção de destino">
+                    <option value="">Escolha uma coleção</option>
+                  </select>
+                  <button id="adicionar-colecao" type="button" class="botao-secundario" disabled>Adicionar</button>
+                  <button id="desvincular-colecao" type="button" class="botao-secundario" disabled>Retirar</button>
+                  <button id="nova-colecao" type="button" class="botao-secundario">Nova coleção</button>
+                </div>
+              </div>
             </div>
 
             <div class="ferramentas-visual">
@@ -199,11 +227,34 @@
               </div>
               <p class="painel-nota" id="altura-ajuda">De 64 a 600 px no modo Ampliado. O modo Compacto mantém 64 px.</p>
             </div>
+
+            <!-- Fonte do resumo: vale para a linha da grade e para o painel de
+                 leitura, porque os dois mostram o mesmo texto. -->
+            <div class="ajuste-fonte" id="ajuste-fonte">
+              <p class="painel-titulo" id="rotulo-fonte">Fonte do resumo</p>
+              <div class="fonte-controle" role="group" aria-labelledby="rotulo-fonte" aria-describedby="fonte-ajuda">
+                <button type="button" class="botao-fonte" id="diminuir-fonte" aria-label="Diminuir fonte do resumo">A<sup>−</sup></button>
+                <output class="fonte-valor" id="fonte-valor" aria-live="polite">13 px</output>
+                <button type="button" class="botao-fonte" id="aumentar-fonte" aria-label="Aumentar fonte do resumo">A<sup>+</sup></button>
+                <button type="button" class="botao-secundario botao-restaurar-fonte" id="restaurar-fonte">Padrão</button>
+              </div>
+              <p class="painel-nota" id="fonte-ajuda">De 11 a 20 px. Ajusta a leitura do resumo na grade e no painel.</p>
+            </div>
           </div>
 
           <p id="aviso-selecao" class="contador" hidden>
             As ações incluem todos os IDs selecionados, inclusive fora do filtro atual.
           </p>
+          <!--
+            Atividade da Biblioteca.
+
+            Antes, quem adicionava um link e fechava a janela não tinha sinal
+            nenhum da importação nesta tela. Esta faixa mostra o que está na
+            fila/em execução SEM percentual inventado: o motor só informa
+            progresso real (itens concluídos / total). Sem esse dado, a barra
+            fica indeterminada.
+          -->
+          <div class="faixa-atividade" id="atividade-biblioteca" role="status" aria-live="polite" hidden></div>
           <p id="resultado-biblioteca" role="status" aria-live="polite"></p>
 
           <div
@@ -238,7 +289,10 @@
                     <button type="button">Estado <span class="seta-ordenacao"></span></button>
                   </th>
                   <th scope="col" data-coluna="resumo">Conteúdo do resumo</th>
-                  <th scope="col" data-coluna="resumo-estado">Resumo</th>
+                  <!-- A célula mostra o ESTADO do resumo (Pronto / Gerando /
+                       Sem resumo / Falhou). O cabeçalho dizia só "Resumo", o
+                       que fazia a coluna parecer repetir a anterior. -->
+                  <th scope="col" data-coluna="resumo-estado">Situação do resumo</th>
                 </tr>
               </thead>
               <tbody id="corpo-biblioteca"></tbody>
@@ -335,6 +389,29 @@
           <div class="barra-ferramentas">
             <h2 class="subtitulo">Trabalhos</h2>
             <span id="atividade-importacoes" role="status"></span>
+            <button id="abrir-limpeza-historico" class="botao-secundario" type="button"
+                    aria-expanded="false" aria-controls="painel-limpeza-historico">Limpar histórico…</button>
+          </div>
+
+          <!-- Limpeza do histórico de importações.
+               A cópia deixa explícito o que NÃO é apagado: remover da
+               biblioteca (com vídeo, transcrição e resumo) é outra ação, e
+               cancelar um trabalho ativo também. Confundir as três era o
+               risco real desta tela. -->
+          <div class="painel-limpeza" id="painel-limpeza-historico" hidden>
+            <p class="painel-titulo">Limpar histórico de importações</p>
+            <p class="painel-nota">
+              Isto remove só o registro das tarefas. Vídeos, transcrições, resumos
+              e coleções <strong>não</strong> são apagados. Para apagar o vídeo,
+              use “Remover da biblioteca” na Biblioteca. Para interromper algo em
+              andamento, use “Cancelar” na própria tarefa.
+            </p>
+            <div class="limpeza-categorias" id="limpeza-categorias" role="group" aria-label="Categorias do histórico"></div>
+            <p class="painel-nota" id="limpeza-aviso" role="status"></p>
+            <div class="limpeza-acoes">
+              <button type="button" class="botao-perigo" id="confirmar-limpeza-historico" disabled>Limpar selecionadas</button>
+              <button type="button" class="botao-secundario" id="cancelar-limpeza-historico">Cancelar</button>
+            </div>
           </div>
           <p id="erro-trabalhos" role="status"></p>
           <div id="lista-trabalhos" class="lista-trabalhos"></div>

@@ -9,6 +9,10 @@
  * linhas e expansão, nunca altura livre, para não quebrar a janela de linhas.
  */
 import { criarRedimensionamentoColunas } from './redimensionamento-colunas.js';
+import {
+  FONTE_RESUMO, lerFonteResumo, mesclarVisual, salvarFonteResumo,
+} from './preferencias-leitura.js';
+import { renderizarMarkdown } from './markdown.js';
 
 export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel, aoResumir }) {
   const $ = seletor => document.querySelector(seletor);
@@ -34,6 +38,17 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel, aoResumir })
    */
   const ALTURA_MINIMA = 64;
   const ALTURA_MAXIMA = 600;
+  /**
+   * Fonte do resumo na grade e no painel.
+   *
+   * Não é a escala global da aplicação: mexe só na leitura do resumo, que é
+   * o texto que o usuário passa mais tempo lendo. O CSS consome
+   * `--fonte-resumo`, então linha e painel não divergem.
+   */
+  const FONTE_MINIMA = FONTE_RESUMO.minima;
+  const FONTE_MAXIMA = FONTE_RESUMO.maxima;
+  const FONTE_PADRAO = FONTE_RESUMO.padrao;
+  const FONTE_PASSO = FONTE_RESUMO.passo;
   function alturaDoCss() {
     const valor = getComputedStyle(document.querySelector('.aplicativo'))
       .getPropertyValue('--altura-linha').trim();
@@ -70,6 +85,7 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel, aoResumir })
   let modo = 'ampliado';
   let colunas = { ...colunasPadrao };
   let larguras = {};
+  let fonteResumo = FONTE_PADRAO;
   let previas = new Map(); // resumo curto por vídeo, buscado em lote
   let versaoPrevias = 0; // sobe quando chega resumo; invalida o cache de linhas
   let intervaloData = null; // recorte da árvore "Data de importação"
@@ -108,6 +124,8 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel, aoResumir })
           if (typeof visual.colunas[nome] === 'boolean') colunas[nome] = visual.colunas[nome];
         }
       }
+      // Fonte do resumo: lida do registro compartilhado (que já limita).
+      fonteResumo = lerFonteResumo();
       if (visual?.larguras && typeof visual.larguras === 'object') {
         for (const nome of ['titulo', ...ordemColunas]) {
           const valor = visual.larguras[nome];
@@ -127,8 +145,45 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel, aoResumir })
 
   function salvarVisual() {
     try {
-      localStorage.setItem('contextflow.biblioteca.visual', JSON.stringify({ modo, colunas, larguras }));
+      // Mescla: o painel de leitura grava `leitura` no mesmo objeto e uma
+      // gravação por substituição apagaria as preferências do outro módulo.
+      mesclarVisual({ modo, colunas, larguras, fonteResumo });
     } catch { /* armazenamento indisponível não impede o uso */ }
+  }
+
+  /**
+   * Quantas linhas de resumo cabem na altura atual da linha.
+   *
+   * A conta precisa da fonte vigente: com 12px o passo era 19,2px, com 20px
+   * passa a ser 32px. Usar um passo fixo fazia o texto estourar a célula e a
+   * altura real divergir da altura virtualizada.
+   */
+  function calcularLinhasResumo(altura, fonte) {
+    const passo = fonte * 1.6;
+    return Math.max(1, Math.floor((altura - 34) / passo));
+  }
+
+  function aplicarFonteResumo(px, { salvar = true } = {}) {
+    fonteResumo = Math.min(FONTE_MAXIMA, Math.max(FONTE_MINIMA, Math.round(px)));
+    const app = document.querySelector('.aplicativo');
+    app.style.setProperty('--fonte-resumo', `${fonteResumo}px`);
+    app.style.setProperty('--linhas-resumo', String(calcularLinhasResumo(alturaLinha(), fonteResumo)));
+    const valor = $('#fonte-valor');
+    if (valor) valor.textContent = `${fonteResumo} px`;
+    const diminuir = $('#diminuir-fonte');
+    const aumentar = $('#aumentar-fonte');
+    if (diminuir) diminuir.disabled = fonteResumo <= FONTE_MINIMA;
+    if (aumentar) aumentar.disabled = fonteResumo >= FONTE_MAXIMA;
+    const restaurar = $('#restaurar-fonte');
+    if (restaurar) restaurar.disabled = fonteResumo === FONTE_PADRAO;
+    if (salvar) {
+      salvarFonteResumo(fonteResumo);
+      // A altura das linhas não muda, mas o conteúdo de cada uma muda: a
+      // janela virtual precisa redesenhar com a mesma altura.
+      linhasAtuais = new Map();
+      if (itens.length) renderizar();
+      agendar();
+    }
   }
 
   function alturaLinha() {
@@ -144,9 +199,9 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel, aoResumir })
     app.style.setProperty('--altura-linha-ampliado', `${limite}px`);
     app.dataset.alturaCurta = String(limite < 88);
     // Reserva respiro e a ação de leitura completa; a altura extra deve
-    // revelar mais texto, em vez de manter o antigo teto de cinco linhas.
-    const linhas = Math.max(1, Math.floor((limite - 34) / 19.2));
-    app.style.setProperty('--linhas-resumo', String(linhas));
+    // revelar mais texto. A conta depende da fonte do resumo, que o usuário
+    // também controla.
+    app.style.setProperty('--linhas-resumo', String(calcularLinhasResumo(limite, fonteResumo)));
     const rotulo = $('#altura-valor');
     if (rotulo) rotulo.textContent = `${limite} px`;
     const controleAltura = $('#altura-linhas');
@@ -240,6 +295,11 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel, aoResumir })
     const n = selecionados.size;
     $('#contador-selecao').textContent = `${n} selecionados · ${total} resultados`;
     $('#aviso-selecao').hidden = !n;
+    // O grupo de lote só existe quando há o que fazer com ele. Sem seleção,
+    // seus botões ficariam desabilitados na tela ocupando a linha inteira —
+    // era metade da poluição da barra.
+    const grupoLote = $('#grupo-lote');
+    if (grupoLote) grupoLote.hidden = n === 0;
     for (const id of ['limpar-selecao', 'reimportar-selecao', 'remover-selecao']) $('#' + id).disabled = !n || ocupado;
     $('#adicionar-colecao').disabled = !n || ocupado || !$('#colecao-destino').value;
     $('#desvincular-colecao').disabled = !n || ocupado || !$('#filtro-colecao').value;
@@ -331,10 +391,39 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel, aoResumir })
       img.alt = '';
       img.loading = 'lazy';
       img.decoding = 'async';
-      // Uma miniatura remota pode falhar (404, CDN fora, vídeo removido).
-      // Sem isto o navegador desenhava o ícone de imagem quebrada no lugar
-      // da miniatura. O fallback mantém a caixa e a proporção intactas.
-      img.addEventListener('error', () => { img.remove(); semImagem(); }, { once: true });
+      img.referrerPolicy = 'no-referrer';
+      /*
+       * A capa remota do YouTube expira e às vezes responde 403. Antes, o erro
+       * só trocava por "sem miniatura" — para sempre, porque nada era gravado.
+       *
+       * Agora o erro dispara UMA busca da cópia local (o motor baixa a imagem
+       * e passa a servi-la pela própria origem). Se a busca falhar, aí sim o
+       * substituto entra e não há nova tentativa nesta sessão: o motor conta
+       * as tentativas e a lista já volta sem URL depois do limite.
+       */
+      // Um erro na capa remota tenta a cópia local; um erro na cópia local
+      // (ou a recusa do motor) cai no substituto. `etapa` impede laço: cada
+      // imagem tenta no máximo uma vez por etapa.
+      img.addEventListener('error', () => {
+        if (img.dataset.etapa === 'local') { img.remove(); semImagem(); return; }
+        if (img.dataset.etapa === 'buscando') return;
+        img.dataset.etapa = 'buscando';
+        void (async () => {
+          try {
+            const resposta = await api(`/api/miniaturas/${encodeURIComponent(video.id)}/buscar`, {
+              method: 'POST',
+              body: JSON.stringify({}),
+            });
+            if (resposta?.miniaturaUrl) {
+              img.dataset.etapa = 'local';
+              img.src = resposta.miniaturaUrl;
+              return;
+            }
+          } catch { /* sem cópia local: cai no substituto */ }
+          img.remove();
+          semImagem();
+        })();
+      });
       img.src = video.miniaturaUrl;
       caixa.append(img);
     } else {
@@ -374,9 +463,17 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel, aoResumir })
       return bloco;
     }
 
-    const paragrafo = document.createElement('p');
-    paragrafo.className = 'resumo-linha';
-    paragrafo.textContent = texto;
+    /*
+     * O resumo na grade é o MESMO texto do painel, então recebe o mesmo
+     * tratamento: Markdown vira tipografia, e o que não for reconhecido
+     * continua texto. O renderizador é compartilhado para os dois nunca
+     * divergirem — e o `ver-mais` decide pelo TEXTO puro, não pela marcação,
+     * senão um resumo com `*` contaria caracteres que o leitor não vê.
+     */
+    const paragrafo = document.createElement('div');
+    paragrafo.className = 'resumo-linha markdown';
+    paragrafo.dataset.markdown = 'sim';
+    const textoPlano = renderizarMarkdown(texto, paragrafo);
     bloco.append(paragrafo);
 
     /*
@@ -387,7 +484,7 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel, aoResumir })
      * pular — o mesmo defeito já corrigido nesta fase. O painel mostra o texto
      * inteiro com conforto, e é uma camada: a posição da lista não muda.
      */
-    if (texto.length > 120) {
+    if (textoPlano.length > 120) {
       const botao = document.createElement('button');
       botao.type = 'button';
       botao.className = 'ver-mais';
@@ -593,6 +690,9 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel, aoResumir })
 
     // Esconde o "ver mais" das linhas que não truncaram de fato.
     medirCortes();
+    // Layout da miniatura depende da altura E da largura REAL da coluna:
+    // medir no próximo quadro, quando o navegador já aplicou as larguras.
+    agendarLayoutMiniaturas();
   }
 
   /**
@@ -887,6 +987,14 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel, aoResumir })
     $('#restaurar-altura')?.addEventListener('click', () => {
       aplicarAlturaAmpliada(ALTURAS_PADRAO.ampliado);
     });
+
+    // Fonte do resumo: mesmo painel, mesma persistência. Sem renderizar durante
+    // `ligar` (a lista ainda não existe); aplica o salvo e só redesenha quando
+    // o usuário aperta.
+    aplicarFonteResumo(fonteResumo, { salvar: false });
+    $('#diminuir-fonte')?.addEventListener('click', () => aplicarFonteResumo(fonteResumo - FONTE_PASSO));
+    $('#aumentar-fonte')?.addEventListener('click', () => aplicarFonteResumo(fonteResumo + FONTE_PASSO));
+    $('#restaurar-fonte')?.addEventListener('click', () => aplicarFonteResumo(FONTE_PADRAO));
   }
 
   function montarColunas() {
@@ -933,6 +1041,73 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel, aoResumir })
     if (itens.length) renderizar();
   }
 
+  /**
+   * Decide, por linha visível, entre miniatura lateral e empilhada.
+   *
+   * A regra vem das medidas reais, não de um breakpoint de tela:
+   *
+   *   larguraDesejada = (alturaLinha - 24) * 1.24   // 16:9 da sobra vertical
+   *   precisa = larguraDesejada + GAP + TEXTO_MINIMO
+   *
+   * Se a coluna do vídeo é mais estreita que `precisa`, o lado a lado
+   * esmagaria o texto — então o título desce. Reduzir a altura reduz
+   * `larguraDesejada`, e o lado a lado volta sozinho.
+   *
+   * Roda depois de renderizar e no resize da coluna; usa
+   * `requestAnimationFrame` para não medir durante o layout.
+   */
+  function ajustarLayoutMiniaturas() {
+    const celulas = corpo.querySelectorAll('.celula-video');
+    if (!celulas.length) return;
+    const altura = alturaLinha();
+    const GAP = 13;
+    /*
+     * Largura mínima para o texto ao lado da miniatura.
+     *
+     * 170px é o ponto em que o título ainda cabe em duas ou três palavras por
+     * linha e o resumo não vira uma coluna de uma palavra. Com 190px a
+     * alternância disparava cedo demais (numa coluna de 392px, 180px de altura
+     * já empilhava sem necessidade — medido no app real).
+     *
+     * Não é um breakpoint de tela: entra na conta junto com a largura que a
+     * imagem quer ocupar, então continua respondendo ao arraste da coluna.
+     */
+    const TEXTO_MINIMO = 170;
+    // Mesma fórmula do CSS: cresce com a altura, teto de 420, piso de 64.
+    const desejada = Math.max(64, Math.min(420, (altura - 24) * 1.24));
+    for (const celula of celulas) {
+      const td = celula.closest('td');
+      if (!td) continue;
+      const larguraColuna = td.clientWidth - 20; // descontar o padding lateral
+      if (!larguraColuna) continue;
+      // 55% é o teto do modo lateral no CSS; usar o menor dos dois mantém o
+      // cálculo coerente com o que o navegador vai desenhar.
+      const larguraImagem = Math.min(desejada, larguraColuna * 0.55);
+      const precisa = larguraImagem + GAP + TEXTO_MINIMO;
+      // Empilha quando o lado a lado não cabe. Não existe um segundo critério
+      // "altura >= N": ele empilhava cedo demais (180px numa coluna de 392px
+      // ainda tem espaço confortável). Quem decide é o espaço real.
+      const empilhado = precisa > larguraColuna;
+      celula.dataset.layout = empilhado ? 'empilhado' : 'lateral';
+      // A largura no modo empilhado é a da coluna, limitada para a imagem não
+      // virar um retângulo enorme que engole o texto.
+      if (empilhado) {
+        const tetoAltura = Math.max(60, Math.min(altura - 66, 260));
+        const larguraTeto = Math.round(tetoAltura * (16 / 9));
+        celula.style.setProperty('--miniatura-empilhada', `${Math.min(larguraColuna, larguraTeto)}px`);
+      }
+    }
+  }
+
+  let quadroLayout = null;
+  function agendarLayoutMiniaturas() {
+    if (quadroLayout) return;
+    quadroLayout = requestAnimationFrame(() => {
+      quadroLayout = null;
+      ajustarLayoutMiniaturas();
+    });
+  }
+
   function ajustarLarguras() {
     const padrao = { titulo: 360, canal: 142, duracao: 96, adicionado: 126, estado: 96, resumo: 280, 'resumo-estado': 122 };
     const visiveis = ['titulo', ...ordemColunas.filter(nome => colunas[nome])];
@@ -948,6 +1123,7 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel, aoResumir })
     const restaurar = $('#restaurar-larguras');
     if (restaurar) restaurar.disabled = !Object.keys(larguras).length;
     redimensionamento.sincronizar();
+    agendarLayoutMiniaturas();
   }
 
   function aplicarModo(novoModo) {

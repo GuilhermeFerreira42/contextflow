@@ -7,6 +7,9 @@
  *    recarrega lista, não toca em busca/filtros/ordenação/scroll.
  *  - Leitura nas linhas é o principal; isto é complementar.
  */
+import { lerLeitura, salvarLeitura } from './preferencias-leitura.js';
+import { renderizarMarkdown } from './markdown.js';
+
 export function criarPainel({ api, aoResumir, aoHistorico }) {
   const $ = seletor => document.querySelector(seletor);
   const painel = $('#painel-leitura');
@@ -149,7 +152,10 @@ export function criarPainel({ api, aoResumir, aoHistorico }) {
       if (geracao !== pedido) return;
 
       if (resumo?.texto) {
-        alvo.textContent = resumo.texto;
+        // Markdown do resumo é conteúdo não confiável (vem da IA). O
+        // renderizador só cria nós e texto — nunca interpreta HTML.
+        renderizarMarkdown(resumo.texto, alvo);
+        alvo.dataset.markdown = 'sim';
         $('#painel-copiar-resumo').disabled = false;
         mostrarSelo('painel-resumo-estado', resumo.desatualizado ? 'parcial' : 'pronto', resumo.desatualizado ? 'Transcrição atualizada desde este resumo' : 'Pronto');
         return;
@@ -293,6 +299,9 @@ export function criarPainel({ api, aoResumir, aoHistorico }) {
     if (!videoId) return;
     const geracao = ++pedido;
     focoAnterior = document.activeElement;
+    // Reaplica a cada abertura: o painel pode ter sido fechado em outra aba ou
+    // o controle pode ter voltado ao padrão do HTML.
+    aplicarPreferenciasDeLeitura();
 
     // Esqueleto primeiro: o painel aparece já, mesmo com rede lenta.
     $('#painel-titulo').textContent = 'Carregando…';
@@ -327,6 +336,20 @@ export function criarPainel({ api, aoResumir, aoHistorico }) {
     focoAnterior = null;
   }
 
+  /**
+   * Leva as preferências salvas para os dois controles.
+   *
+   * Roda em `ligar` (cobre recarregar a página) e em `abrir` (cobre uma
+   * mudança feita em outra aba, já que `storage` não é observado aqui).
+   */
+  function aplicarPreferenciasDeLeitura() {
+    const leitura = lerLeitura();
+    const tempos = $('#mostrar-tempos');
+    const corrido = $('#texto-corrido');
+    if (tempos) tempos.checked = leitura.mostrarTempos;
+    if (corrido) corrido.checked = leitura.textoCorrido;
+  }
+
   function ligar() {
     $('#painel-resumir').addEventListener('click', () => { if (videoAtual) aoResumir?.(videoAtual.id); });
     $('#painel-historico').addEventListener('click', () => { if (videoAtual) aoHistorico?.(videoAtual.id); });
@@ -338,8 +361,17 @@ export function criarPainel({ api, aoResumir, aoHistorico }) {
     // Trocar a apresentação não refaz a chamada de rede nem toca no banco:
     // os mesmos segmentos são redesenhados.
     for (const id of ['#mostrar-tempos', '#texto-corrido']) {
-      $(id)?.addEventListener('change', desenharTranscricao);
+      $(id)?.addEventListener('change', () => {
+        desenharTranscricao();
+        // Gravar a cada troca é barato e garante o estado mesmo se o painel
+        // for fechado por Esc, clique no fundo ou recarregamento abrupto.
+        salvarLeitura({
+          mostrarTempos: $('#mostrar-tempos')?.checked !== false,
+          textoCorrido: $('#texto-corrido')?.checked === true,
+        });
+      });
     }
+    aplicarPreferenciasDeLeitura();
     $('#painel-fundo').addEventListener('click', fechar);
 
     // Esc fecha só o painel — nunca a tela por trás.

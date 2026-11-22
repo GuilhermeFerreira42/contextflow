@@ -132,6 +132,9 @@ body {
   --altura-linha-ampliado: 136px;
   --altura-linha-compacto: 64px;
   --altura-linha: var(--altura-linha-ampliado);
+  /* Fonte do resumo (grade e painel). Fica aqui pelo mesmo motivo das
+     alturas: o JS escreve inline neste elemento. */
+  --fonte-resumo: 13px;
 
   display: grid;
   grid-template-columns: var(--largura-barra) 1fr;
@@ -693,6 +696,76 @@ body {
   cursor: not-allowed;
 }
 
+/* Ação destrutiva: nunca é o botão padrão do agrupamento. O vermelho aparece
+   só no que apaga algo — limpar histórico, remover da biblioteca — para que
+   "Cancelar" ao lado não seja confundido com "apagar". */
+.botao-perigo {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 13px;
+  border-radius: var(--raio);
+  border: 1px solid color-mix(in srgb, var(--erro) 55%, var(--borda));
+  background: var(--erro-fraco);
+  color: var(--erro);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.botao-perigo:hover:not(:disabled) {
+  border-color: var(--erro);
+  background: color-mix(in srgb, var(--erro) 22%, transparent);
+}
+.botao-perigo:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+/* --- painel de limpeza do histórico ------------------------------------- */
+
+.painel-limpeza {
+  margin: 0 0 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  background: var(--grafite-850);
+  display: grid;
+  gap: 10px;
+}
+.limpeza-categorias {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+.limpeza-categorias label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  color: var(--texto);
+  cursor: pointer;
+}
+.limpeza-categorias input {
+  accent-color: var(--azul);
+}
+.limpeza-categorias .contagem {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--texto-fraco);
+  font-variant-numeric: tabular-nums;
+}
+.limpeza-categorias label:has(input:disabled) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.limpeza-acoes {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .botao-adicionar {
   font-size: 12.5px;
 }
@@ -788,6 +861,54 @@ body {
   font-size: 11.5px;
 }
 
+/* --- fonte do resumo ---------------------------------------------------- */
+
+.ajuste-fonte {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--borda);
+}
+.fonte-controle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.botao-fonte {
+  width: 34px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--borda);
+  border-radius: 7px;
+  background: var(--superficie);
+  color: var(--texto-forte);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.botao-fonte sup {
+  font-size: 10px;
+}
+.botao-fonte:hover:not(:disabled) {
+  border-color: var(--azul);
+}
+.botao-fonte:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.fonte-valor {
+  min-width: 52px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--texto-forte);
+  font-variant-numeric: tabular-nums;
+}
+.botao-restaurar-fonte {
+  margin-left: auto;
+  padding: 4px 10px;
+  font-size: 11.5px;
+}
+
 .painel-nota {
   margin: 0;
   font-size: 11.5px;
@@ -873,6 +994,74 @@ body {
   color: var(--texto-fraco);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+/* --- hierarquia da barra (ajuste pós-F6, item 7) -------------------------
+ *
+ * Três grupos com pesos distintos em vez de 11 botões iguais:
+ *  - seleção: discreta, à esquerda;
+ *  - lote: um bloco com fundo próprio, quebrando a linha em "vídeos" e
+ *    "coleção" — a proximidade mostra o que age sobre o quê;
+ *  - aparência: encostada à direita.
+ * `flex: 0 1 auto` no grupo de lote permite que ele quebre para a linha de
+ * baixo em telas estreitas sem empurrar os demais para fora.
+ */
+.grupo-selecao {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+.grupo-lote {
+  display: flex;
+  align-items: center;
+  gap: 4px 14px;
+  flex-wrap: wrap;
+  padding: 5px 10px 5px 12px;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  background: color-mix(in srgb, var(--grafite-850) 65%, transparent);
+}
+/* Separador vertical entre o grupo de seleção e o de lote: demarca a mudança
+   de assunto sem precisar de mais um rótulo. */
+.grupo-lote::before {
+  content: '';
+  align-self: stretch;
+  width: 1px;
+  margin-right: 2px;
+  background: var(--borda);
+}
+.grupo-lote-bloco {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.grupo-rotulo {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--texto-fraco);
+  white-space: nowrap;
+}
+/* "Remover" é destrutivo: destaque só na borda/texto, para não competir com o
+   botão principal da tela. */
+.acoes-lote .botao-perigo-suave {
+  border-color: color-mix(in srgb, var(--erro) 40%, var(--borda));
+  color: var(--erro);
+}
+.acoes-lote .botao-perigo-suave:hover:not(:disabled) {
+  background: var(--erro-fraco);
+  border-color: var(--erro);
+}
+
+@media (max-width: 1100px) {
+  .grupo-lote::before {
+    display: none;
+  }
+  .grupo-lote {
+    padding-left: 10px;
+  }
 }
 
 .ferramentas-visual {
@@ -1106,6 +1295,27 @@ input[type='checkbox'] {
 
 /* ------------------------------------------- célula "Vídeo" (ampliada) */
 
+/*
+ * Célula do vídeo: miniatura + texto.
+ *
+ * Ajuste pós-F6, item 8. Antes a miniatura tinha largura derivada da altura
+ * (`(altura - 24) * 1,24`) e o texto ficava sempre ao lado. Consequências:
+ *
+ *  - em linha alta e coluna estreita, a miniatura queria mais largura do que
+ *    a coluna tinha e o texto era esmagado (ou a imagem estourava);
+ *  - em coluna larga, sobrava espaço vertical ao lado da imagem.
+ *
+ * Agora o layout é decidido pelo ESPAÇO REAL, via container query, não por um
+ * número escolhido a dedo. Dois estados:
+ *
+ *   lateral    — miniatura à esquerda, texto à direita (linha baixa/média ou
+ *                coluna larga);
+ *   empilhado  — miniatura em cima, limitada pela largura da coluna, texto
+ *                abaixo (linha alta + coluna estreita).
+ *
+ * A troca é automática quando a coluna é redimensionada, e volta sozinha ao
+ * reduzir a altura. `aspect-ratio` mantém a proporção nos dois estados.
+ */
 .celula-video {
   display: flex;
   align-items: flex-start;
@@ -1116,6 +1326,16 @@ input[type='checkbox'] {
   overflow: hidden;
 }
 
+/* O texto é o que cede espaço primeiro; `min-width: 0` permite encolher de
+   verdade dentro de um flex item. */
+.celula-video-texto {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .tabela-biblioteca tbody td[data-coluna='titulo'],
 .tabela-biblioteca tbody td[data-coluna='resumo'] {
   text-align: left;
@@ -1123,18 +1343,69 @@ input[type='checkbox'] {
   padding-top: 12px;
 }
 
+/*
+ * Miniatura.
+ *
+ * `--miniatura-largura` é a largura desejada no modo lateral: cresce com a
+ * altura da linha (16:9 de uma imagem que ocupa a altura disponível) até um
+ * teto. O teto NÃO é fixo em px: é 55% da célula, então a coluna estreita
+ * nunca é esmagada pelo texto.
+ *
+ * No modo empilhado a largura passa a ser a da coluna, com teto de altura
+ * para a imagem não virar um retângulo gigante e comer a linha inteira.
+ */
 .miniatura {
   position: relative;
   flex-shrink: 0;
-  width: clamp(64px, calc((var(--altura-linha) - 24px) * 1.24), 420px);
-  max-width: 55%;
+  width: min(
+    clamp(64px, calc((var(--altura-linha) - 24px) * 1.24), 420px),
+    55%
+  );
   aspect-ratio: 16 / 9;
+  max-height: calc(var(--altura-linha) - 24px);
   border-radius: 6px;
   overflow: hidden;
   background: linear-gradient(135deg, var(--grafite-700), var(--grafite-800));
   border: 1px solid var(--borda);
   display: grid;
   place-items: center;
+}
+
+/*
+ * Empilhado: quando a célula fica mais alta do que larga o suficiente para o
+ * par lado a lado, o texto desce.
+ *
+ * A condição é a razão entre largura e a altura que o texto precisa. O valor
+ * 1,9 sai das medidas reais: 13px de gap + ~180px de texto mínimo legível
+ * contra a altura que a imagem ocupa (altura - 24 em 16:9). Abaixo disso o
+ * lado a lado deixaria o texto com menos de ~180px, que é onde o título
+ * começa a quebrar em uma palavra por linha.
+ */
+/*
+ * Estado "empilhado": o JS mede a coluna e a altura e grava
+ * `data-layout="empilhado"` na célula. O CSS só desenha o resultado.
+ *
+ * O limite NÃO é um breakpoint de tela: é a conta
+ *   largura da miniatura (cresce com a altura) + respiro + texto mínimo
+ * comparada à largura real da coluna.
+ * Por isso arrastar a coluna muda o estado na hora, e diminuir a altura
+ * devolve o lado a lado — sem recarregar nada.
+ */
+.celula-video[data-layout='empilhado'] {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+.celula-video[data-layout='empilhado'] .miniatura {
+  /* A imagem passa a ser limitada pela coluna — nunca a ultrapassa — e pela
+     sobra vertical da linha, para o título caber embaixo. */
+  width: var(--miniatura-empilhada, 100%);
+  max-width: 100%;
+  max-height: calc(var(--altura-linha) - 66px);
+}
+.celula-video[data-layout='empilhado'] .celula-video-texto {
+  flex: 0 1 auto;
+  min-height: 0;
 }
 .miniatura img {
   width: 100%;
@@ -1253,7 +1524,7 @@ input[type='checkbox'] {
 
 .resumo-linha {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--fonte-resumo, 12px);
   line-height: 1.6;
   color: var(--texto);
   overflow: hidden;
@@ -1307,12 +1578,20 @@ input[type='checkbox'] {
 /* --------------------------------------------------------- coluna resumo */
 
 .celula-resumo {
-  font-size: 12px;
-  line-height: 1.55;
+  font-size: var(--fonte-resumo, 12px);
+  line-height: 1.6;
   color: var(--texto);
   vertical-align: top;
   /* A linha tem altura fixa (virtualização). O conteúdo da célula não pode
      esticá-la: o corte é responsabilidade do clamp + overflow. */
+  max-height: calc(var(--altura-linha) - 20px);
+  overflow: hidden;
+}
+/* `max-height` não vale em `table-cell`: o conteúdo é quem precisa ser
+   cortado. O bloco interno recebe o limite e o overflow — assim, fonte maior
+   (ou um resumo com título e lista) não estica a linha e não desalinha o
+   virtualizador. */
+.celula-resumo > .celula-video-texto-resumo {
   max-height: calc(var(--altura-linha) - 20px);
   overflow: hidden;
 }
@@ -1323,9 +1602,9 @@ input[type='checkbox'] {
  * tabela, o `td` crescia (129px numa linha pedida de 88) e o virtualizador,
  * que calcula pela variável, ficava fora de fase com o que estava na tela.
  *
- * A conta: cada linha ocupa `font-size * line-height` = 12 * 1.6 = 19.2px.
- * Descontamos ~34px do topo (respiro + "ver resumo completo"). Aumentar a
- * altura revela mais linhas, sem o antigo teto de cinco. */
+ * A conta: cada linha ocupa `fonte do resumo * 1.6`. Descontamos ~34px do
+ * topo (respiro + "ver resumo completo"). O JS usa a fonte vigente — antes
+ * assumia 12px fixos e, com fonte maior, o texto estourava a célula. */
 /* Quantas linhas do resumo cabem na altura atual da linha. O JS calcula e
  * grava em `--linhas-resumo`; aqui só consumimos. Um valor fixo (era 5)
  * fazia o texto ditar a altura da tabela, e o virtualizador — que calcula
@@ -1660,6 +1939,238 @@ input[type='checkbox'] {
 .texto-longo .aviso {
   color: var(--texto-fraco);
   font-style: italic;
+}
+
+/* --- faixa de atividade da Biblioteca ----------------------------------- */
+
+.faixa-atividade {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--azul-fraco);
+  border-left: 3px solid var(--azul);
+  border-radius: var(--raio-pequeno);
+  background: color-mix(in srgb, var(--azul-fraco) 55%, transparent);
+  font-size: 12px;
+}
+.faixa-atividade-rotulo {
+  font-weight: 600;
+  color: var(--texto-forte);
+  white-space: nowrap;
+}
+.faixa-atividade-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.faixa-atividade-nome {
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--texto);
+}
+.faixa-atividade-situacao {
+  color: var(--texto-fraco);
+  white-space: nowrap;
+  font-size: 11.5px;
+}
+.faixa-atividade-barra {
+  position: relative;
+  width: 54px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--grafite-700);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.faixa-atividade-preenchimento {
+  display: block;
+  height: 100%;
+  background: var(--azul);
+  transition: width 0.3s ease;
+}
+.faixa-atividade-barra[data-indeterminada='sim']::after {
+  /* Barra indeterminada: a animação corre de ponta a ponta. Sem percentual
+     inventado e sem parecer travada. */
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, var(--azul), transparent);
+  animation: atividade-correr 1.4s ease-in-out infinite;
+}
+@keyframes atividade-correr {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(260%); }
+}
+.faixa-atividade-resto {
+  color: var(--texto-fraco);
+  font-size: 11.5px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .faixa-atividade-barra[data-indeterminada='sim']::after {
+    animation: none;
+    width: 100%;
+    opacity: 0.35;
+  }
+}
+
+/* Botão de envio: mostra em que etapa está, sem trocar de largura a cada
+   mensagem (min-width fixo evita o "pulo" do layout). */
+#confirmar-adicionar[data-estado] {
+  min-width: 116px;
+}
+#confirmar-adicionar[data-estado='enviando'] {
+  cursor: progress;
+  opacity: 0.85;
+}
+#confirmar-adicionar[data-estado='enviando']::before {
+  content: '';
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  animation: girar 0.7s linear infinite;
+}
+#confirmar-adicionar[data-estado='na-fila'] {
+  background: var(--sucesso);
+  border-color: var(--sucesso);
+}
+#confirmar-adicionar[data-estado='erro'] {
+  background: var(--erro-fraco);
+  border-color: var(--erro);
+  color: var(--erro);
+  box-shadow: none;
+}
+@keyframes girar {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #confirmar-adicionar[data-estado='enviando']::before {
+    animation-duration: 2s;
+  }
+}
+
+/* --- Markdown renderizado (resumo no painel e na grade) ------------------
+ *
+ * O renderizador entrega nós (h2..h6, p, ul, ol, blockquote, pre, code, a).
+ * Aqui damos tipografia. Regras que importam para não quebrar a tela:
+ *  - `white-space: normal` no lugar de `pre-wrap` do `.texto-longo`: o
+ *    renderizador já transformou quebras de linha em blocos; manter pre-wrap
+ *    duplicaria os espaços em branco do Markdown.
+ *  - margens verticais pequenas e sem margem na primeira/última criança:
+ *    na grade a célula tem altura fixa e overflow hidden — margem grande
+ *    cortaria a primeira linha e daria a impressão de texto "subindo".
+ *  - nada de largura fixa: o texto acompanha a fonte e a coluna.
+ */
+.markdown {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.markdown > :first-child {
+  margin-top: 0;
+}
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+.markdown p {
+  margin: 0 0 0.55em;
+}
+.markdown h2,
+.markdown h3,
+.markdown h4,
+.markdown h5,
+.markdown h6 {
+  margin: 0.85em 0 0.35em;
+  /* Título acompanha a fonte do resumo, mas cresce menos que o texto: se
+     escalasse junto, um h2 a 20px viraria 30px e estouraria a linha. */
+  font-size: 1.12em;
+  line-height: 1.35;
+  font-weight: 650;
+  color: var(--texto-forte);
+}
+.markdown h2 {
+  font-size: 1.22em;
+}
+.markdown ul,
+.markdown ol {
+  margin: 0 0 0.55em;
+  padding-left: 1.35em;
+}
+.markdown li {
+  margin: 0 0 0.18em;
+}
+.markdown li::marker {
+  color: var(--texto-fraco);
+}
+.markdown blockquote {
+  margin: 0 0 0.55em;
+  padding: 0.15em 0 0.15em 0.8em;
+  border-left: 3px solid var(--borda-forte, var(--borda));
+  color: var(--texto-fraco);
+}
+.markdown blockquote p {
+  margin: 0 0 0.3em;
+}
+.markdown code {
+  padding: 0.08em 0.32em;
+  border-radius: 4px;
+  background: var(--grafite-800);
+  font-family: var(--mono);
+  font-size: 0.92em;
+}
+.markdown pre {
+  margin: 0 0 0.55em;
+  padding: 0.5em 0.7em;
+  border-radius: 6px;
+  background: var(--grafite-850);
+  overflow-x: auto;
+  white-space: pre;
+}
+.markdown pre code {
+  padding: 0;
+  background: none;
+  font-size: 0.9em;
+}
+.markdown hr {
+  margin: 0.7em 0;
+  border: 0;
+  border-top: 1px solid var(--borda);
+}
+.markdown a {
+  color: var(--azul);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.markdown strong {
+  font-weight: 650;
+  color: var(--texto-forte);
+}
+
+/* Na grade o resumo é cortado por linhas; os títulos não podem somar margem
+   em cima da altura calculada pelo virtualizador. */
+.resumo-linha.markdown h2,
+.resumo-linha.markdown h3,
+.resumo-linha.markdown h4,
+.resumo-linha.markdown h5,
+.resumo-linha.markdown h6 {
+  margin: 0.2em 0 0.1em;
+  font-size: 1em;
+  font-weight: 700;
+}
+.resumo-linha.markdown ul,
+.resumo-linha.markdown ol {
+  margin: 0 0 0.2em;
+  padding-left: 1.15em;
+}
+.resumo-linha.markdown p {
+  margin: 0 0 0.25em;
 }
 
 /* Segmentos com tempo (reaproveitados dentro do painel) */

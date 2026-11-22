@@ -4,7 +4,57 @@
 > `00-comece-aqui.md`. O que está abaixo da linha "Histórico" é registro, não
 > estado vigente.
 
-## Estado vigente — 22/11/2026 — F6
+## Estado vigente — 22/11/2026 — Ajustes pós-F6 (F6-A)
+
+**Branch de trabalho:** `arena/735d302d-contextflow` (a partir de `e11a748d`).
+Base local antes desta rodada: `71b64b4`. F7 **não iniciada**, por instrução.
+
+Os oito ajustes pedidos no comando pós-F6 foram implementados com SPEC prévia
+em `docs/specs/f6a-ajustes-pos-f6.md`. Nenhum módulo funcional foi reescrito;
+uma migração nova (6) entrou só para metadados de cache de miniatura.
+
+| # | Ajuste | Onde |
+|---|---|---|
+| 1 | Feedback de carregamento | `adicionar-link.js` (estado do botão, `aria-busy`, trava de clique repetido), faixa `#atividade-biblioteca` em `aplicacao.js` |
+| 2 | Limpeza do histórico | `DELETE /api/trabalhos/historico` + `GET .../historico/resumo`; painel em Importações |
+| 3 | Preferências de leitura | `js/preferencias-leitura.js`, usado pelo painel e pela Biblioteca |
+| 4 | Miniaturas | migração 6, `modulos/miniaturas/`, `integracoes/miniaturas.ts`, `GET/POST /api/miniaturas/:id` |
+| 5 | Markdown nos resumos | `js/markdown.js` (renderizador próprio, sem HTML), linha e painel |
+| 6 | Fonte do resumo | `#diminuir-fonte`/`#aumentar-fonte`/`#restaurar-fonte`, 11–20 px, `--fonte-resumo` |
+| 7 | Organização dos controles | grupos seleção / lote / aparência, sem remover botão |
+| 8 | Miniatura adaptativa | `data-layout` calculado das medidas reais; lateral ↔ empilhado |
+
+**Decisões que precisam sobreviver à retomada:**
+
+- Limpar histórico **não apaga vídeo, transcrição, resumo nem coleção** — só a
+  entrada de fila. Trabalho ativo é recusado (422). O estado "excluído" não
+  existe no domínio e não foi inventado.
+- "Duplicado" no histórico significa *reimportação da mesma origem*, contada
+  por `trabalhos` + `youtube_id`; não é vídeo duplicado (o banco deduplica).
+- Miniaturas: o motor continua com `--skip-download`. O que mudou é que a
+  **capa** é baixada uma vez, guardada em `<dados>/miniaturas/` e servida por
+  `/api/miniaturas/:id`. Sem rede/CDN, o substituto continua sendo a resposta.
+- Markdown é conteúdo não confiável: o renderizador nunca usa `innerHTML`.
+  HTML do resumo aparece como texto; `javascript:`/`data:` são descartados.
+- O layout da miniatura é decidido por medida (`largura da coluna` ×
+  `largura que a imagem quer ocupar`), não por breakpoint de tela.
+
+**Validação desta rodada (Linux, comandos executados e saída 0):**
+`npm test` **232 testes, 232 aprovados** (198 anteriores + 34 novos);
+Playwright pós-F6 **12/12**; CDP **57/57**; refinamentos **9/9**; resumos F6
+**7/7**; `npm run build` e `npm run verificar` (nove OK/TUDO OK) aprovados.
+Um teste de integração externo (cache de miniaturas com CDN dublê e limpeza de
+histórico com reinício) também passa: 9/9.
+
+**Pendências de homologação (Windows/proprietário):** repetir a matriz acima
+na máquina do proprietário; conferir em rede real de YouTube se a cópia local
+da capa aparece após a primeira falha de CDN; validar a limpeza de histórico
+com o banco pessoal (o teste usa dados descartáveis). O defeito de abertura do
+sistema relatado antes **continua sem homologação** e não foi tratado aqui.
+
+---
+
+## Estado anterior — 22/11/2026 — F6
 
 ### Correção vigente — LiteLLM local e limites de saída
 

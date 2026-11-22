@@ -207,9 +207,12 @@ test('F6: migração preserva legado/projeção, backup e bloqueia rollback dest
   try {
     b.migrar(MIGRACOES.filter(m => m.versao < 5));
     b.db.exec("INSERT INTO videos(id,youtube_id,titulo,url,estado,criado_em,atualizado_em) VALUES('v','12345678901','Legado','https://youtu.be/12345678901','pronto','2026','2026'); INSERT INTO resumos VALUES('v','local','modelo','v1','r1','Legado preservado','pronto',NULL,'2026','2026');");
-    b.migrar(); assert.equal(b.versaoAtual(), 5); assert.equal(readdirSync(join(pasta, 'backups')).length, 1);
+    b.migrar(); assert.equal(b.versaoAtual(), 6); assert.equal(readdirSync(join(pasta, 'backups')).length, 1);
     assert.equal(b.db.prepare('SELECT texto FROM resumos').get()!.texto, 'Legado preservado');
     b.db.exec("INSERT INTO resumos VALUES('v','local','modelo','v1','r2','Revisão nova','pronto',NULL,'2026','2026')");
+    // A reversão é feita migração a migração, cada uma na própria transação:
+    // a 6 (cache de miniaturas, só cache) sai antes, e a F6 recusa descer
+    // mais. O banco sobrevive num estado consistente, na versão 5.
     assert.throws(() => b.reverterPara(4), /histórico F6/); assert.equal(b.versaoAtual(), 5);
     assert.equal(b.db.prepare('SELECT COUNT(*) n FROM resumos').get()!.n, 2);
     b.db.exec('DELETE FROM resumos'); assert.equal(b.db.prepare('SELECT tem_resumo FROM videos').get()!.tem_resumo, 0);

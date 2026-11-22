@@ -27,6 +27,8 @@ import { ServicoResumos, revisaoTranscricao } from './modulos/resumos/servico.ts
 import { ConfiguracaoResumos, PROVEDORES } from './modulos/resumos/configuracao.ts';
 import { ClienteProvedor } from './modulos/resumos/provedores.ts';
 import type { ServicoConfiguracao } from './modulos/configuracao/servico.ts';
+import { RepositorioMiniaturas } from './persistencia/repositorio-miniaturas.ts';
+import { ServicoMiniaturas } from './modulos/miniaturas/servico.ts';
 
 export const VERSAO_API = '0.1.0';
 
@@ -78,6 +80,18 @@ export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}
   });
 
   const repositorioTranscricoes = new RepositorioTranscricoesSqlite(banco.db);
+  /**
+   * Miniaturas: copia local da capa. O projeto usa `--skip-download`, então
+   * sem isso a capa era sempre a URL do CDN — que expira e deixa a linha sem
+   * imagem. A pasta fica na pasta de dados, junto do banco, e continua fora do
+   * Git.
+   */
+  const miniaturas = new ServicoMiniaturas({
+    pastaDados: config.pastaDados,
+    repositorio: new RepositorioMiniaturas(banco.db),
+    buscarUrlDoVideo: async videoId => repositorioBiblioteca.porId(videoId),
+    registrarErro: (mensagem, detalhe) => registrador.aviso('miniaturas', { mensagem, detalhe: String(detalhe) }),
+  });
   const repositorioResumosLeitura = new RepositorioResumosLeituraSqlite(banco.db);
   const executorYtdlp =
     opcoes.executorYtdlp ??
@@ -161,6 +175,9 @@ export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}
         cursor: consulta.get('cursor') ?? undefined,
         limite: consulta.get('limite') ?? undefined,
       });
+      // A capa local substitui a URL remota quando já existe cópia. A lista
+      // não dispara download: só aponta para o que já foi buscado.
+      miniaturas.aplicarEmVideos(pagina.itens);
       return pagina;
     })
     .obter('/api/biblioteca/playlists', () => biblioteca.listarPlaylists())
@@ -301,6 +318,23 @@ export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}
       const trabalho = await trabalhos.criar('importar-lote', corpo as Record<string, unknown>);
       return new ResultadoHttp(trabalho, 202, { location: `/api/trabalhos/${trabalho.id}` });
     })
+    /*
+     * Histórico de importações: contagens por categoria e limpeza.
+     *
+     * Limpar o histórico NÃO apaga vídeo, transcrição nem resumo — só a
+     * entrada de fila. Vídeo, transcrição e resumo têm seus próprios comandos
+     * (remover da Biblioteca, reimportar). Registrar isso aqui é o que impede
+     * tratar as duas coisas como sinônimos.
+     */
+    .obter('/api/trabalhos/historico/resumo', () => repositorioTrabalhos.historicoResumo())
+    .remover('/api/trabalhos/historico', async ({ requisicao }) => {
+      const corpo = requisicao.corpo as { estados?: unknown } | undefined;
+      const estados = Array.isArray(corpo?.estados) ? corpo.estados.filter((e): e is string => typeof e === 'string') : [];
+      if (!estados.length) throw new ErroValidacao('Informe os estados a limpar (concluido, falhou, cancelado).');
+      const resultado = repositorioTrabalhos.limparHistorico(estados);
+      registrador.info('histórico de importações limpo', resultado);
+      return resultado;
+    })
     .obter('/api/trabalhos', ({ requisicao }) => repositorioTrabalhos.pagina({
       raizes: requisicao.consulta.get('raizes') === '1', estado: requisicao.consulta.get('estado') ?? undefined, cursor: requisicao.consulta.get('cursor') ?? undefined,
       limite: Number(requisicao.consulta.get('limite') ?? 50),
@@ -327,6 +361,19 @@ export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}
       const transcricao = await repositorioTranscricoes.porVideo(id);
       return transcricao ?? { videoId: id, idioma: '', origem: 'auto', estado: 'pendente', segmentos: [], motivo: 'Transcrição ainda não importada.', atualizadoEm: '' };
     })
+    .postar('/api/miniaturas/:id/buscar', async ({ requisicao }) => {
+      const id = requisicao.caminho.split('/').at(-2)!;
+      await biblioteca.obter(id); // 404 se o vídeo não existe
+      // `forcar` só quando o cliente pede: reimportação troca a URL e merece
+      // nova tentativa; a rolagem normal não.
+      const forcar = (requisicao.corpo as { forcar?: unknown } | undefined)?.forcar === true;
+      const resultado = await miniaturas.garantir(id, { forcar });
+      return new ResultadoHttp(
+        { videoId: id, ok: resultado.ok, motivo: resultado.ok ? null : resultado.motivo ?? 'indisponível',
+          miniaturaUrl: miniaturas.urlPublica(id) },
+        resultado.ok ? 200 : 404,
+      );
+    })
     .obter('/api/biblioteca/:id/resumo', async ({ requisicao }) => {
       const partes = requisicao.caminho.split('/');
       const id = partes.at(-2)!;
@@ -347,6 +394,29 @@ export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}
   // O mesmo servidor atende API e interface: uma porta, uma origem, sem CORS.
   const servidor = createServer((req, res) => {
     const caminho = new URL(req.url ?? '/', 'http://localhost').pathname;
+    // Imagem é binária: o roteador sempre responde JSON, então a miniatura é
+    // servida aqui, antes dele.
+    const miniatura = /^\/api\/miniaturas\/([^/]+)$/.exec(caminho);
+    if (miniatura && req.method === 'GET') {
+      void miniaturas.bytes(decodeURIComponent(miniatura[1]!)).then((achado) => {
+        if (!achado) {
+          res.writeHead(404, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+          res.end(JSON.stringify({ ok: false, erro: { codigo: 'sem_miniatura', mensagem: 'Miniatura ainda não foi baixada.' } }));
+          return;
+        }
+        res.writeHead(200, {
+          'content-type': achado.contentType,
+          // Cópia imutável: se o arquivo trocar, o nome muda.
+          'cache-control': 'public, max-age=604800, immutable',
+          'content-length': achado.dados.length,
+        });
+        res.end(achado.dados);
+      }).catch(() => {
+        res.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' });
+        res.end('falha ao ler miniatura');
+      });
+      return;
+    }
     if (caminho.startsWith('/api/')) {
       servidorApi.emit('request', req, res);
       return;

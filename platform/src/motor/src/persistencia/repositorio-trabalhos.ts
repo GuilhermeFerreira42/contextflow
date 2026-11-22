@@ -271,4 +271,83 @@ export class RepositorioTrabalhos {
             }
         });
     }
+    /**
+     * Contagens do histórico por categoria — o que a limpeza oferece.
+     *
+     * "Falha" e "cancelado" são estados do trabalho. "Repetido" é derivado:
+     * uma raiz com mais de uma tentativa registrada em `tentativas_trabalho`
+     * significa que a mesma importação foi refeita; nenhuma linha é
+     * considerada "excluída", porque esse estado não existe no domínio.
+     */
+    historicoResumo(): {
+        total: number; concluido: number; falhou: number; cancelado: number; ativo: number;
+        repetido: number; comFilhos: number;
+    } {
+        const contagem = this.banco.db.prepare(`
+          SELECT estado, COUNT(*) n FROM trabalhos WHERE pai_id IS NULL GROUP BY estado
+        `).all() as unknown as { estado: string; n: number }[];
+        const por = (estado: string) => Number(contagem.find(c => c.estado === estado)?.n ?? 0);
+        const repetido = Number((this.banco.db.prepare(`
+          SELECT COUNT(*) n FROM (
+            SELECT pai_id, youtube_id FROM trabalhos
+            WHERE pai_id IS NOT NULL AND youtube_id IS NOT NULL
+            GROUP BY pai_id, youtube_id HAVING COUNT(*) > 1
+          )
+        `).get() as { n: number }).n);
+        const comFilhos = Number((this.banco.db.prepare(`
+          SELECT COUNT(*) n FROM trabalhos p WHERE p.pai_id IS NULL
+            AND EXISTS(SELECT 1 FROM trabalhos f WHERE f.pai_id = p.id)
+        `).get() as { n: number }).n);
+        return {
+          total: por('concluido') + por('falhou') + por('cancelado'),
+          concluido: por('concluido'), falhou: por('falhou'), cancelado: por('cancelado'),
+          ativo: por('na-fila') + por('executando'),
+          repetido, comFilhos,
+        };
+    }
+
+    /**
+     * Remove entradas do histórico.
+     *
+     * Só trabalhos TERMINAIS e raízes. Trabalho ativo é recusado — apagar um
+     * trabalho em execução deixaria o executor tentando gravar num id que não
+     * existe. O que é apagado é a entrada de fila (mais tentativas e chaves de
+     * requisição); vídeo, transcrição, resumo e coleções ficam intactos:
+     * `videos` não tem FK daqui, e `biblioteca.remover` é outro caminho.
+     *
+     * Devolve quantos saíram e quais estados, para a UI confirmar.
+     */
+    limparHistorico(estados: string[]): { removidos: number; estados: string[]; preservados: number } {
+        const permitidos = ['concluido', 'falhou', 'cancelado'];
+        const pedidos = estados.filter(e => permitidos.includes(e));
+        if (!pedidos.length) throw new ErroValidacao('Escolha ao menos uma categoria: concluido, falhou ou cancelado.');
+        const marcadores = pedidos.map(() => '?').join(',');
+        return this.banco.executarTransacao(() => {
+          const alvos = this.banco.db
+            .prepare(`SELECT id FROM trabalhos WHERE pai_id IS NULL AND estado IN (${marcadores})`)
+            .all(...pedidos) as unknown as { id: string }[];
+          // Ativos nunca entram: estão fora dos estados pedidos por construção,
+          // mas a contagem é explícita para a resposta dizer o que sobrou.
+          const preservados = Number((this.banco.db
+            .prepare("SELECT COUNT(*) n FROM trabalhos WHERE pai_id IS NULL AND estado IN ('na-fila','executando')")
+            .get() as { n: number }).n);
+          if (!alvos.length) return { removidos: 0, estados: pedidos, preservados };
+          const ids = alvos.map(a => a.id);
+          const marcas = ids.map(() => '?').join(',');
+          // Filhos primeiro, depois chaves de requisição, depois as raízes.
+          this.banco.db.prepare(`DELETE FROM tentativas_trabalho WHERE trabalho_id IN (
+            SELECT id FROM trabalhos WHERE pai_id IN (${marcas}) OR id IN (${marcas})
+          )`).run(...ids, ...ids);
+          this.banco.db.prepare(`DELETE FROM resumos_execucoes WHERE trabalho_id IN (
+            SELECT id FROM trabalhos WHERE pai_id IN (${marcas}) OR id IN (${marcas})
+          )`).run(...ids, ...ids);
+          this.banco.db.prepare(`DELETE FROM requisicoes_trabalho WHERE trabalho_id IN (
+            SELECT id FROM trabalhos WHERE pai_id IN (${marcas}) OR id IN (${marcas})
+          )`).run(...ids, ...ids);
+          this.banco.db.prepare(`DELETE FROM trabalhos WHERE pai_id IN (${marcas})`).run(...ids);
+          this.banco.db.prepare(`DELETE FROM trabalhos WHERE id IN (${marcas})`).run(...ids);
+          return { removidos: ids.length, estados: pedidos, preservados };
+        });
+    }
+
 }
