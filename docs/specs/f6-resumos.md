@@ -15,6 +15,24 @@ Configurações, Biblioteca, painel de leitura e Importações existentes.
 
 ## Decisões de implementação
 
+### Correção autorizada — LiteLLM local e saída longa (22/11/2026)
+
+Relato e captura do proprietário: endpoint de escuta `0.0.0.0:4000` rejeitado,
+proxy sem chave impedido de testar, saída limitada a 8192 e a um terço do contexto.
+Consulta GET real em loopback confirmou modelos no LiteLLM, sem autenticação;
+nenhuma geração foi solicitada. Normalizar somente host de escuta IPv4
+`0.0.0.0` para `127.0.0.1`, preservando porta/caminho. HTTP remoto continua proibido.
+OpenAI compatível admite chave opcional; se o proxy exigir, seu 401/403 continua
+explícito. OpenAI/Anthropic oficiais continuam exigindo chave. Testar conexão
+salva primeiro o formulário atual e consulta modelos, sem gerar; exibe nomes e
+preenche sugestões de modelo, sem escolher silenciosamente. Saída configurável
+até 1.000.000 de tokens, limitada ao contexto informado e à reserva de entrada
+(prompt UTF-8 + 1024); limite real depende do modelo. Resposta JSON até 32 MB.
+Sem migração. Validar salvar/testar/gerar sem chave com proxy controlado,
+autenticação recusada, limites altos e regressão Playwright. Chamada real de
+geração não faz parte dessa prova de conexão.
+Referência do contrato compatível: https://docs.litellm.ai/docs/simple_proxy .
+
 - Clientes HTTP nativos sem SDK/dependência de produção. OpenAI Chat Completions,
   Anthropic Messages e Ollama `/api/chat`, sem streaming nesta entrega (opcional
   no rascunho). Modelos informados pelo usuário, sem catálogo/preço embutido que

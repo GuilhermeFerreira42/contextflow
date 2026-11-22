@@ -20,6 +20,14 @@
 
 ## Status de execução (atualizado a cada fatia)
 
+**Correção LiteLLM (base `8434a25`):** 198 testes, 192 aprovados e seis ignorados;
+7/7 grupos Playwright F6. Conexão real ao LiteLLM local sem chave e listagem de
+modelos aprovadas; geração real não solicitada. Proxy controlado comprovou salvar,
+testar formulário atual, normalização de endereço, sugestões de modelos, saída
+131072, preservação de 401 e reserva de entrada. Sem ampliar o aceite para modelo
+real nem repetir os nove grupos de dimensões. Evidências em
+`../Continuidade de Projeto/f6-litellm-8434a25/`.
+
 **F6 (22/11/2026, base `9094137`):** 196 testes, 190 aprovados e seis ignorados
 no Windows; 57/57 CDP, 9/9 grupos Playwright de refinamentos e 6/6 de resumos.
 Build/typecheck e nove verificações de fumaça aprovados. Os 13 testes de

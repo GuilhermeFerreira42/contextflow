@@ -103,7 +103,7 @@ export class ServicoResumos {
     if (e.assinaturaEstimativa !== publica.assinaturaEstimativa && !repetida) throw new ErroDominio('estimativa_alterada', 'A configuração ou o conteúdo mudou. Confira uma nova estimativa antes de gerar.', 409);
     if (!snapshots.length) throw new ErroValidacao('Nenhum vídeo selecionado tem transcrição que possa ser resumida.');
     const c = snapshots[0]!.config;
-    if (snapshots.some(s => !this.#existente(s)) && c.provedor !== 'ollama' && !await this.configuracao.chave(c)) throw new ErroDominio('chave_ausente', 'Configure a chave deste provedor antes de gerar.', 412);
+    if (snapshots.some(s => !this.#existente(s)) && ['openai', 'anthropic'].includes(c.provedor) && !await this.configuracao.chave(c)) throw new ErroDominio('chave_ausente', 'Configure a chave deste provedor antes de gerar.', 412);
     for (const s of snapshots) {
       const chaveItem = `${chave}_${hash(s.video.id).slice(0, 16)}`;
       const jaSolicitado = this.#banco.db.prepare('SELECT 1 FROM requisicoes_trabalho WHERE chave=?').get(chaveItem);

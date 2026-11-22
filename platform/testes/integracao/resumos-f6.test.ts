@@ -283,3 +283,32 @@ test('F6: reabrir motor recupera trabalho interrompido e snapshot persistido', a
   const h = (await a.api('/api/resumos/v1')).dados.itens;
   assert.equal(h.filter((r: any) => r.estado === 'pronto').length, 1);
 });
+
+test('F6 LiteLLM: normaliza endereço de escuta, testa/lista e gera sem chave com saída alta', async t => {
+  const a = await ambiente(t); await a.fonte();
+  const salvo = await a.api('/api/resumos/configuracao', a.config({ provedor: 'compativel', baseUrl: a.urlMock.replace('127.0.0.1', '0.0.0.0'), contexto: 200000, maxSaida: 131072 }));
+  assert.equal(salvo.status, 200); assert.equal(salvo.dados.configuracao.baseUrl, a.urlMock);
+  assert.equal(salvo.dados.temChave, false);
+  const teste = await a.api('/api/resumos/testar', {});
+  assert.equal(teste.status, 200); assert.deepEqual(teste.dados.modelos, ['fixture']);
+  assert.equal(teste.dados.modeloListado, true); assert.equal(a.pedidos.length, 1);
+  const g = await a.gerar(); assert.equal(g.resposta.status, 202);
+  assert.equal((await a.terminal(g.resposta.dados.trabalhos[0].id)).estado, 'concluido');
+  assert.equal(a.pedidos.at(-1)!.corpo.max_tokens, 131072);
+  assert.equal(a.pedidos.at(-1)!.auth, '');
+  a.modo.status = 401;
+  const recusado = await a.api('/api/resumos/testar', {});
+  assert.equal(recusado.status, 401);
+  assert.match(JSON.stringify(recusado), /auth_invalido/);
+});
+
+test('F6 LiteLLM: reserva de entrada, limite global e chave oficial continuam validados', async t => {
+  const a = await ambiente(t);
+  assert.equal(validarConfig(a.config({ contexto: 16384, maxSaida: 8192 })).maxSaida, 8192);
+  for (const extra of [{ contexto: 16384, maxSaida: 16384 }, { contexto: 1000000, maxSaida: 1000001 }, { contexto: 2048, maxSaida: 1024, prompt: 'x'.repeat(1500) + '{transcricao}' }]) {
+    assert.equal((await a.api('/api/resumos/configuracao', a.config(extra))).status, 422);
+  }
+  const cliente = new ClienteProvedor();
+  const c = validarConfig(a.config({ provedor: 'openai', baseUrl: 'https://api.openai.com/v1' }));
+  await assert.rejects(cliente.testar(c, null), (e: any) => e.codigo === 'chave_ausente');
+});

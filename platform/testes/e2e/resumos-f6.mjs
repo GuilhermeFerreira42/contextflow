@@ -20,8 +20,9 @@ const mock = createServer(async (req, res) => {
   if (modo.bloquear) return;
   res.writeHead(modo.status, { 'content-type': 'application/json' });
   if (modo.status !== 200) { res.end('{"error":"fixture"}'); return; }
-  if (req.method === 'GET') { res.end('{"models":[{"name":"fixture"}]}'); return; }
+  if (req.method === 'GET') { res.end(req.url === '/models' ? '{"data":[{"id":"fixture"}]}' : '{"models":[{"name":"fixture"}]}'); return; }
   modo.chamadas++;
+  if (req.url === '/chat/completions') { res.end(JSON.stringify({ choices: [{ message: { content: `${modo.texto} Compatível.` }, finish_reason: 'stop' }], usage: { prompt_tokens: 20, completion_tokens: 10 } })); return; }
   res.end(JSON.stringify({ message: { content: `${modo.texto} Chamada ${modo.chamadas}.` }, done: true, prompt_eval_count: 20, eval_count: 10 }));
 });
 const app = criarAplicacao(carregarConfig({ ...process.env, CONTEXTFLOW_DADOS: pasta, CONTEXTFLOW_PORTA: '0', CONTEXTFLOW_AMBIENTE: 'teste' }));
@@ -150,6 +151,32 @@ try {
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     assert.ok(await page.locator('#lista-config dd').evaluateAll(itens => itens.every(el => el.scrollWidth <= el.clientWidth)), 'Preferências devem quebrar linhas sem texto cortado');
     await page.screenshot({ path: join(evidencia, 'configuracao-estreita.png') });
+    assert.deepEqual(erros, []);
+  });
+  await teste('LiteLLM sem chave: salvar/testar formulário atual, modelos e saída acima de 8192', async () => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.locator('#ia-provedor').selectOption('compativel');
+    await page.locator('#ia-endpoint').fill(endpoint.replace('127.0.0.1', '0.0.0.0'));
+    await page.locator('#ia-modelo').fill('modelo-inexistente');
+    await page.locator('#ia-contexto').fill('200000'); await page.locator('#ia-saida').fill('131072');
+    const antes = modo.chamadas;
+    await page.locator('#ia-testar').click();
+    await page.waitForFunction(() => document.querySelector('#ia-resultado').textContent.includes('não consta'));
+    assert.equal(await page.locator('#ia-endpoint').inputValue(), endpoint);
+    assert.equal(await page.locator('#ia-modelos option').first().getAttribute('value'), 'fixture');
+    assert.equal(modo.chamadas, antes, 'conexão não gera texto');
+    await page.locator('#ia-modelo').fill('fixture'); await page.locator('#ia-testar').click();
+    await page.waitForFunction(() => document.querySelector('#ia-resultado').textContent.includes('Nenhum resumo') && !document.querySelector('#ia-resultado').textContent.includes('não consta'));
+    await page.reload(); await page.waitForFunction(() => document.querySelector('#ia-saida').value === '131072');
+    assert.equal(await page.locator('#ia-chave').inputValue(), '');
+    await page.screenshot({ path: join(evidencia, 'litellm-saida-longa.png') });
+    await nav('biblioteca'); await page.locator('tr[data-id="f6-ui-1"] input').check();
+    await page.locator('#gerar-resumos-selecao').click();
+    await page.waitForFunction(() => !document.querySelector('#resumos-confirmar').disabled);
+    await page.locator('#resumos-confirmar').click(); await page.waitForURL('**/#importacoes');
+    const jobs = (await req('/api/trabalhos')).itens.filter(j => j.tipo === 'gerar-resumo');
+    for (const job of jobs) await terminal(job.id);
+    assert.match((await req('/api/biblioteca/f6-ui-1/resumo')).texto, /Compatível/);
     assert.deepEqual(erros, []);
   });
   console.log(`\n${total-falhas.length}/${total} cenários F6 Playwright aprovados. Provedor HTTP controlado; não é serviço/modelo real.`);

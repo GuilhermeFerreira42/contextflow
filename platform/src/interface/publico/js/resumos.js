@@ -71,27 +71,38 @@ export function criarResumosUI({ api, aoEnfileirar, aoSalvar }) {
     } catch (erro) { $('#historico-resumos-conteudo').textContent = erro.message; }
   }
 
-  function ligar() {
-    $('#formulario-ia').addEventListener('submit', async e => {
-      e.preventDefault(); $('#ia-salvar').disabled = true; avisoConfig('Salvando…');
+  async function salvarConfiguracao() {
+      if (!$('#formulario-ia').reportValidity()) return false;
+      $('#ia-salvar').disabled = true; $('#ia-testar').disabled = true; avisoConfig('Salvando…');
       const dados = Object.fromEntries(Object.entries(campos).map(([nome, id]) => [nome, $('#' + id).value]));
       dados.apiKey = $('#ia-chave').value; dados.removerChave = $('#ia-remover-chave').checked;
       try {
         await api('/api/resumos/configuracao', { method: 'POST', body: JSON.stringify(dados) });
-        await carregarConfiguracao(); avisoConfig('Configuração de IA salva.'); aoSalvar?.();
-      } catch (erro) { avisoConfig(erro.message); }
-      finally { $('#ia-chave').value = ''; $('#ia-salvar').disabled = false; }
+        await carregarConfiguracao(); avisoConfig('Configuração de IA salva.'); aoSalvar?.(); return true;
+      } catch (erro) { avisoConfig(erro.message); return false; }
+      finally { $('#ia-chave').value = ''; $('#ia-salvar').disabled = false; $('#ia-testar').disabled = false; }
+  }
+
+  function ligar() {
+    $('#formulario-ia').addEventListener('submit', async e => {
+      e.preventDefault(); await salvarConfiguracao();
     });
     $('#ia-provedor').addEventListener('change', () => {
       const p = provedores.find(p => p.id === $('#ia-provedor').value);
       $('#ia-endpoint').value = p?.baseUrl ?? ''; $('#ia-endpoint').readOnly = ['openai', 'anthropic'].includes(p?.id);
       $('#ia-chave').value = ''; $('#ia-concorrencia').value = p?.id === 'ollama' ? '1' : '2';
+      $('#ia-modelos').replaceChildren();
       $('#ia-protecao').textContent = 'Salve para verificar a chave vinculada a este destino.';
     });
-    $('#ia-endpoint').addEventListener('change', () => { $('#ia-chave').value = ''; });
+    $('#ia-endpoint').addEventListener('change', () => { $('#ia-chave').value = ''; $('#ia-modelos').replaceChildren(); });
     $('#ia-testar').addEventListener('click', async () => {
+      if (!await salvarConfiguracao()) return;
       $('#ia-testar').disabled = true; avisoConfig('Testando a configuração salva…');
-      try { avisoConfig((await api('/api/resumos/testar', { method: 'POST', body: '{}' })).mensagem); }
+      try {
+        const resultado = await api('/api/resumos/testar', { method: 'POST', body: '{}' });
+        $('#ia-modelos').replaceChildren(...resultado.modelos.map(modelo => { const o = document.createElement('option'); o.value = modelo; return o; }));
+        avisoConfig(resultado.mensagem);
+      }
       catch (erro) { avisoConfig(erro.message); }
       finally { $('#ia-testar').disabled = false; }
     });

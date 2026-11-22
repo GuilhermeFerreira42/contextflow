@@ -354,22 +354,22 @@
           <p class="painel-nota">Escolha seu provedor e modelo. A geração só começa após conferir e confirmar a estimativa.</p>
           <form id="formulario-ia" class="formulario-ia">
             <label>Provedor<select id="ia-provedor" required></select></label>
-            <label>Modelo<input id="ia-modelo" required maxlength="160" placeholder="Identificador do modelo no provedor" /></label>
-            <label class="ia-linha-inteira">Endpoint<input id="ia-endpoint" type="url" required /></label>
-            <label class="ia-linha-inteira">Chave do provedor<input id="ia-chave" type="password" autocomplete="new-password" maxlength="4096" placeholder="Em branco mantém a chave deste provedor e endpoint" /></label>
+            <label>Modelo<input id="ia-modelo" required maxlength="160" list="ia-modelos" placeholder="Identificador cadastrado no provedor/proxy" /><datalist id="ia-modelos"></datalist></label>
+            <label class="ia-linha-inteira">Endpoint<input id="ia-endpoint" type="url" required placeholder="http://127.0.0.1:4000" /><small>LiteLLM local: use o endereço desta máquina e o nome do modelo cadastrado no proxy.</small></label>
+            <label class="ia-linha-inteira">Chave do provedor<input id="ia-chave" type="password" autocomplete="new-password" maxlength="4096" placeholder="Em branco mantém a chave salva; opcional em proxy sem autenticação" /></label>
             <label class="filtro-checkbox ia-linha-inteira"><input id="ia-remover-chave" type="checkbox" /> Remover a chave deste endpoint ao salvar</label>
             <p id="ia-protecao" class="painel-nota ia-linha-inteira"></p>
             <label>Versão do prompt<input id="ia-versao" value="v1" required maxlength="40" /></label>
             <label>Contexto (tokens)<input id="ia-contexto" type="number" min="2048" max="1000000" value="16384" required /></label>
             <label class="ia-linha-inteira">Prompt<textarea id="ia-prompt" rows="5" required maxlength="20000" placeholder="Inclua {transcricao}. Também disponíveis: {titulo}, {canal}, {duracao}."></textarea></label>
-            <label>Saída máxima (tokens)<input id="ia-saida" type="number" min="128" max="8192" value="1024" required /></label>
+            <label>Saída máxima (tokens)<input id="ia-saida" type="number" min="128" max="1000000" value="1024" required /><small>Até 1.000.000, conforme o modelo. O contexto precisa comportar a saída, o prompt e a entrada.</small></label>
             <label>Gerações simultâneas<input id="ia-concorrencia" type="number" min="1" max="4" value="2" required /></label>
             <label>Tempo limite por chamada (segundos)<input id="ia-timeout" type="number" min="1" max="300" value="90" required /></label>
             <label>Entrada: USD por milhão de tokens (opcional)<input id="ia-preco-entrada" type="number" min="0" step="any" placeholder="Não informado" /></label>
             <label>Saída: USD por milhão de tokens (opcional)<input id="ia-preco-saida" type="number" min="0" step="any" placeholder="Não informado" /></label>
             <div class="barra-ferramentas ia-linha-inteira">
               <button class="botao-primario" id="ia-salvar" type="submit">Salvar configuração de IA</button>
-              <button class="botao-secundario" id="ia-testar" type="button">Testar conexão salva</button>
+              <button class="botao-secundario" id="ia-testar" type="button">Salvar e testar conexão</button>
             </div>
             <p id="ia-resultado" class="ia-linha-inteira" role="status" aria-live="polite"></p>
           </form>

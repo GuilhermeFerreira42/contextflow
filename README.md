@@ -6,9 +6,11 @@ timestamps, resumos por IA e leitura em planilha de alta densidade.
 Aplicativo local para **Windows e Linux** — motor em Node.js + TypeScript com interface
 web própria. Monólito modular. Chat sobre conteúdo é V2.
 
-> **Estado:** F1–F6 implementadas. Regressão Windows: 190 testes aprovados,
+> **Estado:** F1–F6 implementadas. Correção LiteLLM Windows: 192 testes aprovados,
 > 6 ignorados, 57/57 cenários CDP, 9/9 grupos Playwright de refinamentos e
-> 6/6 grupos Playwright F6. IA validada com servidores HTTP controlados;
+> 7/7 grupos Playwright F6. Os 9/9 refinamentos são da entrega F6 anterior.
+> LiteLLM local: conexão/listagem reais aprovadas, sem geração.
+> IA validada com servidores HTTP controlados;
 > geração em provedor real e homologação humana pendentes. Estado e limites em
 > [`docs/estado-atual.md`](docs/estado-atual.md).
 

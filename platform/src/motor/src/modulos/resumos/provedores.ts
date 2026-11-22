@@ -15,7 +15,7 @@ async function lerJson(resposta: Response): Promise<any> {
       const { done, value } = await leitor.read();
       if (done) break;
       tamanho += value.length;
-      if (tamanho > 2_000_000) throw new ErroDominio('resposta_invalida', 'Resposta do provedor acima do limite de segurança.', 502);
+      if (tamanho > 32_000_000) throw new ErroDominio('resposta_invalida', 'Resposta do provedor acima do limite de segurança.', 502);
       partes.push(value);
     }
     return JSON.parse(Buffer.concat(partes).toString('utf8'));
@@ -32,7 +32,7 @@ export class ClienteProvedor {
   constructor(http: typeof fetch = fetch) { this.http = http; }
 
   async #pedir(c: ConfigResumo, chave: string | null, caminho: string, corpo: unknown, sinal: AbortSignal, fase: (f: string) => void, retentar: boolean) {
-    if (c.provedor !== 'ollama' && !chave) throw new ErroDominio('chave_ausente', 'Configure a chave deste provedor e endpoint em Configurações.', 412);
+    if (['openai', 'anthropic'].includes(c.provedor) && !chave) throw new ErroDominio('chave_ausente', 'Configure a chave deste provedor e endpoint em Configurações.', 412);
     const cabecalhos: Record<string, string> = { 'content-type': 'application/json' };
     if (c.provedor === 'anthropic') {
       cabecalhos['x-api-key'] = chave!;
@@ -78,8 +78,12 @@ export class ClienteProvedor {
 
   async testar(c: ConfigResumo, chave: string | null) {
     const caminho = c.provedor === 'ollama' ? '/api/tags' : '/models';
-    await this.#pedir(c, chave, caminho, undefined, AbortSignal.timeout(15000), () => {}, false);
-    return { disponivel: true, mensagem: 'Conexão e autenticação aceitas pelo endpoint. Nenhum resumo foi solicitado.' };
+    const resposta = await this.#pedir(c, chave, caminho, undefined, AbortSignal.timeout(15000), () => {}, false);
+    const lista = c.provedor === 'ollama' ? resposta?.models : resposta?.data;
+    const modelos: string[] = Array.isArray(lista) ? [...new Set<string>(lista.map(m => m?.id ?? m?.name).filter((m): m is string => typeof m === 'string' && m.length > 0 && m.length <= 200))].slice(0, 200) : [];
+    const encontrado = modelos.includes(c.modelo);
+    return { disponivel: true, modelos, modeloListado: encontrado,
+      mensagem: `Conexão aceita pelo endpoint. Nenhum resumo foi solicitado.${modelos.length ? ` Modelos: ${modelos.join(', ')}.${encontrado ? '' : ' O modelo informado não consta nessa lista; confira o identificador.'}` : ' O endpoint não informou modelos; confira o identificador antes de gerar.'}` };
   }
 
   async completar(c: ConfigResumo, chave: string | null, prompt: string, sinal: AbortSignal, fase: (f: string) => void): Promise<{ texto: string; uso: UsoIA }> {

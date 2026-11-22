@@ -6,6 +6,49 @@
 
 ## Estado vigente — 22/11/2026 — F6
 
+### Correção vigente — LiteLLM local e limites de saída
+
+Base `8434a25`, `main` limpa antes do pedido do proprietário. A captura mostrou
+endpoint `http://0.0.0.0:4000`, chave vazia e saída 8192/contexto 16384.
+Havia três bloqueios do aplicativo: endereço de escuta rejeitado, exigência de
+chave mesmo em proxy sem autenticação e teto de saída 8192/um terço do contexto.
+
+Correção conforme adendo da SPEC F6: normalizar `0.0.0.0` para `127.0.0.1`,
+permitir chave opcional em OpenAI compatível, salvar formulário atual antes do
+teste de conexão, listar/sugerir modelos e avisar se o nome não consta. OpenAI e
+Anthropic oficiais seguem exigindo chave; proxy com autenticação ainda devolve
+401/403. HTTP remoto segue rejeitado. Não adicionar `/v1` automaticamente:
+preservar o caminho da base informada, compatível com a raiz do LiteLLM consultado.
+
+Saída de 128 a 1.000.000 tokens na UI/API, limitada ao contexto com reserva
+`bytes UTF-8 do prompt + 1024` para entrada/margem. Não garante que o modelo
+aceite esse valor: usar seus limites reais. Resposta HTTP limitada a 32 MB para
+acomodar saídas longas. Sem migração, dependência nova ou mudança nas chaves salvas.
+
+**Prova real executada:** cliente corrigido consultou `/models` no LiteLLM do
+PC em loopback, sem chave, e confirmou a lista/modelo `meu-pool`; configuração
+em memória com contexto 200000/saída 131072 aceita. Nenhuma geração real foi
+solicitada nem configuração pessoal foi substituída. O app já aberto precisa
+ser reiniciado e a página recarregada para carregar o backend/JS corrigidos.
+
+Validação desta rodada: `npm test` 198 testes, **192 aprovados, seis ignorados,
+zero falhas**; Playwright F6 **7/7** (novo cenário LiteLLM sem chave, normalização,
+modelo ausente, sugestões, salvar/testar formulário, reload e geração controlada
+com saída 131072). Dois novos testes de integração comprovam limites e auth.
+Regressão CDP **57/57**, build/typecheck aprovados e fumaça **nove OK/TUDO OK**;
+todos os comandos desta rodada encerraram com saída 0.
+Os nove grupos de refinamentos da grade passaram na entrega `8434a25`; não
+foram repetidos nesta correção de configuração. Evidências desta rodada em
+`../Continuidade de Projeto/f6-litellm-8434a25/`; conexão real separada da geração
+com proxy controlado. Geração no LiteLLM real e Linux continuam não executados.
+
+Configuração confirmada para retomar: provedor OpenAI compatível, endpoint
+`http://127.0.0.1:4000`, modelo `meu-pool` (ou outro nome listado pelo proxy),
+chave vazia no proxy atual sem auth. Clicar Salvar e testar conexão. Informar
+contexto/saída conforme o limite real do modelo, sem inferir capacidade do alias.
+
+### Entrega inicial F6 — registro de `8434a25`
+
 **F6 implementada e validada tecnicamente com provedores HTTP controlados no
 Windows. Geração em conta/modelo real e homologação humana não executadas.**
 Branch `main`; base `9094137` (dimensões da grade já commitadas). A entrega F6

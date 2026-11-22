@@ -8,7 +8,7 @@ export const PROVEDORES = [
   { id: 'openai', nome: 'OpenAI', baseUrl: 'https://api.openai.com/v1', exigeChave: true },
   { id: 'anthropic', nome: 'Anthropic', baseUrl: 'https://api.anthropic.com/v1', exigeChave: true },
   { id: 'ollama', nome: 'Ollama', baseUrl: 'http://127.0.0.1:11434', exigeChave: false },
-  { id: 'compativel', nome: 'OpenAI compatível', baseUrl: '', exigeChave: true },
+  { id: 'compativel', nome: 'OpenAI compatível', baseUrl: '', exigeChave: false },
 ] as const;
 export interface ConfigResumo {
   provedor: string; modelo: string; baseUrl: string; prompt: string; versaoPrompt: string;
@@ -30,6 +30,8 @@ export function validarConfig(entrada: unknown): ConfigResumo {
   let url: URL;
   try { url = new URL(texto('baseUrl') || provedor.baseUrl); }
   catch { throw new ErroValidacao('Informe um endpoint válido.'); }
+  // Endereço de escuta não é destino: conectar ao proxy desta máquina.
+  if (url.hostname === '0.0.0.0') url.hostname = '127.0.0.1';
   const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
   if ((url.protocol !== 'https:' && !(url.protocol === 'http:' && local)) || url.username || url.password || url.search || url.hash) {
     throw new ErroValidacao('Use HTTPS (ou HTTP em loopback), sem credenciais ou parâmetros no endpoint.');
@@ -54,8 +56,8 @@ export function validarConfig(entrada: unknown): ConfigResumo {
     return valor;
   };
   const contexto = numero('contexto', 16384, 2048, 1000000);
-  const maxSaida = numero('maxSaida', 1024, 128, 8192);
-  if (maxSaida > contexto / 3) throw new ErroValidacao('Reserve ao menos dois terços do contexto para a entrada.');
+  const maxSaida = numero('maxSaida', 1024, 128, 1000000);
+  if (contexto - maxSaida < Buffer.byteLength(prompt, 'utf8') + 1024) throw new ErroValidacao('Aumente o contexto ou reduza a saída: reserve espaço para o prompt e ao menos 1024 tokens de entrada/margem.');
   return { provedor: provedor.id, modelo, baseUrl, prompt, versaoPrompt, contexto, maxSaida,
     concorrencia: numero('concorrencia', provedor.id === 'ollama' ? 1 : 2, 1, 4),
     timeoutSegundos: numero('timeoutSegundos', 90, 1, 300), precoEntrada: preco('precoEntrada'), precoSaida: preco('precoSaida') };
