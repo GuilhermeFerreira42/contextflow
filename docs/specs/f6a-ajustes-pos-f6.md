@@ -218,7 +218,53 @@ Também foi corrigido um defeito encontrado pela própria suíte:
   mensagem de sucesso por "Nenhum registro selecionado". Corrigido com
   `manterAviso`.
 
-## 11. O que não entra
+## 11. Correção depois do teste do proprietário (22/11, mesmo dia)
+
+O print do proprietário mostrou que o item 8 **não estava realmente resolvido**:
+com a linha muito alta e a coluna de vídeo larga, a miniatura parava num
+tamanho fixo, sobrava vazio embaixo e o título continuava ao lado.
+
+**Causa (duas travas somadas):**
+
+1. `width: clamp(64px, (altura−24)×1,24, 420px)` — teto fixo de **420 px**.
+2. `max-width: 55%` — em coluna de 690 px, a imagem parava em **380 px**.
+
+E o cálculo do modo lateral comparava `min(desejada, 55%) + gap + texto` com a
+largura da coluna: como `55% + 170` sempre cabia, o modo empilhado **nunca era
+alcançado** em coluna larga.
+
+**Correção:** o CSS deixa de impor teto e passa a consumir `--miniatura-largura`
+escrita pelo JS. O JS decide por espaço real:
+
+```
+sobraVertical    = altura − 24
+larguraPelaAltura = sobraVertical × 16/9
+espacoLateral    = larguraColuna − gap − textoMínimo
+lateral   se larguraPelaAltura ≤ espacoLateral
+empilhado caso contrário, com largura limitada por (altura − 66) × 16/9
+```
+
+**Matriz medida no app (coluna × altura):**
+
+| Coluna | 64 | 136 | 220 | 300 | 420 | 600 |
+|---|---|---|---|---|---|---|
+| auto (758) | 71×40 L | 199×112 L | 348×196 L | 491×276 L | 629×354 E | 758×426 E |
+| 700 (678) | 71×40 L | 199×112 L | 348×196 L | 491×276 L | 629×354 E | 678×381 E |
+| 380 (358) | 71×40 L | 124×70 E | 274×154 E | 358×201 E | 358×201 E | 358×201 E |
+
+(L = lateral, E = empilhado). Razão 16:9 em todas; nenhuma imagem ultrapassa a
+coluna; título abaixo sempre que empilhado.
+
+**Prova de que o teste pega a regressão:** reintroduzindo a lógica antiga no JS,
+o cenário novo falha exatamente nos quatro sintomas relatados (`veio lateral`,
+`374px` de largura, `210px` de altura, título ao lado). Com a correção, passa.
+O teste Playwright subiu de 12 para **13 cenários**.
+
+**Limite conhecido:** quando o resumo (coluna à direita) é longo, o texto dita a
+altura da linha e sobra ~48 px abaixo da imagem. É o `max-height` do bloco de
+texto, não um teto da imagem — e a imagem continua proporcional.
+
+## 12. O que não entra
 
 F7, chat/RAG, geração automática ao importar, troca de provedor, redesenho de
 telas, alteração do original Python, nova dependência de produção.

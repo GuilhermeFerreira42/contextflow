@@ -1073,28 +1073,52 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel, aoResumir })
      * imagem quer ocupar, então continua respondendo ao arraste da coluna.
      */
     const TEXTO_MINIMO = 170;
-    // Mesma fórmula do CSS: cresce com a altura, teto de 420, piso de 64.
-    const desejada = Math.max(64, Math.min(420, (altura - 24) * 1.24));
+    const PROPORCAO = 16 / 9;
+
+    /*
+     * A imagem deve ocupar toda a sobra vertical da linha: 16:9 de
+     * `altura - 24` (o respiro que o CSS já reserva).
+     *
+     * O defeito anterior estava aqui: existia um teto fixo de 420px e um
+     * `max-width: 55%`. Numa coluna larga e linha alta, a imagem parava em
+     * 420 (ou em 55% da coluna) e **sobrava vazio embaixo**; pior, como
+     * `55% + gap + texto` sempre "cabia", o modo lado a lado nunca era
+     * abandonado e o título jamais descia. Medido no app do proprietário.
+     *
+     * Agora não há teto arbitrário: a largura desejada vem da altura, e quem
+     * decide o modo é o espaço REAL que sobra para a imagem ao lado do texto.
+     */
+    const sobraVertical = Math.max(40, altura - 24);
+    const larguraPelaAltura = sobraVertical * PROPORCAO;
+
     for (const celula of celulas) {
       const td = celula.closest('td');
       if (!td) continue;
       const larguraColuna = td.clientWidth - 20; // descontar o padding lateral
       if (!larguraColuna) continue;
-      // 55% é o teto do modo lateral no CSS; usar o menor dos dois mantém o
-      // cálculo coerente com o que o navegador vai desenhar.
-      const larguraImagem = Math.min(desejada, larguraColuna * 0.55);
-      const precisa = larguraImagem + GAP + TEXTO_MINIMO;
-      // Empilha quando o lado a lado não cabe. Não existe um segundo critério
-      // "altura >= N": ele empilhava cedo demais (180px numa coluna de 392px
-      // ainda tem espaço confortável). Quem decide é o espaço real.
-      const empilhado = precisa > larguraColuna;
-      celula.dataset.layout = empilhado ? 'empilhado' : 'lateral';
-      // A largura no modo empilhado é a da coluna, limitada para a imagem não
-      // virar um retângulo enorme que engole o texto.
-      if (empilhado) {
-        const tetoAltura = Math.max(60, Math.min(altura - 66, 260));
-        const larguraTeto = Math.round(tetoAltura * (16 / 9));
-        celula.style.setProperty('--miniatura-empilhada', `${Math.min(larguraColuna, larguraTeto)}px`);
+
+      // Espaço máximo que a imagem pode ocupar mantendo o texto ao lado.
+      const espacoLateral = larguraColuna - GAP - TEXTO_MINIMO;
+
+      if (larguraPelaAltura <= espacoLateral) {
+        // Cabe ao lado do texto: a imagem cresce com a altura, sem teto fixo.
+        celula.dataset.layout = 'lateral';
+        celula.style.setProperty('--miniatura-largura', `${Math.round(larguraPelaAltura)}px`);
+        celula.style.removeProperty('--miniatura-empilhada');
+      } else {
+        /*
+         * O lado a lado limitaria a imagem (ela ficaria mais baixa do que a
+         * linha permite e sobraria espaço vazio). Então o título desce e a
+         * imagem usa a largura da coluna — limitada pela altura restante
+         * depois do título, para não engolir a linha inteira.
+         */
+        const larguraMaximaPorAltura = Math.max(80, (altura - 66) * PROPORCAO);
+        celula.dataset.layout = 'empilhado';
+        celula.style.setProperty(
+          '--miniatura-empilhada',
+          `${Math.round(Math.min(larguraColuna, larguraMaximaPorAltura))}px`,
+        );
+        celula.style.removeProperty('--miniatura-largura');
       }
     }
   }

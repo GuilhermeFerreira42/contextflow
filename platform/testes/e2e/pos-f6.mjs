@@ -443,6 +443,8 @@ try {
   const media = (await ajustarAltura(200), await medirLinha());
   verificar(media.miniAltura > baixa.miniAltura,
     `layout: miniatura deveria crescer com a altura (${baixa.miniAltura} → ${media.miniAltura})`);
+  verificar(media.miniAltura > 120,
+    `layout: com 200px de linha a miniatura ficou pequena (${media.miniAltura}px de altura)`);
 
   const alta = (await ajustarAltura(560), await medirLinha());
   verificar(alta.miniDireita <= alta.celulaDireita + 1,
@@ -477,6 +479,58 @@ try {
   verificar(reduzida.textoTopo <= reduzida.miniTopo + 24,
     'layout: ao voltar ao lateral o título deveria subir para o lado da miniatura');
   await pagina.screenshot({ path: join(evidencia, '06-layout-lateral.png') });
+
+  /*
+   * Regressão do defeito RELATADO pelo proprietário (22/11): com a linha
+   * muito alta e a coluna larga, a miniatura parava num tamanho fixo (havia
+   * teto de 420px e `max-width: 55%`), sobrava vazio embaixo e o título
+   * continuava ao lado — o modo empilhado nunca era alcançado.
+   *
+   * Aqui a coluna de vídeo é alargada de propósito (como no print) e a
+   * verificação exige as duas coisas: imagem realmente maior E título abaixo.
+   */
+  cenarios++;
+  await pagina.evaluate(() => {
+    const v = JSON.parse(localStorage.getItem('contextflow.biblioteca.visual') || '{}');
+    v.larguras = { ...(v.larguras || {}), titulo: 700 };
+    localStorage.setItem('contextflow.biblioteca.visual', JSON.stringify(v));
+  });
+  await pagina.reload({ waitUntil: 'networkidle' });
+  await esperar(900);
+  await ajustarAltura(600);
+  const muitoAlta = await medirLinha();
+  verificar(muitoAlta.layout === 'empilhado',
+    `layout: linha de 600px em coluna larga deveria empilhar, veio ${muitoAlta.layout}`);
+  /*
+   * O teto antigo era 420px de LARGURA. Comparar a largura da imagem com esse
+   * número é o que pega a regressão: com o `clamp(..., 420px)` ela parava em
+   * 420 mesmo numa coluna de 700 (ou em 55% dela), e sobrava vazio embaixo.
+   */
+  verificar(muitoAlta.miniLargura > 430,
+    `layout: miniatura deveria passar dos 420px de largura do teto antigo (veio ${muitoAlta.miniLargura})`);
+  verificar(muitoAlta.miniAltura > 300,
+    `layout: miniatura deveria crescer em altura também (altura ${muitoAlta.miniAltura})`);
+  verificar(muitoAlta.miniAltura > media.miniAltura,
+    `layout: miniatura não cresceu da linha média para a alta (${media.miniAltura} → ${muitoAlta.miniAltura})`);
+  verificar(muitoAlta.textoTopo > muitoAlta.miniTopo, 'layout: título deveria estar abaixo da miniatura');
+  // O vazio embaixo da imagem era o sintoma visível do print.
+  const sobra = await pagina.evaluate(() => {
+    const celula = document.querySelector('#corpo-biblioteca tr[data-id="vd-titulo-longo"] .celula-video');
+    const mini = celula?.querySelector('.miniatura');
+    if (!celula || !mini) return null;
+    return Math.round(celula.getBoundingClientRect().bottom - mini.getBoundingClientRect().bottom);
+  });
+  verificar(sobra !== null && sobra <= 90,
+    `layout: ainda sobra muito espaço vazio abaixo da imagem (${sobra}px)`);
+
+  // Devolve a largura original para os cenários seguintes.
+  await pagina.evaluate(() => {
+    const v = JSON.parse(localStorage.getItem('contextflow.biblioteca.visual') || '{}');
+    if (v.larguras) delete v.larguras.titulo;
+    localStorage.setItem('contextflow.biblioteca.visual', JSON.stringify(v));
+  });
+  await pagina.reload({ waitUntil: 'networkidle' });
+  await esperar(900);
 
   // ======================================================================
   // 5. Miniaturas: fallback coerente e sem pedido repetido

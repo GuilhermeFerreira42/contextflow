@@ -22,7 +22,7 @@ uma migração nova (6) entrou só para metadados de cache de miniatura.
 | 5 | Markdown nos resumos | `js/markdown.js` (renderizador próprio, sem HTML), linha e painel |
 | 6 | Fonte do resumo | `#diminuir-fonte`/`#aumentar-fonte`/`#restaurar-fonte`, 11–20 px, `--fonte-resumo` |
 | 7 | Organização dos controles | grupos seleção / lote / aparência, sem remover botão |
-| 8 | Miniatura adaptativa | `data-layout` calculado das medidas reais; lateral ↔ empilhado |
+| 8 | Miniatura adaptativa | `data-layout` das medidas reais; sem teto fixo de 420px/55%; lateral ↔ empilhado |
 
 **Decisões que precisam sobreviver à retomada:**
 
@@ -39,9 +39,22 @@ uma migração nova (6) entrou só para metadados de cache de miniatura.
 - O layout da miniatura é decidido por medida (`largura da coluna` ×
   `largura que a imagem quer ocupar`), não por breakpoint de tela.
 
+### Correção do item 8 depois do teste do proprietário
+
+O primeiro teste no navegador não reproduziu o cenário real: a coluna de vídeo
+estava estreita. Com linha alta e coluna larga, a miniatura parava em 420px
+(teto do `clamp`) e, como `55% + gap + texto` sempre cabia, o modo empilhado
+nunca era alcançado — sobrava vazio e o título ficava ao lado.
+
+Corrigido: o CSS não impõe mais teto (consome `--miniatura-largura` do JS) e o
+JS compara o espaço vertical real com o lateral. Medido: 71→199→348→491→629→758
+de largura conforme a linha cresce, empilhando quando o lado a lado limitaria.
+O cenário Playwright novo falha com a lógica antiga nos quatro sintomas
+relatados e passa com a correção (13 cenários no total).
+
 **Validação desta rodada (Linux, comandos executados e saída 0):**
 `npm test` **232 testes, 232 aprovados** (198 anteriores + 34 novos);
-Playwright pós-F6 **12/12**; CDP **57/57**; refinamentos **9/9**; resumos F6
+Playwright pós-F6 **13/13**; CDP **57/57**; refinamentos **9/9**; resumos F6
 **7/7**; `npm run build` e `npm run verificar` (nove OK/TUDO OK) aprovados.
 Um teste de integração externo (cache de miniaturas com CDN dublê e limpeza de
 histórico com reinício) também passa: 9/9.

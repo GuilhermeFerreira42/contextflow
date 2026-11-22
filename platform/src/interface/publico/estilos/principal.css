@@ -1346,21 +1346,23 @@ input[type='checkbox'] {
 /*
  * Miniatura.
  *
- * `--miniatura-largura` é a largura desejada no modo lateral: cresce com a
- * altura da linha (16:9 de uma imagem que ocupa a altura disponível) até um
- * teto. O teto NÃO é fixo em px: é 55% da célula, então a coluna estreita
- * nunca é esmagada pelo texto.
+ * A largura é escrita pelo JS em `--miniatura-largura` (modo lateral), porque
+ * depende de DUAS medidas que o CSS não combina sozinho: a altura da linha e a
+ * largura real da coluna. O CSS só desenha.
  *
- * No modo empilhado a largura passa a ser a da coluna, com teto de altura
- * para a imagem não virar um retângulo gigante e comer a linha inteira.
+ * O `clamp(..., 420px)` anterior era um teto fixo: numa linha alta a imagem
+ * parava de crescer e sobrava vazio embaixo. Não há mais teto em px; a única
+ * restrição é a proporção 16:9 e a largura da coluna, garantidas pelo cálculo
+ * e por `max-width`.
+ *
+ * `flex-shrink: 0` + `max-width: 100%`: a imagem nunca encolhe por conta do
+ * texto nem ultrapassa a célula, qualquer que seja a largura da coluna.
  */
 .miniatura {
   position: relative;
   flex-shrink: 0;
-  width: min(
-    clamp(64px, calc((var(--altura-linha) - 24px) * 1.24), 420px),
-    55%
-  );
+  width: var(--miniatura-largura, calc((var(--altura-linha) - 24px) * 16 / 9));
+  max-width: 100%;
   aspect-ratio: 16 / 9;
   max-height: calc(var(--altura-linha) - 24px);
   border-radius: 6px;
