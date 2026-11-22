@@ -20,6 +20,18 @@
 
 ## Status de execução (atualizado a cada fatia)
 
+**F6 (22/11/2026, base `9094137`):** 196 testes, 190 aprovados e seis ignorados
+no Windows; 57/57 CDP, 9/9 grupos Playwright de refinamentos e 6/6 de resumos.
+Build/typecheck e nove verificações de fumaça aprovados. Os 13 testes de
+integração F6 cobrem DPAPI real, configuração/reabertura, migração/backup,
+histórico/revisões, contratos dos quatro provedores (três protocolos HTTP),
+429/5xx/timeout/autenticação, respostas inválidas, cancelamento/retry,
+concorrência e recuperação do snapshot ao reabrir o motor. Playwright cobre
+configuração, confirmação/custo, lote sem legenda, fila, cópia/histórico,
+cancelamento/retry, preservação de resumo e janela estreita.
+Provedores são servidores controlados: geração/modelo/conta real não executados.
+Evidências: `../Continuidade de Projeto/f6-resumos-9094137/LEIA-ME.md`.
+
 **Dimensões da grade (base `027c7df`):** 9/9 grupos Playwright agora incluem
 barra de altura 64–600 px, divisórias arrastáveis, teclado, cancelamento,
 persistência e conservação do vídeo ao mudar altura longe do topo. CDP 57/57,
@@ -61,9 +73,9 @@ na revisão F5-UI; a tabela abaixo distingue prova anterior e regressão control
 | A8 (volume) | ✅ **executado e aprovado** | 5.004 vídeos no E2E, DOM com menos de 150 linhas; rolagem até o índice 3.000 sem perder identidade |
 | A9 (seleção) | ✅ **executado e aprovado** | seleção por linha, selecionar visíveis, ações em lote, seleção fora do filtro |
 | A10 (leitura contínua) | 🟨 **parcial; homologação humana pendente** | resumo na linha e painel com transcrição implementados; capacidades restantes de leitura avançada pertencem à F7 |
-| A11, A12 (IA, custos, segredos) | ⬜ não executado | F6–F8 |
+| A11, A12 (IA, custos, segredos) | 🟨 **F6 aprovada com provedores HTTP controlados; DPAPI Windows executado** | `resumos-f6.test.ts`, `resumos-f6.mjs`; custos conservadores/ausência de preços e isolamento da chave. Conta/modelo real, Linux e preferências gerais F8 pendentes |
 | A13 (migração da base original) | ⬜ não executado | F9 |
-| A15 (Windows e Linux) | 🟨 **regressão Windows executada; instalação/entrega V1 ainda pendente** | Windows: 177 aprovados + 6 ignorados, 57 E2E; registro anterior Linux: 183/183 e 57/57; Linux não reexecutado nesta revisão |
+| A15 (Windows e Linux) | 🟨 **regressão Windows executada; instalação/entrega V1 ainda pendente** | F6 Windows: 190 aprovados + 6 ignorados, 57 CDP, 15 grupos Playwright; registro anterior Linux: 183/183 e 57/57; Linux não reexecutado nesta revisão |
 
 **Legenda:** ✅ executado e aprovado · 🟨 parcial ou verificado sem prova real · ⬜ não executado
 

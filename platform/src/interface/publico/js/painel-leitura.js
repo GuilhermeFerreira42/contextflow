@@ -7,7 +7,7 @@
  *    recarrega lista, não toca em busca/filtros/ordenação/scroll.
  *  - Leitura nas linhas é o principal; isto é complementar.
  */
-export function criarPainel({ api }) {
+export function criarPainel({ api, aoResumir, aoHistorico }) {
   const $ = seletor => document.querySelector(seletor);
   const painel = $('#painel-leitura');
 
@@ -142,6 +142,7 @@ export function criarPainel({ api }) {
     const estado = $('#painel-resumo-estado');
     alvo.replaceChildren();
     estado.hidden = true;
+    $('#painel-copiar-resumo').disabled = true;
 
     try {
       const resumo = await api(`/api/biblioteca/${encodeURIComponent(video.id)}/resumo`);
@@ -149,7 +150,8 @@ export function criarPainel({ api }) {
 
       if (resumo?.texto) {
         alvo.textContent = resumo.texto;
-        mostrarSelo('painel-resumo-estado', 'pronto', 'Pronto');
+        $('#painel-copiar-resumo').disabled = false;
+        mostrarSelo('painel-resumo-estado', resumo.desatualizado ? 'parcial' : 'pronto', resumo.desatualizado ? 'Transcrição atualizada desde este resumo' : 'Pronto');
         return;
       }
 
@@ -158,7 +160,7 @@ export function criarPainel({ api }) {
       texto.className = 'aviso';
       texto.textContent = estadoResumo === 'erro'
         ? `A geração do resumo falhou${resumo?.erro ? `: ${resumo.erro}` : '.'}`
-        : 'Este vídeo ainda não tem resumo. A geração por IA entra na fase de resumos (F6).';
+        : resumo?.estado === 'processando' ? 'Gerando resumo. Acompanhe o trabalho em Importações.' : 'Este vídeo ainda não tem resumo. Use Gerar resumo para conferir a estimativa.';
       alvo.append(texto);
       mostrarSelo('painel-resumo-estado', estadoResumo === 'erro' ? 'erro' : 'pendente', estadoResumo === 'erro' ? 'Erro' : 'Pendente');
     } catch (erro) {
@@ -326,6 +328,12 @@ export function criarPainel({ api }) {
   }
 
   function ligar() {
+    $('#painel-resumir').addEventListener('click', () => { if (videoAtual) aoResumir?.(videoAtual.id); });
+    $('#painel-historico').addEventListener('click', () => { if (videoAtual) aoHistorico?.(videoAtual.id); });
+    $('#painel-copiar-resumo').addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText($('#painel-resumo').textContent); $('#painel-copia-status').textContent = 'Resumo copiado.'; }
+      catch { $('#painel-copia-status').textContent = 'Não foi possível copiar. Selecione o texto para copiar manualmente.'; }
+    });
     $('#fechar-painel').addEventListener('click', fechar);
     // Trocar a apresentação não refaz a chamada de rede nem toca no banco:
     // os mesmos segmentos são redesenhados.

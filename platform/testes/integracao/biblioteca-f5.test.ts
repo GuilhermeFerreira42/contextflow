@@ -163,11 +163,11 @@ test('F5: migração 004 reconcilia dados antigos e rollback preserva vínculos 
     banco.db.exec(`INSERT INTO videos(id,youtube_id,titulo,url,estado,criado_em,atualizado_em) VALUES('v','aaaaaaaaaaa','Antes','url','pronto','2026','2026');
       INSERT INTO colecoes VALUES('c','Coleção');INSERT INTO colecao_videos VALUES('c','v');
       INSERT INTO resumos VALUES('v','teste','m','p','r','Texto original','pronto',NULL,'2026','2026');`);
-    assert.equal(banco.migrar(),1);assert.equal(banco.db.prepare("SELECT tem_resumo FROM videos WHERE id='v'").get()!.tem_resumo,1);
+    assert.equal(banco.migrar(),MIGRACOES.length - 3);assert.equal(banco.db.prepare("SELECT tem_resumo FROM videos WHERE id='v'").get()!.tem_resumo,1);
     assert.equal(banco.db.prepare("SELECT colecao_ids FROM videos WHERE id='v'").get()!.colecao_ids,'["c"]');
     banco.reverterPara(3);assert.equal(banco.db.prepare('SELECT COUNT(*) n FROM colecao_videos').get()!.n,1);
     assert.equal(banco.db.prepare('SELECT texto FROM resumos').get()!.texto,'Texto original');
-    assert.equal(banco.migrar(),1);
+    assert.equal(banco.migrar(),MIGRACOES.length - 3);
   }finally{banco.fechar();}
 });
 

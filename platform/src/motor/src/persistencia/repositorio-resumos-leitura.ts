@@ -43,10 +43,10 @@ export class RepositorioResumosLeituraSqlite implements RepositorioResumosLeitur
            FROM resumos
           WHERE video_id = ?
           ORDER BY CASE estado WHEN 'pronto' THEN 0 WHEN 'processando' THEN 1 ELSE 2 END,
-                   -- Entre resumos prontos, o mais completo é o que a interface
-                   -- deve exibir: é o que o usuário vai ler na linha e no painel.
-                   length(COALESCE(texto,'')) DESC,
-                   atualizado_em DESC
+                   -- Entre prontos, exibir o mais recente; comprimento desempata
+                   -- registros legados com a mesma data.
+                   atualizado_em DESC,
+                   length(COALESCE(texto,'')) DESC
           LIMIT 1`,
       )
       .get(videoId) as unknown as LinhaResumo | undefined;

@@ -11,6 +11,7 @@ import { randomUUID } from 'node:crypto';
 import { MIGRACAO_TRABALHOS } from './migracao-trabalhos.ts';
 import { MIGRACAO_F5_BIBLIOTECA } from './migracao-f5-biblioteca.ts';
 import { MIGRACAO_F5_PROJECOES } from './migracao-f5-projecoes.ts';
+import { MIGRACAO_F6_RESUMOS } from './migracao-f6-resumos.ts';
 
 /**
  * Tipo mínimo do driver, para os repositórios não dependerem do pacote do Node.
@@ -114,7 +115,7 @@ const MIGRACAO_1: Migracao = {
   },
 };
 
-export const MIGRACOES: readonly Migracao[] = [MIGRACAO_1, MIGRACAO_TRABALHOS, MIGRACAO_F5_BIBLIOTECA, MIGRACAO_F5_PROJECOES];
+export const MIGRACOES: readonly Migracao[] = [MIGRACAO_1, MIGRACAO_TRABALHOS, MIGRACAO_F5_BIBLIOTECA, MIGRACAO_F5_PROJECOES, MIGRACAO_F6_RESUMOS];
 
 export interface OpcoesBanco {
   /** Caminho do arquivo. `:memory:` é aceito para testes. */

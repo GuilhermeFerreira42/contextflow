@@ -10,7 +10,7 @@
  */
 import { criarRedimensionamentoColunas } from './redimensionamento-colunas.js';
 
-export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
+export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel, aoResumir }) {
   const $ = seletor => document.querySelector(seletor);
 
   const viewport = $('#biblioteca-viewport');
@@ -244,6 +244,7 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
     $('#adicionar-colecao').disabled = !n || ocupado || !$('#colecao-destino').value;
     $('#desvincular-colecao').disabled = !n || ocupado || !$('#filtro-colecao').value;
     $('#selecionar-visiveis').disabled = ocupado || !itens.length;
+    $('#gerar-resumos-selecao').disabled = !n || ocupado;
     const visiveis = visiveisCalculados ?? linhasVisiveis();
     const marcados = visiveis.filter(l => selecionados.has(l.dataset.id)).length;
     $('#selecao-visivel').checked = !!visiveis.length && marcados === visiveis.length;
@@ -484,7 +485,8 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
     // A coluna se chama "Transcrição": mostra o estado do vídeo, não do resumo
     // (o resumo já tem o próprio selo na coluna Resumo).
     tdResumoEstado.append(
-      video.temResumo ? selo('pronto', 'Pronto') : selo('sem', 'Sem resumo'),
+      video.temResumo ? selo('pronto', 'Pronto') : video.estadoResumo === 'processando' ? selo('processando', 'Gerando')
+        : video.estadoResumo === 'erro' ? selo('erro', 'Falhou') : selo('sem', 'Sem resumo'),
     );
 
     tr.append(tdCanal, tdDuracao, tdAdicionado, tdEstado, tdResumo, tdResumoEstado);
@@ -966,6 +968,7 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
   // ------------------------------------------------------------- eventos
 
   function ligar() {
+    $('#gerar-resumos-selecao').addEventListener('click', () => aoResumir?.([...selecionados]));
     lerPreferencias();
     montarColunas();
     montarAltura();
@@ -1160,6 +1163,11 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel }) {
   }
 
   return {
+    invalidarResumos(ids) {
+      for (const id of ids) previas.delete(id);
+      versaoPrevias++;
+      linhasAtuais = new Map();
+    },
     ligar,
     carregar,
     carregarOpcoes,

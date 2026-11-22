@@ -28,8 +28,15 @@ com fallback `~/.local/share/ContextFlow`). SQLite via `node:sqlite`, sem ORM;
 decisão final na SPEC F2. A leitura integra a Biblioteca desde a F5-UI;
 detalhes da interface em `06b-arquitetura-da-interface.md`.
 
-As responsabilidades de resumos e configuração abaixo descrevem o alvo V1:
-geração por IA e configuração editável ainda não foram implementadas.
+A F6 implementa geração por IA e configuração editável específica de resumos.
+Preferências gerais do módulo Configuração seguem como alvo da F8.
+`resumos/servico.ts` recebe contratos de leitura de vídeos/transcrições injetados
+pela composição em `aplicacao.ts`; reutiliza a fila F4 e grava resultado/conclusão
+sob o mesmo fencing. Clientes HTTP nativos em `resumos/provedores.ts`.
+Migração 005 conserva versões/revisões e snapshots em `resumos_execucoes`.
+Configuração não secreta em `ia/config.json`; credenciais separadas em
+`ia/secrets.json`, sob a pasta de dados, protegidas por DPAPI CurrentUser no
+Windows ou permissões POSIX. API nunca devolve a chave salva.
 
 **Uma única fonte de verdade por dado.** Nenhum módulo importa detalhes internos de
 outro: a comunicação passa por contratos explícitos exportados pela API pública do módulo.

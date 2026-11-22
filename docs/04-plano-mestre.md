@@ -13,7 +13,7 @@ globais permanecem nos documentos canônicos.
 | **F4 — Trabalhos e recuperação** | fila persistente, estados, cancelamento, falhas, reexecução controlada | ✅ concluída + testada (`5a13b3c`) |
 | **F5 — Biblioteca** | grid virtualizado, filtros/pesquisa, seleção, ações em lote | ✅ concluída + testada (`7b58f32`) |
 | **F5-UI — Reformulação da interface** | Biblioteca centrada, linhas com resumo, colunas, painel sobreposto, árvore lateral, Adicionar link | 🟨 **implementada e testada** (`9e7ce02`, `3db2e48`); homologação humana pendente. SPEC em `specs/f5-ui-reformulacao.md` |
-| **F6 — IA para resumos** | provedores/configuração, resumos persistidos, custos/erros, múltiplas seleções | **SPEC escrita** (`d9ef6a6`), **não implementada**. Próxima na sequência, mas **não iniciar nesta etapa**, conforme orientação vigente do proprietário |
+| **F6 — IA para resumos** | provedores/configuração, resumos persistidos, custos/erros, múltiplas seleções | 🟨 **implementada e testada no Windows**, sobre `9094137`, após autorização de avançar; SPEC final em `specs/f6-resumos.md`. Provedores HTTP controlados; conta/modelo real e aceite humano pendentes |
 | **F7 — Leitura avançada** | resumos/transcrições/ambos, expansão, leitor completo, retorno sem perda de estado | F5–6; textos longos. **Nota:** a leitura na linha e o painel sobreposto já existem desde a F5-UI; a F7 acrescenta o que falta (ver SPEC) |
 | **F8 — Configuração e acabamento** | preferências, segurança, navegação, feedback consistente, texto de ajuda | F1–7; exportação só se aprovada na SPEC |
 | **F9 — End-to-end e entrega** | smoke, regressão, instalação Windows/Linux, roteiro de homologação V1 | todas; aceite do escopo |
@@ -35,9 +35,14 @@ F2 e F3 podem ser preparadas em paralelo documental, mas F3 só roda sobre persi
 presente em `da4cf1b`. O proprietário autorizou explicitamente o Codex a
 implementar os refinamentos subsequentes, limitados pela SPEC
 `specs/f5-ui-refinamentos-leitura.md`. Não repetir a entrega anterior por
-inferência nem iniciar F6. Evidências e próxima ação no estado de retomada.
+inferência. Evidências e próxima ação no estado de retomada.
 O pedido subsequente de altura deslizante e colunas redimensionáveis foi
 implementado conforme `specs/f5-ui-dimensoes-grade.md`, sem antecipar F6.
+
+**Atualização vigente (22/11/2026):** dimensões commitadas em `9094137`; o pedido
+de avançar autorizou a F6. Entrega conforme SPEC final, com regressão e provedores
+controlados; homologação externa e humana pendentes. F7 requer sua SPEC antes
+de implementação e não foi iniciada nesta rodada.
 
 ### Ajuste de escopo registrado na F3
 

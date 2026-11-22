@@ -25,7 +25,7 @@ export interface RegistroTrabalho {
     iniciado_em: string | null;
     finalizado_em: string | null;
 }
-export const erroCancelado = () => new ErroDominio('trabalho_cancelado', 'Importação cancelada.', 409);
+export const erroCancelado = () => new ErroDominio('trabalho_cancelado', 'Trabalho cancelado.', 409);
 const terminais = new Set(['concluido', 'falhou', 'cancelado']);
 export class RepositorioTrabalhos {
     readonly banco: Banco;
@@ -56,7 +56,7 @@ export class RepositorioTrabalhos {
         return { id: r.id, tipo: r.tipo, estado: r.estado, progresso: r.progresso, tentativas: r.tentativas,
             erro: r.erro, criadoEm: r.criado_em, atualizadoEm: r.atualizado_em, fase: r.fase,
             titulo: resultado?.video?.titulo ?? escopo.titulo ?? escopo.url ?? 'Lote de vídeos',
-            paiId: r.pai_id, videoId: resultado?.video?.id ?? null, resultado,
+            paiId: r.pai_id, videoId: resultado?.video?.id ?? resultado?.videoId ?? escopo.videoId ?? null, resultado,
             cancelamentoSolicitado: Boolean(r.cancelamento), erroCodigo: r.erro_codigo,
             iniciadoEm: r.iniciado_em, finalizadoEm: r.finalizado_em, contadores: { ...filhos } };
     }
@@ -206,13 +206,14 @@ export class RepositorioTrabalhos {
       atualizado_em=?,finalizado_em=? WHERE id=?`).run(estado, erro, codigo, erroHttp, resultado === undefined ? null : JSON.stringify(resultado), estado, agora, agora, id);
         this.banco.db.prepare('UPDATE tentativas_trabalho SET finalizado_em=?,estado=?,erro=? WHERE trabalho_id=? AND numero=?').run(agora, estado, erro, id, r.tentativas);
     }
-    falhar(r: RegistroTrabalho, erro: unknown): void {
+    falhar(r: RegistroTrabalho, erro: unknown, gravar?: () => void): void {
         this.banco.executarTransacao(() => {
             const atual = this.registro(r.id);
-            if (atual.geracao !== r.geracao || atual.dono !== r.dono || !this.possuiLease(r.dono!))
+            if (atual.estado !== 'executando' || atual.geracao !== r.geracao || atual.dono !== r.dono || !this.possuiLease(r.dono!))
                 return;
+            gravar?.();
             const cancelado = atual.cancelamento || (erro instanceof ErroDominio && erro.codigo === 'trabalho_cancelado');
-            this.#terminal(r.id, cancelado ? 'cancelado' : 'falhou', cancelado ? 'Importação cancelada.' : erro instanceof ErroDominio ? erro.message : 'Falha interna na importação.', cancelado ? 'trabalho_cancelado' : erro instanceof ErroDominio ? erro.codigo : 'erro_interno', undefined, cancelado ? 409 : erro instanceof ErroDominio ? erro.statusHttp : 500);
+            this.#terminal(r.id, cancelado ? 'cancelado' : 'falhou', cancelado ? 'Trabalho cancelado.' : erro instanceof ErroDominio ? erro.message : 'Falha interna no trabalho.', cancelado ? 'trabalho_cancelado' : erro instanceof ErroDominio ? erro.codigo : 'erro_interno', undefined, cancelado ? 409 : erro instanceof ErroDominio ? erro.statusHttp : 500);
         });
     }
     cancelar(id: string): void {
@@ -228,7 +229,7 @@ export class RepositorioTrabalhos {
                     continue;
                 this.banco.db.prepare('UPDATE trabalhos SET cancelamento=1,atualizado_em=? WHERE id=?').run(new Date().toISOString(), f.id);
                 if (r.estado === 'na-fila')
-                    this.#terminal(f.id, 'cancelado', 'Importação cancelada.', 'trabalho_cancelado');
+                    this.#terminal(f.id, 'cancelado', 'Trabalho cancelado.', 'trabalho_cancelado');
             }
         });
     }
@@ -253,7 +254,7 @@ export class RepositorioTrabalhos {
         this.banco.executarTransacao(() => {
             if (!this.possuiLease(dono))
                 return;
-            const pais = this.banco.db.prepare("SELECT id FROM trabalhos WHERE estado='executando' AND tipo<>'importar-video'").all() as unknown as {
+            const pais = this.banco.db.prepare("SELECT id FROM trabalhos WHERE estado='executando' AND tipo IN ('importar-playlist','importar-lote')").all() as unknown as {
                 id: string;
             }[];
             for (const p of pais) {

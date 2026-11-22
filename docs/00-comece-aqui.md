@@ -3,8 +3,8 @@
 **Status**: V1 em implementação. **F1 e F2 homologadas**; **F3 validada no Windows
 com YouTube real** (19/11/2026; aceite humano e ressalvas no estado atual).
 **F4 e F5 implementadas e testadas**; **F5-UI (reformulação da interface)
-implementada e testada, homologação humana pendente**; **F6 apenas especificada**,
-não implementada.
+implementada e testada, homologação humana pendente**; **F6 implementada e testada
+com provedores HTTP controlados no Windows**; homologação com provedor real pendente.
 Base documental: pacote `ContextFlow_Pacote_Execucao_V1` (2026-11-18). Estado vivo em
 `docs/estado-atual.md`.
 
@@ -14,7 +14,9 @@ e controle da lateral no topo. Resultados e evidências em `docs/estado-atual.md
 SPEC em `docs/specs/f5-ui-refinamentos-leitura.md`. Homologação humana pendente.
 Na rodada seguinte, o proprietário solicitou altura por barra deslizante e
 larguras arrastáveis; implementadas conforme `docs/specs/f5-ui-dimensoes-grade.md`.
-F6 não deve ser iniciada nesta etapa.
+Em 22/11/2026, o pedido de comitar e avançar à próxima fatia autorizou a F6.
+SPEC fechada antes da implementação: `docs/specs/f6-resumos.md`. Essa autorização
+substitui a restrição anterior sobre F6; não autoriza iniciar F7/F8 nesta rodada.
 
 **Se você é um agente chegando agora (Codex ou outro):** leia
 `docs/handoff-codex.md` primeiro — ele diz o que verificar, em que ordem, e o

@@ -10,7 +10,7 @@ import { createServer, type Server } from 'node:http';
 import type { Preferencias } from '@contextflow/compartilhado';
 import type { ConfigMotor } from './nucleo/configuracao.ts';
 import { criarServidorApi, Roteador, ResultadoHttp } from './nucleo/http.ts';
-import { ErroValidacao } from './nucleo/erros.ts';
+import { ErroDominio, ErroValidacao } from './nucleo/erros.ts';
 import { criarRegistrador, type Registrador } from './nucleo/registro.ts';
 import { lerArquivoPublico, servirEstatico } from './nucleo/estatico.ts';
 import { RepositorioColecoes } from './persistencia/repositorio-colecoes.ts';
@@ -23,7 +23,9 @@ import { RepositorioTranscricoesSqlite } from './persistencia/repositorio-transc
 import { Ytdlp, type ExecutorYtdlp } from './integracoes/ytdlp.ts';
 import { FilaTrabalhos, validarIdiomas } from './modulos/trabalhos/servico.ts';
 import { RepositorioTrabalhos } from './persistencia/repositorio-trabalhos.ts';
-import type { ServicoResumos } from './modulos/resumos/servico.ts';
+import { ServicoResumos, revisaoTranscricao } from './modulos/resumos/servico.ts';
+import { ConfiguracaoResumos, PROVEDORES } from './modulos/resumos/configuracao.ts';
+import { ClienteProvedor } from './modulos/resumos/provedores.ts';
 import type { ServicoConfiguracao } from './modulos/configuracao/servico.ts';
 
 export const VERSAO_API = '0.1.0';
@@ -51,6 +53,8 @@ export interface Aplicacao {
 }
 
 export interface OpcoesAplicacao {
+  /** Transporte injetável para testar contratos de IA sem serviços pagos. */
+  httpIA?: typeof fetch;
   /**
    * Injetável para teste: substitui o yt-dlp por um dublê. Em produção fica
    * indefinido e o adaptador real é criado com o binário do PATH.
@@ -90,10 +94,21 @@ export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}
   });
 
   const repositorioTrabalhos = new RepositorioTrabalhos(banco);
+  const configuracaoResumos = new ConfiguracaoResumos(config.pastaDados);
+  const resumos = new ServicoResumos({ banco, trabalhos: repositorioTrabalhos, configuracao: configuracaoResumos,
+    videos: repositorioBiblioteca, transcricoes: repositorioTranscricoes,
+    cliente: new ClienteProvedor(opcoes.httpIA) });
   const trabalhos = new FilaTrabalhos({
     repositorio: repositorioTrabalhos, executor: executorYtdlp,
     concorrencia: opcoes.concorrencia ?? Number(process.env.CONTEXTFLOW_CONCORRENCIA ?? 2),
     registrarErro: () => registrador.erro('Falha ao processar a fila.'),
+    processarResumo: (r, sinal) => resumos.processar(r, sinal),
+    falharResumo: (r, erro) => resumos.marcarErro(r, erro),
+    criarResumo: async entrada => {
+      const lote = await resumos.gerar({ ...entrada, videoIds: entrada.videoIds ?? [entrada.videoId] });
+      if (!lote.trabalhos[0]) throw new ErroDominio('resumo_existente', 'Este resumo já está pronto e foi preservado.', 409);
+      return repositorioTrabalhos.detalhe(lote.trabalhos[0].id);
+    },
     processar: (r, escopo, sinal) => ingestao.importar(escopo.url!, escopo.idiomas, {
       sinal, retomar: true,
       verificar: () => repositorioTrabalhos.conferir(r),
@@ -111,7 +126,6 @@ export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}
         resultado.transcricao.erroCodigo ? { codigo: resultado.transcricao.erroCodigo, mensagem: resultado.transcricao.motivo!, status: resultado.transcricao.erroHttp } : undefined),
     }),
   });
-  const resumos = null as ServicoResumos | null;
   const configuracao = null as ServicoConfiguracao | null;
 
   const roteador = new Roteador()
@@ -193,7 +207,17 @@ export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}
       const videoId = partes[5]!;
       return biblioteca.removerVideoColecao(id, videoId);
     })
-    .obter('/api/configuracoes', () => preferenciasPadrao(config))
+    .obter('/api/configuracoes', async () => {
+      const ia = await configuracaoResumos.obter();
+      return { ...preferenciasPadrao(config), provedorResumo: ia?.provedor ?? null, modeloResumo: ia?.modelo ?? null, promptResumo: ia?.prompt ?? null };
+    })
+    .obter('/api/resumos/provedores', () => ({ provedores: PROVEDORES }))
+    .obter('/api/resumos/configuracao', () => configuracaoResumos.publica())
+    .postar('/api/resumos/configuracao', ({ requisicao }) => configuracaoResumos.salvar(requisicao.corpo))
+    .postar('/api/resumos/testar', () => resumos.testar())
+    .postar('/api/resumos/estimar', ({ requisicao }) => resumos.estimar(requisicao.corpo))
+    .postar('/api/resumos/gerar', async ({ requisicao }) => new ResultadoHttp(await resumos.gerar(requisicao.corpo), 202))
+    .obter('/api/resumos/:videoId', ({ requisicao }) => resumos.historico(decodeURIComponent(requisicao.caminho.split('/').at(-1)!)))
     .postar('/api/biblioteca', async ({ requisicao }) => {
       // Ponto de escrita da biblioteca. Na F3 quem chama é o módulo de ingestão;
       // por enquanto permite criar um registro válido para provar persistência real.
@@ -314,7 +338,8 @@ export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}
         // entre "não existe" e "falhou".
         return { videoId: id, estado: 'pendente' as const, texto: null, provedor: null, modelo: null, atualizadoEm: null };
       }
-      return resumo;
+      const transcricao = await repositorioTranscricoes.porVideo(id);
+      return { ...resumo, desatualizado: transcricao ? revisaoTranscricao(transcricao) !== resumo.revisaoTranscricao : true };
     });
 
   const servidorApi = criarServidorApi(roteador, registrador);

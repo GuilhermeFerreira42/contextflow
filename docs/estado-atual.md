@@ -4,7 +4,91 @@
 > `00-comece-aqui.md`. O que está abaixo da linha "Histórico" é registro, não
 > estado vigente.
 
-## Estado vigente — 21/11/2026 (revisado)
+## Estado vigente — 22/11/2026 — F6
+
+**F6 implementada e validada tecnicamente com provedores HTTP controlados no
+Windows. Geração em conta/modelo real e homologação humana não executadas.**
+Branch `main`; base `9094137` (dimensões da grade já commitadas). A entrega F6
+é o commit que contém este registro; localizar com `git log -1` após o commit.
+
+**Autorização:** o proprietário pediu comitar e avançar à próxima fatia, seguido
+de continuar. Isso autoriza a F6 e supera a proibição anterior dessa fase.
+SPEC fechada antes do código: `specs/f6-resumos.md`, substituindo o rascunho antigo.
+Não houve implementação de F7/F8 como fatias completas nem alteração do original
+Python. Layout, barra de altura e divisórias redimensionáveis preservados.
+
+### Entrega e decisões
+
+- Configurações de OpenAI, Anthropic, Ollama e OpenAI compatível: modelo,
+  endpoint, prompt/versão, contexto/saída, concorrência, timeout e preços opcionais.
+  HTTP nativo, sem dependência de produção nova. HTTPS remoto, HTTP só loopback;
+  chave vinculada ao provedor/endpoint; redirects proibidos.
+- Credencial separada em `ia/secrets.json`, sob a pasta de dados; DPAPI
+  CurrentUser no Windows (executado com chave sintética). Configuração comum em
+  `ia/config.json`. API não devolve chave, navegador não a persiste. POSIX usa
+  0700/0600; essa execução Linux não foi realizada. Segredos/bancos pessoais
+  não foram lidos nem adicionados ao Git.
+- Seleção na Biblioteca ou vídeo no painel → estimativa conservadora → confirmação
+  → fila persistente F4. Sem transcrição: motivo explícito, sem geração fictícia.
+  Sem preços: custo desconhecido, não zero. Estimativa inclui até três tentativas
+  por chamada; não representa fatura. Mudança de conteúdo/configuração invalida
+  confirmação antiga. Geração automática ao importar continua desabilitada,
+  orientando usar a Biblioteca para confirmar custos.
+- Migração 005, com backup automático antes da alteração: versões/revisões
+  preservadas em `resumos`; fonte/configuração imutáveis por trabalho em
+  `resumos_execucoes`, sem chave. Resultado/conclusão sob fencing da fila.
+  Rollback recusa perda de histórico/trabalhos F6: restaurar o backup anterior.
+- Texto longo: divisão por orçamento conservador UTF-8, resumos parciais e
+  consolidação com limite de chamadas; falha explícita se não reduzir. HTTP429,
+  5xx, rede/timeout: até três tentativas canceláveis; 401/403 não retentam
+  automaticamente. Retry manual conserva fonte/modelo aprovados. Reabertura
+  recupera snapshot persistido; chamadas podem repetir após interrupção.
+- Grade/painel mostram resultado; histórico, cópia e revisão desatualizada.
+  Falha nova preserva resumo anterior. Prévia é invalidada após término, evitando
+  resumo antigo na grade até reload. Preferências em janela estreita agora
+  quebram linhas, sem cortar caminhos/prompt. Configuração geral F8 segue pendente.
+
+### Evidência executada
+
+Windows, Node v22.12.0; dados descartáveis e provedores locais de teste.
+
+| Comando | Resultado real |
+|---|---|
+| `npm test` | 196 testes: 190 aprovados, seis ignorados, zero falhas; saída 0 |
+| `npm run test:e2e` | 57/57 cenários CDP; saída 0 |
+| `npm run test:e2e:refinamentos` | 9/9 grupos Playwright; saída 0 |
+| `npm run test:e2e:resumos` | 6/6 grupos Playwright F6; saída 0 |
+| `npm run build` | typecheck e compilação aprovados; saída 0 |
+| `npm run verificar` | nove verificações OK, TUDO OK; saída 0 |
+
+Os 13 testes F6 de integração exercitam contratos HTTP, DPAPI, migração/backup,
+confirmação/idempotência, revisão/histórico, map/reduce, timeout/429/5xx/401,
+resposta inválida, cancelamento/backoff/retry, concorrência e reabertura do motor.
+Playwright usa navegador real com servidor HTTP controlado, **não um LLM real**.
+Capturas de estimativa e Configurações estreita também inspecionadas visualmente.
+Regressão mantém os 5.000 vídeos sintéticos e controles de dimensão.
+
+Correções durante validação: o teste antigo de migração F5 tinha duas contagens
+fixas incompatíveis com a nova migração; ajustadas para as migrações pendentes.
+Agregação de filhos da fila limitada a playlist/lote, evitando tratar geração
+como importação pai; versão pronta mais recente ganha prioridade na leitura.
+Mensagens de cancelamento agora se referem a trabalho, também válidas para IA;
+o teste de fencing verifica o código de domínio em vez do gênero da mensagem.
+Falha intermediária e resultados finais estão separados nos logs.
+
+Evidências fora do Git: `../Continuidade de Projeto/f6-resumos-9094137/`.
+`LEIA-ME.md` identifica logs finais e capturas. Não foi necessário instalar
+dependências novas. Não executados: chamadas reais OpenAI/Anthropic/compatível,
+modelo Ollama real (sem ambiente/credenciais configurados para esta validação),
+regressão Linux, novo YouTube real e homologação humana. Não equivalem a teste
+aprovado; continuidade técnica da F6 não encerra esses aceites.
+
+**Próxima ação:** homologar manualmente a interface e, nas Configurações locais,
+configurar um provedor/modelo real, testar conexão e gerar um resumo após conferir
+estimativa; nunca compartilhar chave no chat. Depois, fechar SPEC da F7 antes
+de implementá-la. F7/F8/F9 não foram iniciadas nesta entrega.
+
+## Histórico — estado de 21/11/2026 (superado pelo registro acima)
 
 **F5-UI (reformulação da interface) implementada, testada e commitada.
 Homologação humana pendente.** A F6 (IA para resumos) está somente especificada

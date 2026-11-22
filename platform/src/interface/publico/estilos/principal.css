@@ -2020,7 +2020,7 @@ dialog p {
 
 .lista-config {
   display: grid;
-  grid-template-columns: 220px 1fr;
+  grid-template-columns: minmax(100px, 220px) minmax(0, 1fr);
   gap: 0;
   max-width: 760px;
   margin: 0;
@@ -2036,6 +2036,8 @@ dialog p {
   font-size: 12px;
 }
 .lista-config dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
   margin: 0;
   padding: 10px 14px;
   border-bottom: 1px solid var(--borda);
@@ -2045,6 +2047,10 @@ dialog p {
 .lista-config dt:last-of-type,
 .lista-config dd:last-of-type {
   border-bottom: 0;
+}
+
+@media (max-width: 650px) {
+  .lista-config { grid-template-columns: 110px minmax(0, 1fr); }
 }
 
 .aviso-fase {
@@ -2155,6 +2161,49 @@ dialog p {
   .celula-video {
     gap: 10px;
   }
+}
+
+.formulario-ia {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  max-width: 900px;
+  margin: 20px 0;
+  padding: 20px;
+  background: var(--grafite-900);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+}
+.formulario-ia label:not(.filtro-checkbox) {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.formulario-ia input:not([type='checkbox']),
+.formulario-ia select,
+.formulario-ia textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--borda-forte);
+  border-radius: var(--raio-pequeno);
+  background: var(--grafite-950);
+  color: var(--texto-forte);
+  font: inherit;
+}
+.formulario-ia textarea { resize: vertical; }
+.ia-linha-inteira { grid-column: 1 / -1; }
+.dialogo-resumos {
+  width: min(720px, calc(100vw - 32px));
+  max-height: 85vh;
+  overflow: auto;
+}
+.dialogo-resumos li { margin: 10px 0; overflow-wrap: anywhere; }
+.dialogo-resumos details { padding: 12px 0; border-bottom: 1px solid var(--borda); }
+.historico-resumo-texto { white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 650px) {
+  .formulario-ia { grid-template-columns: minmax(0, 1fr); padding: 14px; }
 }
 
 /* Respeita quem prefere menos movimento */

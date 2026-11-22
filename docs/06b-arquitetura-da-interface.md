@@ -7,9 +7,12 @@
 ## Princípio
 
 A interface **nunca é dona dos dados**. Ela pede ao motor e reconcilia o que
-voltou. Quando um módulo está pendente, a tela diz isso em vez de fingir
-funcionamento — a F6 ainda não existe, e o botão de resumo aparece desabilitado
-com o motivo à vista.
+voltou. A F6 conecta geração individual/no lote à fila persistente, com estimativa
+e confirmação antes de chamar IA. `resumos.js` coordena formulário em Configurações,
+estimativa e histórico; Biblioteca e painel oferecem gerar, ler e copiar.
+Segredos nunca são armazenados no navegador nem devolvidos pela API.
+Preferências gerais e geração automática ao importar permanecem indisponíveis
+com motivo explícito; a geração manual funciona pela confirmação de estimativa.
 
 Sem framework, sem bundler, sem etapa de build no frontend: **JS puro em
 módulos ES** servido pelo próprio motor, com CSS próprio. O motivo é o mesmo

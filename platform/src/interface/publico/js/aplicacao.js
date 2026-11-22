@@ -2,6 +2,7 @@ import { criarBiblioteca } from './biblioteca.js';
 import { criarPainel } from './painel-leitura.js';
 import { criarArvore } from './arvore-organizacao.js';
 import { criarAdicionarLink } from './adicionar-link.js';
+import { criarResumosUI } from './resumos.js';
 
 /**
  * Interface do ContextFlow — camada de apresentação.
@@ -121,13 +122,14 @@ const bibliotecaUI = criarBiblioteca({
   api,
   aoEnfileirar: (id) => estado.pendentes.add(id),
   aoAbrirPainel: (videoId) => painelUI?.abrir(videoId),
+  aoResumir: ids => resumosUI.abrir(ids),
 });
 
 async function carregarBiblioteca() {
   await Promise.all([bibliotecaUI.carregar(), bibliotecaUI.carregarOpcoes()]);
 }
 
-const painelUIReal = criarPainel({ api });
+const painelUIReal = criarPainel({ api, aoResumir: id => resumosUI.abrir([id]), aoHistorico: id => resumosUI.abrirHistorico(id) });
 painelUI = painelUIReal;
 
 const arvoreUI = criarArvore({
@@ -150,6 +152,13 @@ const adicionarLinkUI = criarAdicionarLink({
     void carregarTrabalhos();
   },
 });
+const resumosUI = criarResumosUI({ api, aoSalvar: () => void carregarConfiguracoes(), aoEnfileirar: async resultado => {
+  for (const t of resultado.trabalhos) estado.pendentes.add(t.id);
+  painelUI?.fechar();
+  $('#resultado-biblioteca').textContent = `${resultado.trabalhos.length} trabalho(s) de resumo; ${resultado.reutilizados.length} já pronto(s); ${resultado.ignorados.length} ignorado(s).`;
+  if (resultado.trabalhos.length) { mostrarTela('importacoes'); await carregarTrabalhos(); }
+  else await carregarBiblioteca();
+} });
 
 /* --------------------------------------------------------- importações ---- */
 
@@ -227,7 +236,9 @@ function mostrarResultadoTrabalho(trabalho) {
     saida.textContent = trabalho.erro ?? 'Importação cancelada.';
     return;
   }
-  if (resultado?.video) {
+  if (trabalho.tipo === 'gerar-resumo') {
+    saida.dataset.tipo = 'ok'; saida.textContent = 'Resumo concluído. Abra o vídeo na Biblioteca para ler.';
+  } else if (resultado?.video) {
     const { video, transcricao } = resultado;
     if (transcricao.estado === 'pronta') {
       saida.dataset.tipo = 'ok';
@@ -297,7 +308,7 @@ function linhaTrabalho(trabalho) {
 
   linha.append(cabecalho, acoes);
 
-  if (trabalho.tipo !== 'importar-video') {
+  if (['importar-playlist', 'importar-lote'].includes(trabalho.tipo)) {
     const c = trabalho.contadores;
     const contagem = document.createElement('p');
     contagem.className = 'trabalho-meta';
@@ -316,7 +327,7 @@ function linhaTrabalho(trabalho) {
     barra.setAttribute('aria-valuenow', String(Math.round(trabalho.progresso * 100)));
     barra.setAttribute('aria-valuemin', '0');
     barra.setAttribute('aria-valuemax', '100');
-    barra.setAttribute('aria-label', 'Progresso da importação');
+    barra.setAttribute('aria-label', trabalho.tipo === 'gerar-resumo' ? 'Progresso do resumo' : 'Progresso da importação');
     linha.append(barra);
   }
 
@@ -361,7 +372,7 @@ function linhaTrabalho(trabalho) {
     acoes.append(botao);
   }
 
-  if (trabalho.tipo !== 'importar-video') {
+  if (['importar-playlist', 'importar-lote'].includes(trabalho.tipo)) {
     const itens = document.createElement('details');
     itens.dataset.pai = trabalho.id;
     itens.style.gridColumn = '1 / -1';
@@ -442,6 +453,7 @@ async function carregarTrabalhos() {
       const t = itens.find(t => t.id === id) ?? await api(`/api/trabalhos/${id}`);
       if (['concluido', 'falhou', 'cancelado'].includes(t.estado)) {
         estado.pendentes.delete(id);
+        if (t.tipo === 'gerar-resumo' && t.videoId) bibliotecaUI.invalidarResumos([t.videoId]);
         if (id === estado.ultimoTrabalho) mostrarResultadoTrabalho(t);
         // A Biblioteca reflete a importação sem recarregar a página.
         await carregarBiblioteca();
@@ -500,6 +512,7 @@ function ligarEventos() {
   painelUIReal.ligar();
   arvoreUI.ligar();
   adicionarLinkUI.ligar();
+  resumosUI.ligar();
 
   $('#formulario-importacao').addEventListener('submit', importarVideo);
   $('#tipo-importacao').addEventListener('change', () => {
@@ -544,7 +557,7 @@ async function iniciar() {
   mostrarTela(telaDaUrl());
 
   await verificarMotor();
-  await Promise.all([carregarBiblioteca(), carregarConfiguracoes(), carregarDiagnostico()]);
+  await Promise.all([carregarBiblioteca(), carregarConfiguracoes(), carregarDiagnostico(), resumosUI.carregarConfiguracao()]);
 
   // Atividade global discreta: o status do motor se atualiza sem recarregar a tela.
   setInterval(verificarMotor, 15000);

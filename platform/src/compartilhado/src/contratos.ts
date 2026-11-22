@@ -46,6 +46,8 @@ export interface Video {
   playlistIds?: string[];
   /** F5: atalho para UI evitar join com tabela resumos. */
   temResumo?: boolean;
+  /** F6: estado do resumo exibido, sem carregar seu texto na consulta. */
+  estadoResumo?: EstadoResumo;
 }
 
 export interface SegmentoTranscricao {

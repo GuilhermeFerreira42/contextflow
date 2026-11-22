@@ -55,7 +55,7 @@ test('GET /api/saude responde com envelope ok e diz o estado dos módulos', asyn
   // Honestidade: módulos não implementados são declarados, não escondidos.
   assert.equal(corpo.dados.modulos.biblioteca, 'sqlite');
   assert.equal(corpo.dados.modulos.ingestao, 'yt-dlp');
-  assert.equal(corpo.dados.modulos.resumos, 'pendente');
+  assert.equal(corpo.dados.modulos.resumos, 'ativo');
 });
 
 test('GET /api/biblioteca devolve página vazia válida', async () => {

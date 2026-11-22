@@ -284,7 +284,7 @@ test('requisições inválidas, tipo futuro, paginação e status de cancelament
     const a = await ambiente(t);
     for (const escopo of [{ url: url(), idiomas: ['--exec'], chaveRequisicao: randomUUID() }, { url: 'https://vimeo.com/1', chaveRequisicao: randomUUID() }])
         assert.equal((await a.post('/api/trabalhos', { tipo: 'importar-video', escopo })).resposta.status, 422);
-    assert.equal((await a.post('/api/trabalhos', { tipo: 'gerar-resumo', escopo: {} })).resposta.status, 503);
+    assert.equal((await a.post('/api/trabalhos', { tipo: 'gerar-resumo', escopo: {} })).resposta.status, 422);
     assert.equal((await fetch(a.base + '/api/trabalhos/inexistente')).status, 404);
     assert.equal((await fetch(a.base + '/api/trabalhos?limite=0')).status, 422);
     const j = await a.criar();
@@ -326,7 +326,8 @@ test('cancelamento persistido antes do commit impede qualquer escrita de conteú
         const id = repo.inserir('importar-video', { url: url() }, 'aaaaaaaaaaa');
         const tentativa = repo.claim('executor')!;
         repo.cancelar(id);
-        assert.throws(() => repo.concluir(tentativa, {}, () => banco.db.exec("INSERT INTO colecoes VALUES('nao','Não gravar')")), /cancelada/);
+        assert.throws(() => repo.concluir(tentativa, {}, () => banco.db.exec("INSERT INTO colecoes VALUES('nao','Não gravar')")),
+            (erro: unknown) => erro instanceof ErroDominio && erro.codigo === 'trabalho_cancelado');
         assert.equal(banco.db.prepare('SELECT COUNT(*) n FROM colecoes').get()!.n, 0);
         repo.falhar(tentativa, new Error('Operação abortada.'));
         assert.equal(repo.detalhe(id).estado, 'cancelado');

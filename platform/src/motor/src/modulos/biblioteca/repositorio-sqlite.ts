@@ -24,6 +24,7 @@ interface LinhaVideo {
   atualizado_em: string;
   tem_resumo: number;
   colecao_ids: string;
+  resumo_estado?: Video['estadoResumo'];
 }
 
 function paraVideo(linha: LinhaVideo): Video {
@@ -42,12 +43,16 @@ function paraVideo(linha: LinhaVideo): Video {
     atualizadoEm: linha.atualizado_em,
     temResumo: Boolean(linha.tem_resumo),
     colecaoIds: linha.colecao_ids ? JSON.parse(linha.colecao_ids) : [],
+    ...(linha.resumo_estado ? { estadoResumo: linha.resumo_estado } : {}),
   };
 }
 
 const COLUNAS = `id, youtube_id, titulo, canal_id, canal_nome, duracao_segundos, url,
                  miniatura_url, publicado_em, estado, criado_em, atualizado_em,
-                 tem_resumo, colecao_ids`;
+                 tem_resumo, colecao_ids,
+                 (SELECT estado FROM resumos r WHERE r.video_id=videos.id
+                  ORDER BY CASE r.estado WHEN 'pronto' THEN 0 WHEN 'processando' THEN 1 ELSE 2 END,
+                  r.atualizado_em DESC LIMIT 1) AS resumo_estado`;
 
 export class RepositorioBibliotecaSqlite implements RepositorioBiblioteca {
   private readonly db: Driver;

@@ -123,6 +123,9 @@ export function criarServidorApi(roteador: Roteador, registrador: Registrador): 
   return createServer(async (req, res) => {
     const inicio = Date.now();
     try {
+      if (req.headers.origin && req.headers.origin !== `http://${req.headers.host}`) {
+        throw new ErroDominio('origem_nao_permitida', 'A API local não aceita requisições de outra origem.', 403);
+      }
       const url = new URL(req.url ?? '/', 'http://localhost');
       const caminho = url.pathname;
 

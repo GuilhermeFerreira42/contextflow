@@ -29,7 +29,10 @@ os refinamentos de grade/leitura/lateral, registrados no estado e na SPEC própr
 Uma tarefa repassada apenas como contexto não autoriza repetir implementação.
 Registrar separadamente
 o relato de entrega da Arena, a presença da revisão local e a evidência executada.
-Não iniciar F6 nesta etapa.
+Atualização de 22/11/2026: o proprietário pediu comitar as dimensões e avançar à
+próxima fatia. F6 autorizada, especificada e implementada; provas e limitações no
+estado atual. A proibição anterior de iniciar F6 foi superada por esse pedido.
+F7/F8 continuam sem implementação nesta rodada.
 
 1. `docs/00-comece-aqui.md` → escopo → decisões → `docs/estado-atual.md`.
 2. No repositório: conferir branch/HEAD e alterações locais; **não** sobrescrever

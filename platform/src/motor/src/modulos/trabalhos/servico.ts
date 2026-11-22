@@ -54,6 +54,9 @@ export class FilaTrabalhos implements ServicoTrabalhos {
     readonly #processar: (r: RegistroTrabalho, escopo: EscopoImportacao, sinal: AbortSignal) => Promise<ResultadoIngestao>;
     readonly #registrarErro: (erro: unknown) => void;
     readonly #concorrencia: number;
+    readonly #criarResumo?: (entrada: Record<string, unknown>) => Promise<Trabalho>;
+    readonly #processarResumo?: (r: RegistroTrabalho, sinal: AbortSignal) => Promise<void>;
+    readonly #falharResumo?: (r: RegistroTrabalho, erro: unknown) => void;
     readonly #dono = randomUUID();
     readonly #ativos = new Map<string, {
         controle: AbortController;
@@ -67,6 +70,9 @@ export class FilaTrabalhos implements ServicoTrabalhos {
         executor: ExecutorYtdlp;
         processar: (r: RegistroTrabalho, escopo: EscopoImportacao, sinal: AbortSignal) => Promise<ResultadoIngestao>;
         concorrencia?: number;
+        criarResumo?: (entrada: Record<string, unknown>) => Promise<Trabalho>;
+        processarResumo?: (r: RegistroTrabalho, sinal: AbortSignal) => Promise<void>;
+        falharResumo?: (r: RegistroTrabalho, erro: unknown) => void;
         registrarErro?: (erro: unknown) => void;
     }) {
         this.repositorio = op.repositorio;
@@ -74,10 +80,14 @@ export class FilaTrabalhos implements ServicoTrabalhos {
         this.#processar = op.processar;
         this.#registrarErro = op.registrarErro ?? (() => { });
         this.#concorrencia = op.concorrencia ?? 2;
+        this.#criarResumo = op.criarResumo;
+        this.#processarResumo = op.processarResumo;
+        this.#falharResumo = op.falharResumo;
         if (!Number.isInteger(this.#concorrencia) || this.#concorrencia < 1)
             throw new ErroValidacao('Concorrência deve ser um inteiro positivo.');
     }
     async criar(tipo: TipoTrabalho, entrada: Record<string, unknown>): Promise<Trabalho> {
+        if (tipo === 'gerar-resumo' && this.#criarResumo) return this.#criarResumo(entrada);
         if (!['importar-video', 'importar-playlist', 'importar-lote'].includes(tipo))
             throw new ErroDominio('indisponivel', 'Este tipo de trabalho ainda não está disponível.', 503);
         const idiomas = validarIdiomas(entrada.idiomas);
@@ -202,7 +212,7 @@ export class FilaTrabalhos implements ServicoTrabalhos {
             const controle = new AbortController();
             const promessa = Promise.resolve().then(() => this.#executar(r, controle.signal)).catch(e => {
                 if (!this.#parando)
-                    this.repositorio.falhar(r, e);
+                    this.repositorio.falhar(r, e, r.tipo === 'gerar-resumo' && this.#falharResumo ? () => this.#falharResumo!(r, e) : undefined);
             }).catch(e => this.#registrarErro(e)).finally(() => { this.#ativos.delete(r.id); });
             this.#ativos.set(r.id, { controle, promessa });
         }
@@ -210,6 +220,11 @@ export class FilaTrabalhos implements ServicoTrabalhos {
     async #executar(r: RegistroTrabalho, sinal: AbortSignal): Promise<void> {
         const escopo = JSON.parse(r.escopo) as EscopoImportacao;
         this.repositorio.conferir(r);
+        if (r.tipo === 'gerar-resumo') {
+            if (!this.#processarResumo) throw new ErroDominio('indisponivel', 'Geração de resumos indisponível.', 503);
+            await this.#processarResumo(r, sinal);
+            return;
+        }
         if (r.tipo === 'importar-video') {
             if (escopo.indisponivel)
                 throw new ErroDominio('video_indisponivel', 'Este item da playlist não está disponível.', 502);

@@ -156,6 +156,7 @@
               <button id="selecionar-visiveis" type="button" class="botao-secundario">Selecionar visíveis</button>
               <button id="limpar-selecao" type="button" class="botao-secundario" disabled>Limpar</button>
               <button id="reimportar-selecao" type="button" class="botao-secundario" disabled>Reimportar</button>
+              <button id="gerar-resumos-selecao" type="button" class="botao-secundario" disabled>Gerar resumos</button>
               <button id="remover-selecao" type="button" class="botao-secundario" disabled>Remover</button>
               <select id="colecao-destino" aria-label="Coleção de destino">
                 <option value="">Escolha uma coleção</option>
@@ -349,9 +350,32 @@
             </div>
           </header>
           <dl class="lista-config" id="lista-config"></dl>
+          <h2 class="subtitulo">Resumos por IA</h2>
+          <p class="painel-nota">Escolha seu provedor e modelo. A geração só começa após conferir e confirmar a estimativa.</p>
+          <form id="formulario-ia" class="formulario-ia">
+            <label>Provedor<select id="ia-provedor" required></select></label>
+            <label>Modelo<input id="ia-modelo" required maxlength="160" placeholder="Identificador do modelo no provedor" /></label>
+            <label class="ia-linha-inteira">Endpoint<input id="ia-endpoint" type="url" required /></label>
+            <label class="ia-linha-inteira">Chave do provedor<input id="ia-chave" type="password" autocomplete="new-password" maxlength="4096" placeholder="Em branco mantém a chave deste provedor e endpoint" /></label>
+            <label class="filtro-checkbox ia-linha-inteira"><input id="ia-remover-chave" type="checkbox" /> Remover a chave deste endpoint ao salvar</label>
+            <p id="ia-protecao" class="painel-nota ia-linha-inteira"></p>
+            <label>Versão do prompt<input id="ia-versao" value="v1" required maxlength="40" /></label>
+            <label>Contexto (tokens)<input id="ia-contexto" type="number" min="2048" max="1000000" value="16384" required /></label>
+            <label class="ia-linha-inteira">Prompt<textarea id="ia-prompt" rows="5" required maxlength="20000" placeholder="Inclua {transcricao}. Também disponíveis: {titulo}, {canal}, {duracao}."></textarea></label>
+            <label>Saída máxima (tokens)<input id="ia-saida" type="number" min="128" max="8192" value="1024" required /></label>
+            <label>Gerações simultâneas<input id="ia-concorrencia" type="number" min="1" max="4" value="2" required /></label>
+            <label>Tempo limite por chamada (segundos)<input id="ia-timeout" type="number" min="1" max="300" value="90" required /></label>
+            <label>Entrada: USD por milhão de tokens (opcional)<input id="ia-preco-entrada" type="number" min="0" step="any" placeholder="Não informado" /></label>
+            <label>Saída: USD por milhão de tokens (opcional)<input id="ia-preco-saida" type="number" min="0" step="any" placeholder="Não informado" /></label>
+            <div class="barra-ferramentas ia-linha-inteira">
+              <button class="botao-primario" id="ia-salvar" type="submit">Salvar configuração de IA</button>
+              <button class="botao-secundario" id="ia-testar" type="button">Testar conexão salva</button>
+            </div>
+            <p id="ia-resultado" class="ia-linha-inteira" role="status" aria-live="polite"></p>
+          </form>
           <div class="aviso-fase">
-            <strong>Leitura (F1/F8).</strong> Os valores vêm do motor. Edição de provedor e
-            chaves entra na F6/F8; chaves nunca são exibidas pela API.
+            Provedor de IA editável nesta tela. As demais preferências gerais ainda
+            são de leitura. A chave salva nunca é devolvida pela API.
           </div>
         </section>
       </main>
@@ -386,9 +410,12 @@
                   Abrir no YouTube
                   <svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6"/><path d="M20 4 10 14"/><path d="M19 14v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5"/></svg>
                 </a>
-                <button type="button" class="botao-secundario" id="painel-resumir" disabled>
-                  Gerar resumo (F6)
+                <button type="button" class="botao-secundario" id="painel-resumir">
+                  Gerar resumo
                 </button>
+                <button type="button" class="botao-secundario" id="painel-historico">Histórico de resumos</button>
+                <button type="button" class="botao-secundario" id="painel-copiar-resumo">Copiar resumo</button>
+                <p id="painel-copia-status" role="status"></p>
               </div>
             </div>
           </div>
@@ -470,7 +497,7 @@
           <label class="filtro-checkbox">
             <input type="checkbox" id="adicionar-resumir" disabled />
             <span>Gerar resumo com IA ao importar</span>
-            <span class="nota-fase">Disponível na F6</span>
+            <span class="nota-fase">Gere pela Biblioteca após confirmar a estimativa.</span>
           </label>
 
           <p class="resultado-validacao" id="adicionar-resultado" role="status" aria-live="polite"></p>
@@ -483,6 +510,22 @@
       </div>
     </div>
 
+    <dialog id="dialogo-resumos" class="dialogo-resumos" aria-labelledby="resumos-titulo">
+      <h2 id="resumos-titulo">Gerar resumos</h2>
+      <p id="resumos-custo" role="status" aria-live="polite"></p>
+      <ul id="resumos-itens"></ul>
+      <p id="resumos-aviso" class="painel-nota"></p>
+      <p id="resumos-erro" role="alert"></p>
+      <div class="dialogo-acoes">
+        <button type="button" class="botao-secundario" id="resumos-fechar">Voltar</button>
+        <button type="button" class="botao-primario" id="resumos-confirmar" disabled>Confirmar e gerar</button>
+      </div>
+    </dialog>
+    <dialog id="dialogo-historico-resumos" class="dialogo-resumos" aria-labelledby="historico-resumos-titulo">
+      <h2 id="historico-resumos-titulo">Histórico de resumos</h2>
+      <div id="historico-resumos-conteudo" role="status"></div>
+      <div class="dialogo-acoes"><button type="button" class="botao-secundario" id="historico-resumos-fechar">Fechar</button></div>
+    </dialog>
     <script type="module" src="/js/aplicacao.js"></script>
   </body>
 </html>
