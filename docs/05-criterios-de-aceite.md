@@ -20,6 +20,14 @@
 
 ## Status de execução (atualizado a cada fatia)
 
+**Recuperação de capas (base `adb6c57`, Windows):** 231 testes aprovados e seis
+ignorados (237 total), CDP57/57, Playwright recuperação3/3 e layout4/4,
+build/typecheck/fumaça aprovados. Caso real: URL localizada404; JPEG padrão200,
+cache recuperado e imagem1280×720 exibida no navegador da aplicação local.
+Sem conversão, migração ou alteração de vídeo/transcrição/resumo. Os demais
+roteiros completos permanecem como prova anterior, não nova execução. Evidências:
+`../Continuidade de Projeto/recuperacao-miniaturas-adb6c57/LEIA-ME.md`.
+
 **Miniatura adaptativa (base `76e57d1`, Windows):** 232 testes, 226 aprovados e
 seis ignorados; CDP 57/57; Playwright 4/4 miniatura, 13/13 pós-F6, 9/9
 refinamentos e 7/7 resumos. Build/typecheck e nove verificações de fumaça OK.

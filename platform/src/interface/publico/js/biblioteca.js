@@ -378,12 +378,40 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel, aoResumir })
      * podia cair no errado.
      */
     const semImagem = () => {
+      caixa.querySelectorAll('.sem-miniatura, .tentar-miniatura').forEach(el => el.remove());
       caixa.classList.add('miniatura-vazia');
       caixa.dataset.fallback = '1';
       const vazio = document.createElement('span');
       vazio.className = 'sem-miniatura';
       vazio.textContent = 'sem miniatura';
       caixa.append(vazio);
+      const tentar = document.createElement('button');
+      tentar.type = 'button'; tentar.className = 'tentar-miniatura'; tentar.textContent = '↻';
+      tentar.title = 'Tentar carregar miniatura';
+      tentar.setAttribute('aria-label', `Tentar carregar miniatura de ${video.titulo}`);
+      tentar.addEventListener('click', async evento => {
+        evento.stopPropagation(); tentar.disabled = true;
+        vazio.textContent = 'Buscando…'; caixa.setAttribute('aria-busy', 'true');
+        try {
+          const resposta = await api(`/api/miniaturas/${encodeURIComponent(video.id)}/buscar`, {
+            method: 'POST', body: JSON.stringify({ forcar: true }),
+          });
+          if (!resposta?.miniaturaUrl) throw new Error('indisponível');
+          const imagem = document.createElement('img'); imagem.alt = ''; imagem.className = 'miniatura-recuperada';
+          imagem.addEventListener('load', () => {
+            video.miniaturaUrl = resposta.miniaturaUrl;
+            caixa.classList.remove('miniatura-vazia'); delete caixa.dataset.fallback;
+            vazio.remove(); tentar.remove(); caixa.removeAttribute('aria-busy');
+          }, { once: true });
+          imagem.addEventListener('error', () => {
+            imagem.remove(); tentar.disabled = false; vazio.textContent = 'Miniatura indisponível'; caixa.removeAttribute('aria-busy');
+          }, { once: true });
+          imagem.src = resposta.miniaturaUrl; caixa.append(imagem);
+        } catch {
+          vazio.textContent = 'Miniatura indisponível'; tentar.disabled = false; caixa.removeAttribute('aria-busy');
+        }
+      });
+      caixa.append(tentar);
     };
 
     if (video.miniaturaUrl) {

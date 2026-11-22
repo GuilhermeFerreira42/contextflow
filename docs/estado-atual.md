@@ -4,7 +4,69 @@
 > `00-comece-aqui.md`. O que está abaixo da linha "Histórico" é registro, não
 > estado vigente.
 
-## Estado vigente — 22/11/2026 — correção da miniatura adaptativa
+## Estado vigente — 22/11/2026 — recuperação de capa importada
+
+Base `adb6c57`, `main` limpa antes do pedido. O proprietário relatou vídeo
+importado sem imagem e autorizou conversão se necessária. SPEC anterior ao
+código: `specs/f6a-recuperacao-miniaturas.md`. F7 não iniciada.
+
+**Diagnóstico real:** a URL localizada `/vi_lc/<id>/maxresdefault_en-US.jpg`
+retornava HTTP404; o cache havia guardado três falhas e a listagem passou a
+devolver imagem nula. As variantes JPEG padrão maxres/hq do mesmo ID responderam
+200. Não era incompatibilidade de formato; não adicionar conversor/dependência.
+
+**Entrega:** serviço tenta URL original + JPEG maxres/hq para CDN YouTube/ID
+válido, sem duplicatas e com orçamento automático de três falhas. Fontes
+arbitrárias não recebem candidatos inventados. Recuperação simultânea continua
+deduplicada. O fallback oferece botão Tentar carregar miniatura, usando o POST
+existente com `forcar:true`, desabilitado durante a busca e sem laço automático.
+Isso permite recuperar cache esgotado e renovar arquivo já existente. Leitura e
+seleção continuam independentes; a imagem recuperada não intercepta seu botão.
+
+Downloads limitados a 4 MB mesmo sem Content-Length; corpos rejeitados são
+cancelados. Biblioteca e detalhe usam a mesma cópia local. A rota estável da
+imagem usa ETag/revalidação em vez de immutable por uma semana, permitindo
+atualizar capas sem congelar o cache do navegador. Sem migração ou dependências.
+
+**Reparo do caso relatado executado:** serviço corrigido recuperou um JPEG de
+138445 bytes; API local respondeu 200. Playwright abriu a Biblioteca real e
+confirmou imagem decodificada de **1280×720**, servida pela própria origem;
+captura inspecionada visualmente. Foram gravados somente metadados da tabela
+`miniaturas` e arquivo no cache autorizado; vídeo, transcrição e resumo não
+foram alterados e o banco pessoal não foi copiado para as evidências. O processo
+aberto já enxerga a capa recuperada no cache; reiniciar ContextFlow/recarregar
+é necessário para carregar a política nova do backend nas próximas falhas.
+
+**Validação Windows, Node v22.12.0, comandos com saída 0:**
+
+| Comando/prova | Resultado |
+|---|---|
+| `npm test` | 237 testes: 231 aprovados, seis ignorados, zero falhas |
+| `npm run test:e2e:capas` | 3/3: localizada404 → padrão; tentativa manual com cache esgotado; leitura/seleção/reload; falha sem laço |
+| `npm run test:e2e:miniatura` | 4/4: layout adaptativo preservado |
+| `npm run test:e2e` | 57/57 CDP |
+| `npm run build` | typecheck/build aprovados |
+| `npm run verificar` | nove OK, TUDO OK |
+| Vídeo real, API e navegador | JPEG público recuperado e decodificado na Biblioteca |
+
+Cinco testes novos de integração cobrem variantes/limites/deduplicação, cache e
+arquivo apagado, atualização explícita e stream acima do limite. Teste anterior
+que exigia immutable foi atualizado para revalidação com ETag. Uma rodada sob
+carga também expôs uma asserção temporal antiga da fila; não se alterou a fila
+para esse efeito. A rodada final sem falhas está separada dos logs intermediários.
+
+Evidências: `../Continuidade de Projeto/recuperacao-miniaturas-adb6c57/`, índice
+`LEIA-ME.md`; `recuperacao-real.log`, `navegador-real.log`, `capa-real.png`, logs
+finais e capturas de teste. Não executados nesta rodada: Linux, importação de
+novo vídeo pelo yt-dlp, geração real de IA e repetição completa dos roteiros
+pós-F6/refinamentos/resumos (aprovados na rodada anterior). Houve prova real de
+download/serviço de imagem, não de importação completa.
+
+Próxima ação: o proprietário conferir a capa já recuperada após recarregar a
+Biblioteca; reiniciar o motor para ativar as correções gerais. Commit contém
+este registro, localizar com `git log -1`. Preservar F6 e não iniciar F7.
+
+## Estado anterior — correção da miniatura adaptativa
 
 Branch `main`; base `76e57d1`, árvore limpa antes deste pedido. O proprietário
 trouxe a entrega atualizada da Arena e pediu corrigir miniatura/título (item 8),

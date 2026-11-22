@@ -1437,6 +1437,21 @@ input[type='checkbox'] {
   text-align: center;
   padding: 0 8px;
 }
+.miniatura .tentar-miniatura {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  z-index: 2;
+  width: 25px;
+  height: 25px;
+  border: 1px solid var(--borda);
+  border-radius: 4px;
+  background: var(--grafite-900);
+  color: var(--texto);
+  cursor: pointer;
+}
+.miniatura .tentar-miniatura:disabled { opacity: .6; cursor: progress; }
+.miniatura .miniatura-recuperada { position: absolute; inset: 0; pointer-events: none; }
 .miniatura .duracao-selo {
   position: absolute;
   right: 5px;

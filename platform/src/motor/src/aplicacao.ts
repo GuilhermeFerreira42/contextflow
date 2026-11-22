@@ -5,7 +5,7 @@ import { gravarResultadoIngestao, escreverResultadoIngestao } from './persistenc
  * Este é o ponto onde o monólito modular é "costurado". Nenhum módulo importa
  * outro módulo diretamente: eles recebem dependências por aqui.
  */
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import type { Preferencias } from '@contextflow/compartilhado';
 import type { ConfigMotor } from './nucleo/configuracao.ts';
@@ -55,6 +55,8 @@ export interface Aplicacao {
 }
 
 export interface OpcoesAplicacao {
+  /** Transporte de capas injetável; produção usa fetch nativo. */
+  httpMiniaturas?: typeof fetch;
   /** Transporte injetável para testar contratos de IA sem serviços pagos. */
   httpIA?: typeof fetch;
   /**
@@ -87,6 +89,7 @@ export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}
    * Git.
    */
   const miniaturas = new ServicoMiniaturas({
+    http: opcoes.httpMiniaturas,
     pastaDados: config.pastaDados,
     repositorio: new RepositorioMiniaturas(banco.db),
     buscarUrlDoVideo: async videoId => repositorioBiblioteca.porId(videoId),
@@ -185,7 +188,9 @@ export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}
     .obter('/api/biblioteca/meses', () => biblioteca.listarMeses())
     .obter('/api/biblioteca/:id', async ({ requisicao }) => {
       const id = requisicao.caminho.split('/').at(-1)!;
-      return biblioteca.obter(id);
+      const video = await biblioteca.obter(id);
+      miniaturas.aplicarEmVideos([video]);
+      return video;
     })
     .postar('/api/biblioteca/lote', async ({ requisicao }) => {
       const corpo = requisicao.corpo as { acao: import('@contextflow/compartilhado').AcaoLote; ids: string[]; colecaoId?: string; chaveRequisicao?: string } | undefined;
@@ -404,10 +409,15 @@ export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}
           res.end(JSON.stringify({ ok: false, erro: { codigo: 'sem_miniatura', mensagem: 'Miniatura ainda não foi baixada.' } }));
           return;
         }
+        const etag = `"${createHash('sha256').update(achado.dados).digest('hex')}"`;
+        res.setHeader('cache-control', 'private, no-cache');
+        res.setHeader('etag', etag);
+        if (req.headers['if-none-match'] === etag) {
+          res.writeHead(304); res.end(); return;
+        }
         res.writeHead(200, {
           'content-type': achado.contentType,
-          // Cópia imutável: se o arquivo trocar, o nome muda.
-          'cache-control': 'public, max-age=604800, immutable',
+          // A rota é estável por vídeo; revalidar permite recuperar/trocar a capa.
           'content-length': achado.dados.length,
         });
         res.end(achado.dados);

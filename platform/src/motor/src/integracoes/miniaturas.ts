@@ -64,6 +64,7 @@ export async function baixarMiniatura(
   repositorio: RepositorioMiniaturas,
   videoId: string,
   url: string,
+  http: typeof fetch = fetch,
 ): Promise<{ ok: true; arquivo: string; contentType: string } | { ok: false; motivo: string }> {
   let destino: URL;
   try {
@@ -80,26 +81,43 @@ export async function baixarMiniatura(
   const controle = new AbortController();
   const relogio = setTimeout(() => controle.abort(), TIMEOUT_MS);
   try {
-    const resposta = await fetch(destino, {
+    const resposta = await http(destino, {
       signal: controle.signal,
       redirect: 'follow',
-      headers: { accept: 'image/avif,image/webp,image/*;q=0.9,*/*;q=0.5' },
+      headers: { accept: 'image/jpeg,image/png,image/webp,image/gif;q=0.9' },
     });
     if (!resposta.ok) {
+      await resposta.body?.cancel();
       repositorio.registrarFalha(videoId, `HTTP ${resposta.status}`);
       return { ok: false, motivo: `HTTP ${resposta.status}` };
     }
     const tipo = (resposta.headers.get('content-type') ?? '').split(';')[0]?.trim().toLowerCase() || '';
     if (!TIPOS.has(tipo)) {
+      await resposta.body?.cancel();
       repositorio.registrarFalha(videoId, `tipo não suportado: ${tipo || 'desconhecido'}`);
       return { ok: false, motivo: 'tipo não suportado' };
     }
     const tamanho = Number(resposta.headers.get('content-length') ?? '0');
     if (tamanho > TAMANHO_MAXIMO) {
+      await resposta.body?.cancel();
       repositorio.registrarFalha(videoId, 'imagem grande demais');
       return { ok: false, motivo: 'imagem grande demais' };
     }
-    const bytes = Buffer.from(await resposta.arrayBuffer());
+    const leitor = resposta.body?.getReader();
+    const partes: Uint8Array[] = [];
+    let total = 0;
+    if (leitor) for (;;) {
+      const { done, value } = await leitor.read();
+      if (done) break;
+      total += value.length;
+      if (total > TAMANHO_MAXIMO) {
+        await leitor.cancel();
+        repositorio.registrarFalha(videoId, 'imagem grande demais');
+        return { ok: false, motivo: 'imagem grande demais' };
+      }
+      partes.push(value);
+    }
+    const bytes = Buffer.concat(partes);
     if (!bytes.length) {
       repositorio.registrarFalha(videoId, 'imagem vazia');
       return { ok: false, motivo: 'imagem vazia' };

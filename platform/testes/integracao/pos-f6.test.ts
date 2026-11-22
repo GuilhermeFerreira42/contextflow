@@ -113,7 +113,8 @@ test('buscar baixa uma vez e passa a servir pela própria origem', async () => {
   const imagem = await fetch(`${base}/api/miniaturas/v-capa`);
   assert.equal(imagem.status, 200);
   assert.equal(imagem.headers.get('content-type'), 'image/png');
-  assert.match(imagem.headers.get('cache-control') ?? '', /immutable/);
+  assert.match(imagem.headers.get('cache-control') ?? '', /no-cache/);
+  assert.ok(imagem.headers.get('etag'), 'capa deve permitir revalidar sem congelar recuperação');
   assert.equal(Buffer.from(await imagem.arrayBuffer()).length, PNG.length);
 
   const pagina = await json(await fetch(`${base}/api/biblioteca?limite=10`));

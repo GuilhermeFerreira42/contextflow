@@ -22,7 +22,8 @@ export const ROTA_MINIATURA = '/api/miniaturas';
 export interface ServicoMiniaturasDeps {
   pastaDados: string;
   repositorio: RepositorioMiniaturas;
-  buscarUrlDoVideo: (videoId: string) => Promise<{ miniaturaUrl: string | null } | null>;
+  buscarUrlDoVideo: (videoId: string) => Promise<{ miniaturaUrl: string | null; youtubeId?: string } | null>;
+  http?: typeof fetch;
   registrarErro?: (mensagem: string, detalhe?: unknown) => void;
 }
 
@@ -83,16 +84,15 @@ export class ServicoMiniaturas {
     // ter limpado a pasta de dados).
     if (registro?.arquivo) {
       const dados = await lerMiniaturaLocal(this.#deps.pastaDados, registro.arquivo);
-      if (dados) return { ok: true };
-      this.#deps.repositorio.remover(videoId);
+      if (dados && !forcar) return { ok: true };
+      if (!dados) this.#deps.repositorio.remover(videoId);
     }
 
     if (!forcar && registro?.falha && registro.tentativas >= MAXIMO_TENTATIVAS) {
       return { ok: false, motivo: registro.falha };
     }
 
-    // Reaproveita a URL remota que já está no vídeo; só consulta o yt-dlp se
-    // ela não existir (vídeo importado antes de haver `thumbnail`).
+    // Reaproveita a URL já importada; não executa yt-dlp nem baixa vídeo.
     let origem = registro?.origem ?? null;
     let url = await this.#urlRemota(videoId, origem);
     if (!url) {
@@ -100,7 +100,21 @@ export class ServicoMiniaturas {
       this.#deps.repositorio.registrarFalha(videoId, 'vídeo sem miniatura conhecida');
       return { ok: false, motivo: 'sem miniatura' };
     }
-    return baixarMiniatura(this.#deps.pastaDados, this.#deps.repositorio, videoId, url);
+    const candidatos = [url];
+    const video = await this.#deps.buscarUrlDoVideo(videoId);
+    const id = video?.youtubeId;
+    let host = '';
+    try { host = new URL(url).hostname; } catch { /* baixarMiniatura registra a URL inválida */ }
+    if (id && /^[A-Za-z0-9_-]{11}$/.test(id) && (host === 'ytimg.com' || host.endsWith('.ytimg.com'))) {
+      candidatos.push(`https://i.ytimg.com/vi/${id}/maxresdefault.jpg`, `https://i.ytimg.com/vi/${id}/hqdefault.jpg`);
+    }
+    let resultado: { ok: boolean; motivo?: string } = { ok: false, motivo: 'sem miniatura' };
+    for (const candidato of new Set(candidatos)) {
+      if (!forcar && (this.#deps.repositorio.obter(videoId)?.tentativas ?? 0) >= MAXIMO_TENTATIVAS) break;
+      resultado = await baixarMiniatura(this.#deps.pastaDados, this.#deps.repositorio, videoId, candidato, this.#deps.http);
+      if (resultado.ok) return resultado;
+    }
+    return resultado;
   }
 
   /** Lê a URL remota. Guardada em `videos.miniatura_url`; o deps decide como. */
