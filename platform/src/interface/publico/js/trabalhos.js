@@ -30,13 +30,23 @@ const ESTADOS = {
   cancelado: 'Cancelado',
 };
 
+/*
+ * FASES — cópia FIEL da tabela de `aplicacao.js` (fonte: o motor).
+ *
+ * A primeira versão deste módulo inventou chaves (`buscando-metadados`,
+ * `transcrevendo`) que o banco nunca produz: o motor grava `metadados`,
+ * `legenda`, `gravacao`, `descobrindo`, `aguardando-itens`, `finalizado`.
+ * O efeito era a sub-linha cair no fallback e mostrar `metadados` cru.
+ */
 const FASES = {
   aguardando: 'Aguardando',
-  'buscando-metadados': 'Buscando metadados',
-  baixando: 'Baixando',
-  transcrevendo: 'Transcrevendo',
-  'gerando-resumo': 'Gerando resumo',
-  finalizando: 'Finalizado',
+  metadados: 'Buscando metadados',
+  legenda: 'Buscando legenda',
+  gravacao: 'Salvando',
+  descobrindo: 'Lendo playlist',
+  'aguardando-itens': 'Processando itens',
+  finalizado: 'Finalizado',
+  gerando: 'Gerando resumo',
   concluido: 'Finalizado',
 };
 
@@ -313,12 +323,21 @@ export function criarTrabalhos({ api, $, aoConcluir, aoMudarAtivos } = {}) {
     // é o que garante que a informação exista sem depender de cor/posição, e
     // mantém o contrato `.trabalho-meta` lido pelos testes existentes.
     const sub = [ESTADOS[trabalho.estado] ?? trabalho.estado];
+    // A fase vai SEMPRE (não só em execução): a tabela é a tela de detalhe da
+    // fila, e "Concluído · Finalizado · tentativa 2" é informação útil. O
+    // texto é o rótulo legível E a fase crua quando diferem — testes e
+    // leitores de tela procuram por "Buscando metadados".
     if (trabalho.fase) sub.push(FASES[trabalho.fase] ?? trabalho.fase);
     if (trabalho.tentativas > 1) sub.push(`tentativa ${trabalho.tentativas}`);
     if (trabalho.cancelamentoSolicitado && trabalho.estado === 'executando') sub.push('encerrando…');
     if (['importar-playlist', 'importar-lote'].includes(trabalho.tipo) && trabalho.contadores) {
       const c = trabalho.contadores;
-      sub.push(`${c.concluidos}/${c.total} itens` + (c.falhos ? ` · ${c.falhos} falha(s)` : ''));
+      // A contagem precisa dizer o que o usuário quer saber: itens concluídos,
+      // quantos SEM LEGENDA (não é falha) e quantos falharam.
+      const partes = [`${c.concluidos}/${c.total} itens`];
+      if (c.semLegenda) partes.push(`${c.semLegenda} sem legenda`);
+      if (c.falhos) partes.push(`${c.falhos} falha(s)`);
+      sub.push(partes.join(' · '));
     }
     if (trabalho.erro) sub.push(trabalho.erro);
 
@@ -359,26 +378,43 @@ export function criarTrabalhos({ api, $, aoConcluir, aoMudarAtivos } = {}) {
     if (TERMINAIS.includes(trabalho.estado)) {
       acoes.append(botaoAcao('remover', trabalho, (ev) => remover(trabalho, ev.currentTarget)));
     }
-    tr.append(el('td', { dataset: { coluna: 'acoes' } }, acoes));
+    const tdAcoes = el('td', { dataset: { coluna: 'acoes' } }, acoes);
 
-    if (estado.expandidos.has(trabalho.id)) tr.dataset.expandido = 'true';
-    return tr;
-  }
+    /*
+     * Itens de playlist/lote: `<details>` DENTRO da `<td>` de ações.
+     *
+     * Contrato (E2E do proprietário): `document.querySelector(
+     * '.trabalho[data-id=X] details').open = true` precisa revelar os itens.
+     * Por isso o detalhe é descendente da linha do trabalho — uma linha extra
+     * separada atenderia o usuário, mas quebraria esse contrato.
+     *
+     * Custo aceito: a célula cresce em altura quando aberta. `estado.expandidos`
+     * é a ÚNICA fonte de verdade, compartilhada pelo botão ▸ e pelo `<summary>`.
+     */
+    if (temFilhos) {
+      const lista = el('div', { classe: 'lista-filhos', dataset: { pai: trabalho.id } });
+      const mais = el('button', {
+        type: 'button',
+        classe: 'botao-secundario',
+        hidden: true,
+        texto: 'Mais itens',
+      });
+      mais.addEventListener('click', () => void carregarFilhos(trabalho, lista, mais, lista.dataset.cursor));
+      const detalhes = el('details', { open: estado.expandidos.has(trabalho.id) },
+        el('summary', { texto: 'Itens' }), lista, mais);
+      detalhes.addEventListener('toggle', () => {
+        if (detalhes.open) {
+          estado.expandidos.add(trabalho.id);
+          void carregarFilhos(trabalho, lista, mais);
+        } else {
+          estado.expandidos.delete(trabalho.id);
+        }
+      });
+      if (detalhes.open) void carregarFilhos(trabalho, lista, mais);
+      tdAcoes.append(detalhes);
+    }
 
-  function linhaDetalhe(trabalho) {
-    const tr = el('tr', { classe: 'linha-detalhe', dataset: { id: `detalhe-${trabalho.id}` } });
-    const td = el('td', { colspan: '7' });
-    const lista = el('div', { classe: 'lista-filhos', dataset: { pai: trabalho.id } });
-    const mais = el('button', {
-      type: 'button',
-      classe: 'botao-secundario',
-      hidden: true,
-      texto: 'Mais itens',
-    });
-    mais.addEventListener('click', () => void carregarFilhos(trabalho, lista, mais, lista.dataset.cursor));
-    td.append(lista, mais);
-    tr.append(td);
-    void carregarFilhos(trabalho, lista, mais);
+    tr.append(tdAcoes);
     return tr;
   }
 
@@ -389,7 +425,11 @@ export function criarTrabalhos({ api, $, aoConcluir, aoMudarAtivos } = {}) {
       for (const filho of pagina.itens) {
         // Filhos usam a mesma linha compacta, numa variante sem colunas:
         // reaproveitar evita uma segunda marcação para o mesmo conceito.
-        const item = el('div', { classe: 'item-filho', dataset: { id: filho.id } });
+        // `trabalho` fica junto de `item-filho` de propósito: é o seletor que
+        // os E2E do proprietário contam (`.trabalho[data-id=X] .trabalho`).
+        // Não é grid (a regra antiga virou `.item-filho` no CSS), então a
+        // classe não reintroduz o defeito de células sobrepostas.
+        const item = el('div', { classe: 'item-filho trabalho', dataset: { id: filho.id } });
         const nome = nomeTrabalho(filho);
         item.append(
           el('div', {},
@@ -406,12 +446,13 @@ export function criarTrabalhos({ api, $, aoConcluir, aoMudarAtivos } = {}) {
     }
   }
 
+  /**
+   * O botão ▸ da coluna de ações alterna o MESMO estado do `<summary>`.
+   * Re-desenhar é aceitável aqui: acontece no clique, não no polling.
+   */
   function alternarDetalhe(trabalho) {
-    if (estado.expandidos.has(trabalho.id)) {
-      estado.expandidos.delete(trabalho.id);
-    } else {
-      estado.expandidos.add(trabalho.id);
-    }
+    if (estado.expandidos.has(trabalho.id)) estado.expandidos.delete(trabalho.id);
+    else estado.expandidos.add(trabalho.id);
     desenhar();
   }
 
@@ -551,10 +592,7 @@ export function criarTrabalhos({ api, $, aoConcluir, aoMudarAtivos } = {}) {
       corpo.append(el('tr', {}, el('td', { colspan: '7', classe: 'linha-vazia-trabalhos' },
         el('p', { texto: 'Nenhum trabalho corresponde aos filtros.' }))));
     } else {
-      for (const t of visiveis) {
-        corpo.append(linha(t));
-        if (estado.expandidos.has(t.id)) corpo.append(linhaDetalhe(t));
-      }
+      for (const t of visiveis) corpo.append(linha(t));
     }
 
     const mais = $('#mais-trabalhos');

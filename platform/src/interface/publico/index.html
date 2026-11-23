@@ -662,6 +662,27 @@
       <div id="historico-resumos-conteudo" role="status"></div>
       <div class="dialogo-acoes"><button type="button" class="botao-secundario" id="historico-resumos-fechar">Fechar</button></div>
     </dialog>
+    <!--
+      Cartão de acompanhamento (F6-B, item 4).
+
+      Existe para o resumo não obrigar a sair da tela: ao confirmar, o cartão
+      aparece no canto, mostra fila/execução, permite cancelar e avisa quando
+      termina. Não é modal (`aria-live` + região), não bloqueia a Biblioteca e
+      NUNCA navega sozinho: "Ir para Importações" é um botão, não um efeito.
+    -->
+    <aside class="cartao-acompanhamento" id="cartao-acompanhamento" aria-labelledby="acompanhamento-titulo" hidden>
+      <header class="acompanhamento-topo">
+        <h2 id="acompanhamento-titulo">Acompanhamento</h2>
+        <button type="button" class="botao-icone" id="acompanhamento-recolher"
+                aria-label="Minimizar acompanhamento" aria-expanded="true" title="Minimizar acompanhamento">▾</button>
+      </header>
+      <div class="acompanhamento-corpo" id="acompanhamento-lista" role="status" aria-live="polite"></div>
+      <div class="acompanhamento-acoes">
+        <button type="button" class="botao-secundario" id="acompanhamento-ir" hidden>Ir para Importações</button>
+        <button type="button" class="botao-secundario" id="acompanhamento-fechar" hidden>Fechar</button>
+      </div>
+    </aside>
+
     <script type="module" src="/js/aplicacao.js"></script>
   </body>
 </html>

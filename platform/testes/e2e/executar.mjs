@@ -377,12 +377,20 @@ try {
   registrar('configurações listam valores reais do motor', configCarregou, primeiroRotulo);
 
   // 7. Tema escuro aplicado de fato (não basta declarar no CSS).
+  //
+  // F6-B trocou a paleta a pedido do proprietário: neutro #0B0B0D, sem
+  // gradiente e sem o azul elétrico da marca. O teste continua guardando o
+  // VALOR (não um número solto) — mudar o tema exige mudar o teste de
+  // propósito, que é exatamente o que está sendo feito aqui.
   const fundo = await avaliar(`getComputedStyle(document.body).backgroundColor`);
-  const azul = await avaliar(`getComputedStyle(document.querySelector('.marca-simbolo')).backgroundImage.includes('76, 154, 255')`);
-  // F5-UI: o grafite de fundo ficou mais profundo para casar com o mockup
-  // (#080b12). O teste guarda o VALOR, não um número solto: mudar o tema exige
-  // mudar o teste de propósito.
-  registrar('tema grafite escuro com detalhe azul aplicado', fundo === 'rgb(8, 11, 18)' && azul === true, `${fundo} / azul=${azul}`);
+  const marca = await avaliar(`(() => {
+    const cs = getComputedStyle(document.querySelector('.marca-simbolo'));
+    return { imagem: cs.backgroundImage, cor: cs.backgroundColor };
+  })()`);
+  const semGradiente = marca.imagem === 'none';
+  const neutro = fundo === 'rgb(11, 11, 11)';
+  registrar('tema neutro escuro aplicado, sem gradiente na marca',
+    neutro && semGradiente, `${fundo} / gradiente=${marca.imagem}`);
 
   // 8. Console sem erros de script.
   const erros = errosJs.length;
@@ -423,7 +431,11 @@ try {
   const contou = await esperar(`document.querySelector('.trabalho[data-id="${playlistId}"]')?.textContent.includes('1 sem legenda')`);
   await avaliar(`document.querySelector('.trabalho[data-id="${playlistId}"] details').open=true`);
   const filhos = await esperar(`document.querySelectorAll('.trabalho[data-id="${playlistId}"] .trabalho').length===2`);
-  registrar('playlist exibe filhos e ausência explícita de legenda', contou && filhos);
+  registrar('playlist exibe filhos e ausência explícita de legenda', contou && filhos,
+    JSON.stringify({ contou, filhos, texto: await avaliar(`document.querySelector('.trabalho[data-id="${playlistId}"]')?.textContent?.slice(0,200)`),
+      filhosDom: await avaliar(`document.querySelectorAll('.trabalho[data-id="${playlistId}"] .trabalho').length`),
+      detalhe: await avaliar(`document.querySelectorAll('.linha-detalhe').length`),
+      expandidos: await avaliar(`document.querySelectorAll('tr[data-expandido]').length`) }));
 
   falhasE2e.add('ccccccccccc');
   await avaliar(`document.querySelector('#tipo-importacao').value='importar-video';document.querySelector('#url-video').value='https://youtu.be/ccccccccccc';document.querySelector('#formulario-importacao').requestSubmit()`);

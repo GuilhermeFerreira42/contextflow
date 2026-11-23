@@ -8,11 +8,13 @@
  * O resumo por IA fica desabilitado com motivo até a F6 — nada de prometer o
  * que a fase não entrega.
  */
-export function criarAdicionarLink({ api, aoEnfileirar }) {
+export function criarAdicionarLink({ api, aoEnfileirar, aoAceitar }) {
   const $ = seletor => document.querySelector(seletor);
   const fundo = $('#dialogo-adicionar');
   let focoAnterior = null;
   let colecoes = [];
+  /** Timer do fechamento pós-aceite; cancelado se o usuário fechar antes. */
+  let timerFechar = null;
 
   const PADRAO_VIDEO = /^https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)[\w-]{6,}/i;
   const PADRAO_PLAYLIST = /^https?:\/\/(www\.)?youtube\.com\/playlist\?list=[\w-]{6,}/i;
@@ -63,6 +65,7 @@ export function criarAdicionarLink({ api, aoEnfileirar }) {
   }
 
   function fechar() {
+    clearTimeout(timerFechar);
     fundo.hidden = true;
     document.body.style.overflow = '';
     if (focoAnterior && document.contains(focoAnterior)) focoAnterior.focus({ preventScroll: true });
@@ -126,33 +129,73 @@ export function criarAdicionarLink({ api, aoEnfileirar }) {
     avisar('Enviando para a fila…', 'pendente');
 
     try {
-      const trabalho = await api('/api/ingestao/importar', {
+      /*
+       * Contrato REAL de `POST /api/ingestao/importar` (conferido no motor):
+       * a rota AGUARDA a ingestão e devolve o resultado
+       * `{ video: {...}, transcricao: {...}, criado: bool }` — não o trabalho.
+       * O tipo pedido (`tipo`) é validado aqui; o motor sempre cria
+       * `importar-video` nesta rota, e playlist sai por `/api/ingestao/lote`.
+       */
+      const resposta = await api('/api/ingestao/importar', {
         method: 'POST',
-        body: JSON.stringify({ url, tipo, chaveRequisicao: crypto.randomUUID() }),
+        body: JSON.stringify({ url, chaveRequisicao: crypto.randomUUID() }),
       });
-      const id = trabalho?.id ?? trabalho?.trabalhoId;
-      estadoBotao('na-fila', 'Na fila');
-      avisar(
-        'Importação adicionada à fila. Você acompanha o andamento em Importações.',
-        'ok',
-      );
-      if (id) aoEnfileirar?.(id);
+      // `id` só existe no formato de trabalho (fila assíncrona). Mantido como
+      // defesa: se o motor passar a responder 202 com o trabalho, o fluxo de
+      // provisória continua funcionando sem nova mudança aqui.
+      const id = resposta?.id ?? resposta?.trabalhoId ?? null;
+      const video = resposta?.video ?? null;
 
-      const colecaoId = $('#adicionar-colecao').value;
-      if (colecaoId && trabalho?.videoId) {
-        try {
-          await api(`/api/colecoes/${encodeURIComponent(colecaoId)}/videos`, {
-            method: 'POST',
-            body: JSON.stringify({ videoId: trabalho.videoId }),
-          });
-        } catch { /* o vínculo é secundário; a importação já está em curso */ }
-      }
-
+      /*
+       * Fechamento da janela — pelo formato da resposta, não por um timer cego.
+       *
+       *  - resposta com `video` (ingestão já concluída): não há o que
+       *    acompanhar. Fecha imediatamente e o `aoAceitar` leva o usuário à
+       *    Biblioteca com a linha já criada.
+       *  - resposta 202 com trabalho: a importação está na FILA. A janela
+       *    mostra o estado "Na fila" (contrato do E2E do proprietário) e
+       *    fecha logo em seguida — quem acompanha é o cartão/linha provisória
+       *    da Biblioteca, não uma janela presa. O tempo é curto de propósito:
+       *    basta para o estado ser lido, sem prender o usuário.
+       *
+       * Em nenhum caso há navegação automática para Importações.
+       */
       $('#adicionar-url').value = '';
-      // Fechar após sucesso leva o usuário a Importações; deixamos isso explícito.
-      setTimeout(() => {
-        if (!fundo.hidden) fechar();
-      }, 900);
+      const colecaoId = $('#adicionar-colecao').value;
+      const jaConcluida = Boolean(video?.id);
+      if (jaConcluida) fechar();
+      else {
+        estadoBotao('na-fila', 'Na fila');
+        // Fechar depois de pintar o estado. `fechar()` cancela o timer se o
+        // usuário fechar antes (Escape/botão) — daí o guarda `fundo.hidden`.
+        clearTimeout(timerFechar);
+        timerFechar = setTimeout(() => { if (!fundo.hidden) fechar(); }, 2200);
+      }
+      avisar(
+        jaConcluida
+          ? 'Importação concluída. O vídeo está na Biblioteca.'
+          : 'Importação adicionada à fila. Acompanhe pela linha no topo da Biblioteca.',
+        jaConcluida ? 'ok' : 'pendente',
+      );
+
+      aoAceitar?.({
+        trabalhoId: id,
+        tipo,
+        url,
+        colecaoId: colecaoId || null,
+        titulo: video?.titulo ?? resposta?.titulo ?? null,
+        videoId: video?.id ?? resposta?.videoId ?? null,
+        // Presente quando a ingestão é síncrona (caso atual): a Biblioteca já
+        // pode entrar com a linha definitiva em vez de uma provisória.
+        video: video ? {
+          id: video.id,
+          titulo: video.titulo,
+          canalNome: video.canalNome ?? null,
+          duracaoSegundos: video.duracaoSegundos ?? null,
+          miniaturaUrl: video.miniaturaUrl ?? null,
+          estado: video.estado ?? 'novo',
+        } : null,
+      });
     } catch (erro) {
       estadoBotao('erro');
       avisar(`Não foi possível enfileirar: ${erro.message}`, 'erro');

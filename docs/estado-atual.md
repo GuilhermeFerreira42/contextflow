@@ -4,7 +4,7 @@
 > `00-comece-aqui.md`. O que está abaixo da linha "Histórico" é registro, não
 > estado vigente.
 
-## Estado vigente — 23/11/2026 — F6-B, partes D-1 e B aplicadas
+## Estado vigente — 23/11/2026 — F6-B, partes D-1, B e A aplicadas
 
 Branch de trabalho do Arena (`arena/735d302d-contextflow`), base `e11a748`,
 HEAD local `c3e8286` + os commits desta sessão. **F7 não iniciada.** As quatro
@@ -37,6 +37,57 @@ estado refeitos com `color-mix` sobre os tokens e **texto sempre presente**
 Defeito encontrado e corrigido: o selo "Concluído" aparecia como bolha de
 58 px porque, sendo flex item de uma coluna `auto`, herdava `stretch`. Agora
 `width: fit-content` + `align-self: center` → 22 px.
+
+### A — importação e resumo sem abandonar a tela (aplicada)
+
+**Janela "Adicionar link".** Fecha no aceite do backend (formato da resposta), sem
+os 900 ms antigos. Contrato real de `POST /api/ingestao/importar` conferido no
+motor: a rota **aguarda** a ingestão e devolve `{video, transcricao, criado}` —
+não um trabalho. Com vídeo, o fluxo é síncrono e a linha entra já definitiva;
+com 202 + trabalho, a janela mostra "Na fila" e fecha em 2,2 s (timer cancelável)
+enquanto a Biblioteca acompanha.
+
+**Linha provisória na Biblioteca.** `bibliotecaUI.adicionarProvisoria` mantém
+uma camada **de apresentação** (nada gravado): estado vem do mesmo registro de
+trabalhos, título/miniatura/videoId chegam pelo polling, e a reconciliação é por
+`videoId` — a provisória sai quando o vídeo real aparece, sem duplicar. Falha
+remove a provisória, avisa na tela e deixa o registro em Importações. Não há
+segunda fila: `acompanhamentoProvisorio` só guarda `trabalhoId -> chave`.
+
+**Cartão de acompanhamento** (`js/acompanhamento.js`, não-modal). Confirmar
+resumo **não navega mais** para Importações: o cartão mostra fila/execução/
+progresso, permite cancelar e repetir por item, exibe erro e oferece
+"Ir para Importações" como **opção**. A Biblioteca se atualiza sozinha quando
+cada trabalho termina.
+
+**Contrato de coleção corrigido.** O vínculo manda `{ videoIds: [id] }` (a rota
+valida array) e a falha é reportada em vez de engolida por `catch` vazio. O
+vínculo acontece quando o `videoId` existe — no fluxo síncrono, imediatamente;
+no assíncrono, na reconciliação.
+
+**Defeitos encontrados e corrigidos no caminho**
+
+| Defeito | Causa | Correção |
+|---|---|---|
+| "Na fila" virava bloco verde | `--sucesso` como fundo do botão, sobra da paleta antiga | azul translúcido + texto azul |
+| Fase aparecia como `metadados` cru | eu inventei chaves de fase (`buscando-metadados`) | tabela copiada do motor: `metadados`, `legenda`, `gravacao`, `descobrindo`, `aguardando-itens`, `finalizado` |
+| Itens de playlist não apareciam | `<details>` em linha separada, fora do contrato `.trabalho details` | `<details>` dentro da `<td>` de ações, com `estado.expandidos` como fonte única |
+| Rolagem virtualizada para o índice 3.000 falhava | identidade de linha trocada por `videoId` instável | `chaveLinha` estável separada do `id` |
+| Polling parava depois de "Repetir" | nada entrava em `estado.pendentes` | `trabalhosUI.possuiAtivo()` no laço |
+| `#limpar-selecao` e `input[type=search]` duplicados | ids/seletores colidiam com a Biblioteca | `#limpar-selecao-trabalhos`, `type="text" role="searchbox"` |
+
+**Testes adaptados de propósito (F6-A → F6-B).** `testes/e2e/resumos-f6.mjs`
+esperava `waitForURL('**/#importacoes')` em quatro pontos. O comando da F6-B
+proíbe navegação automática, então os quatro passaram a verificar o contrato
+NOVO — que é mais forte: tela continua `biblioteca`, cartão visível com o item,
+cancelar/repetir pelo cartão e "Ir para Importações" como botão.
+`testes/e2e/executar.mjs` guardava o fundo `rgb(8,11,18)` e a presença de
+gradiente na marca; agora guarda `rgb(11,11,11)` e `background-image: none`,
+com comentário explicando a troca de paleta.
+
+**Validação (Linux/Node, saídas 0):** `npm test` 242/242 · `test:e2e` 57/57 ·
+`pos-f6` 13/13 · `refinamentos` 9/9 · `visualizacao` 4/4 · `resumos` 8/8.
+Evidências em `Continuidade de Projeto/f6b-refinamento/07..13`.
 
 ### B — Importações como tabela compacta (aplicada)
 

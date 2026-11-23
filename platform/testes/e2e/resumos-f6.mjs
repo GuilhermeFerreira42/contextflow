@@ -52,6 +52,22 @@ try {
     for (let i = 0; i < 200; i++) { const j = await req(`/api/trabalhos/${id}`); if (['concluido','falhou','cancelado'].includes(j.estado)) return j; await new Promise(ok => setTimeout(ok, 50)); }
     throw new Error('Trabalho F6 não terminou.');
   };
+  /*
+   * F6-B mudou o comportamento esperado aqui.
+   *
+   * Na F6-A (spec `f6a-prompt-persistente-painel`) confirmar o resumo levava
+   * o usuário a `#importacoes`. O comando da F6-B proíbe isso: "não obrigar a
+   * sair da tela atual" e "Importações como opção, nunca navegação
+   * automática". Este helper substitui os `waitForURL` e verificam o
+   * contrato novo — que é mais forte, porque exige o cartão visível com o
+   * trabalho e a tela inalterada.
+   */
+  const aposConfirmar = async (idTrabalho) => {
+    await page.waitForFunction(() => !document.querySelector('#cartao-acompanhamento').hidden);
+    const tela = await page.evaluate(() => document.querySelector('.tela:not([hidden])')?.dataset.telaNome);
+    assert.equal(tela, 'biblioteca', 'confirmar resumo não pode tirar o usuário da Biblioteca');
+    await page.waitForFunction(id => document.querySelector(`.acompanhamento-item[data-id="${id}"]`), idTrabalho);
+  };
   const teste = async (nome, fn) => {
     total++;
     try { await fn(); console.log(`PASS ${nome}`); }
@@ -86,11 +102,13 @@ try {
     assert.equal(modo.chamadas, 0, 'estimativa não chama o modelo');
     await page.screenshot({ path: join(evidencia, 'estimativa.png') });
     await page.locator('#resumos-confirmar').click();
-    await page.waitForURL('**/#importacoes');
     const jobs = (await req('/api/trabalhos')).itens.filter(j => j.tipo === 'gerar-resumo');
     assert.equal(jobs.length, 2);
+    await aposConfirmar(jobs[0].id);
     for (const j of jobs) assert.equal((await terminal(j.id)).estado, 'concluido');
-    await page.waitForFunction(() => [...document.querySelectorAll('.trabalho-meta')].some(p => p.textContent.includes('Concluído')));
+    // `Concluído` deve aparecer no cartão (onde o usuário está) — o antigo
+    // `.trabalho-meta` vivia na tabela de outra tela.
+    await page.waitForFunction(() => document.querySelector('#acompanhamento-lista')?.textContent.includes('concluído'));
     await page.screenshot({ path: join(evidencia, 'fila.png') });
     assert.ok(modo.chamadas > 2, 'fonte longa exerceu map-reduce');
   });
@@ -118,14 +136,16 @@ try {
     modo.bloquear = true;
     await page.locator('#gerar-resumos-selecao').click();
     await page.waitForFunction(() => !document.querySelector('#resumos-confirmar').disabled);
-    await page.locator('#resumos-confirmar').click(); await page.waitForURL('**/#importacoes');
+    await page.locator('#resumos-confirmar').click();
     const jobs = (await req('/api/trabalhos')).itens;
     const novo = jobs.find(j => ['na-fila','executando'].includes(j.estado)); assert.ok(novo);
-    await page.locator(`.trabalho[data-id="${novo.id}"] [data-acao="cancelar"]`).click();
+    await aposConfirmar(novo.id);
+    // Cancelar AGORA pelo cartão: o usuário nunca saiu da Biblioteca.
+    await page.locator('.acompanhamento-item button', { hasText: 'Cancelar' }).first().click();
     assert.equal((await terminal(novo.id)).estado, 'cancelado');
     assert.match((await req('/api/biblioteca/f6-ui-1/resumo')).texto, /Resumo controlado/);
     modo.bloquear = false; modo.texto = 'Resumo novo da interface.';
-    await page.locator(`.trabalho[data-id="${novo.id}"] [data-acao="repetir"]`).click();
+    await page.locator('.acompanhamento-item button', { hasText: 'Repetir' }).first().click();
     assert.equal((await terminal(novo.id)).estado, 'concluido');
     await nav('biblioteca');
     await page.waitForFunction(() => document.querySelector('tr[data-id="f6-ui-1"] .resumo-linha')?.textContent.includes('Resumo novo'));
@@ -138,11 +158,15 @@ try {
     await nav('biblioteca'); modo.status = 401;
     await page.locator('#gerar-resumos-selecao').click();
     await page.waitForFunction(() => !document.querySelector('#resumos-confirmar').disabled);
-    await page.locator('#resumos-confirmar').click(); await page.waitForURL('**/#importacoes');
+    await page.locator('#resumos-confirmar').click();
     const novo = (await req('/api/trabalhos')).itens.find(j => j.estado !== 'concluido' && j.tipo === 'gerar-resumo');
     const t = await terminal(novo.id); assert.equal(t.estado, 'falhou'); assert.equal(t.erroCodigo, 'auth_invalido');
-    await page.waitForFunction(id => document.querySelector(`.trabalho[data-id="${id}"]`)?.textContent.includes('autenticação'), novo.id);
+    // A mensagem precisa estar onde o usuário está: no cartão, sem navegar.
+    await page.waitForFunction(id => document.querySelector(`.acompanhamento-item[data-id="${id}"]`)?.textContent.includes('autenticação'), novo.id);
     assert.match((await req('/api/biblioteca/f6-ui-1/resumo')).texto, /Resumo novo/);
+    // Importações continua acessível como OPÇÃO: o botão do cartão leva lá.
+    await page.locator('#acompanhamento-ir').click();
+    await page.waitForFunction(() => location.hash === '#importacoes');
     await page.screenshot({ path: join(evidencia, 'erro-provedor.png') });
   });
   await teste('Nenhuma exceção JavaScript e formulário em janela estreita', async () => {
@@ -173,8 +197,10 @@ try {
     await nav('biblioteca'); await page.locator('tr[data-id="f6-ui-1"] input').check();
     await page.locator('#gerar-resumos-selecao').click();
     await page.waitForFunction(() => !document.querySelector('#resumos-confirmar').disabled);
-    await page.locator('#resumos-confirmar').click(); await page.waitForURL('**/#importacoes');
+    await page.locator('#resumos-confirmar').click();
     const jobs = (await req('/api/trabalhos')).itens.filter(j => j.tipo === 'gerar-resumo');
+    const pendente = jobs.find(j => j.estado !== 'concluido') ?? jobs[0];
+    await aposConfirmar(pendente.id);
     for (const job of jobs) await terminal(job.id);
     assert.match((await req('/api/biblioteca/f6-ui-1/resumo')).texto, /Compatível/);
     assert.deepEqual(erros, []);

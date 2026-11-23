@@ -2179,9 +2179,15 @@ input[type='checkbox'] {
   border-top-color: transparent;
   animation: girar 0.7s linear infinite;
 }
+/*
+ * "Na fila" NÃO é o primário: azul translúcido com texto azul, na mesma
+ * família dos selos. Antes herdava o fundo de `--sucesso` e virava um bloco
+ * verde saturado — que a referência não tem em lugar nenhum.
+ */
 #confirmar-adicionar[data-estado='na-fila'] {
-  background: var(--sucesso);
-  border-color: var(--sucesso);
+  background: var(--azul-fraco);
+  border-color: color-mix(in srgb, var(--azul) 45%, transparent);
+  color: var(--azul);
 }
 #confirmar-adicionar[data-estado='erro'] {
   background: var(--erro-fraco);
@@ -3188,4 +3194,220 @@ dialog p {
 @media (prefers-reduced-motion: reduce) {
   .tabela-trabalhos tbody tr[data-destaque='true'] { animation: none; }
   .trilho-progresso > span { transition: none; }
+}
+
+/* ------------------------------------------- biblioteca: linha provisória */
+/*
+ * Linha que representa uma importação em andamento (F6-B, parte A).
+ *
+ * Distinção visual sem cor como único sinal: fundo levemente elevado, borda
+ * esquerda tracejada, título em itálico e indicador com TEXTO ("Na fila",
+ * "Importando"). Quem não distingue matiz continua lendo o estado.
+ */
+tr.linha-provisoria > td {
+  background: color-mix(in srgb, var(--azul) 5%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--borda) 60%, transparent);
+}
+tr.linha-provisoria > td:first-child {
+  box-shadow: inset 2px 0 0 var(--azul);
+}
+tr.linha-provisoria.provisoria-falhou > td {
+  background: color-mix(in srgb, var(--erro) 7%, transparent);
+}
+tr.linha-provisoria.provisoria-falhou > td:first-child {
+  box-shadow: inset 2px 0 0 var(--erro);
+}
+.titulo-provisorio {
+  font-style: italic;
+  color: var(--texto);
+}
+.miniatura-provisoria {
+  position: relative;
+  overflow: hidden;
+}
+.miniatura-vazia-provisoria {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(100deg, transparent 30%, color-mix(in srgb, var(--texto-forte) 7%, transparent) 50%, transparent 70%),
+    var(--grafite-800);
+  background-size: 220% 100%, 100% 100%;
+  animation: brilho-provisorio 1.6s ease-in-out infinite;
+}
+@keyframes brilho-provisorio {
+  from { background-position: 130% 0, 0 0; }
+  to { background-position: -30% 0, 0 0; }
+}
+.miniatura-progresso {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: color-mix(in srgb, var(--azul) 30%, transparent);
+  overflow: hidden;
+}
+.miniatura-progresso::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: var(--azul);
+  animation: correr-provisorio 1.5s linear infinite;
+}
+@keyframes correr-provisorio {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(250%); }
+}
+.indicador-processamento {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  color: var(--texto-fraco);
+}
+.indicador-processamento[data-tipo='executando'] { color: var(--azul); }
+.indicador-processamento[data-tipo='erro'] { color: var(--erro); }
+.barra-provisoria {
+  display: inline-block;
+  width: 54px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--trilho);
+  overflow: hidden;
+}
+.barra-provisoria > span {
+  display: block;
+  height: 100%;
+  background: var(--azul);
+  transition: width 0.3s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .miniatura-vazia-provisoria { animation: none; }
+  .miniatura-progresso::after { animation: none; width: 100%; }
+}
+
+/* ------------------------------------------------ cartão de acompanhamento */
+/*
+ * Região não-modal, fixa no canto inferior direito.
+ *
+ * Por que não modal: o pedido é explícito — acompanhar resumo/importação não
+ * pode bloquear o app nem obrigar a sair da tela. Um modal prenderia foco e
+ * esconderia a Biblioteca; este cartão convive com ela.
+ *
+ * Em janelas estreitas ele ocupa a largura toda e sobe acima do rodapé, para
+ * não competir com a navegação inferior.
+ */
+.cartao-acompanhamento {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 60;
+  width: min(340px, calc(100vw - 32px));
+  border: 1px solid var(--borda-forte);
+  border-radius: 12px;
+  background: var(--grafite-850);
+  box-shadow: 0 18px 40px -18px rgba(0, 0, 0, 0.9);
+  overflow: hidden;
+}
+.acompanhamento-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 10px 9px 13px;
+  border-bottom: 1px solid var(--borda);
+  background: var(--grafite-900);
+}
+.acompanhamento-topo h2 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--texto-forte);
+}
+.acompanhamento-corpo {
+  display: grid;
+  gap: 9px;
+  padding: 11px 13px;
+  max-height: 40vh;
+  overflow: auto;
+}
+.cartao-acompanhamento[data-recolhido='true'] .acompanhamento-corpo,
+.cartao-acompanhamento[data-recolhido='true'] .acompanhamento-acoes {
+  display: none;
+}
+.acompanhamento-item {
+  display: grid;
+  gap: 5px;
+}
+.acompanhamento-linha {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.acompanhamento-nome {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--texto-forte);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.acompanhamento-situacao {
+  font-size: 10.5px;
+  color: var(--texto-fraco);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.acompanhamento-item[data-estado='falhou'] .acompanhamento-situacao { color: var(--erro); }
+.acompanhamento-item[data-estado='concluido'] .acompanhamento-situacao { color: var(--sucesso); }
+.acompanhamento-barra {
+  display: block;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--trilho);
+  overflow: hidden;
+}
+.acompanhamento-barra > span {
+  display: block;
+  height: 100%;
+  background: var(--azul);
+  transition: width 0.3s;
+}
+.acompanhamento-barra[data-indeterminada='sim'] {
+  background-image: repeating-linear-gradient(
+    115deg, transparent 0 6px,
+    color-mix(in srgb, var(--texto-fraco) 22%, transparent) 6px 12px
+  );
+}
+.acompanhamento-item[data-estado='concluido'] .acompanhamento-barra > span { background: var(--sucesso); }
+/* Em falha, a barra fica VAZIA (trilho neutro): uma barra vermelha cheia
+   sugeriria "concluído com erro", que é o oposto do que aconteceu. O estado
+   em texto e a mensagem é que informam. */
+.acompanhamento-item[data-estado='falhou'] .acompanhamento-barra > span { background: transparent; }
+.acompanhamento-erro {
+  margin: 0;
+  font-size: 11px;
+  color: var(--erro);
+}
+.acompanhamento-acoes {
+  display: flex;
+  gap: 6px;
+  padding: 9px 13px;
+  border-top: 1px solid var(--borda);
+  background: var(--grafite-900);
+}
+.acompanhamento-acoes .botao-secundario {
+  padding: 4px 9px;
+  font-size: 11px;
+}
+@media (max-width: 640px) {
+  .cartao-acompanhamento {
+    right: 8px;
+    left: 8px;
+    bottom: 8px;
+    width: auto;
+  }
 }

@@ -4,6 +4,7 @@ import { criarArvore } from './arvore-organizacao.js';
 import { criarAdicionarLink } from './adicionar-link.js';
 import { criarResumosUI } from './resumos.js';
 import { criarTrabalhos } from './trabalhos.js';
+import { criarAcompanhamento } from './acompanhamento.js';
 
 /**
  * Interface do ContextFlow — camada de apresentação.
@@ -128,6 +129,19 @@ async function carregarBiblioteca() {
   await Promise.all([bibliotecaUI.carregar(), bibliotecaUI.carregarOpcoes()]);
 }
 
+/*
+ * Cartão de acompanhamento: criado antes de resumos/fila porque os dois o
+ * usam para "não tirar o usuário da tela". `aoMudar` força um ciclo imediato
+ * da fila depois de cancelar/repetir — sem isso, o botão só refletiria o novo
+ * estado no próximo segundo do polling.
+ */
+const acompanhamentoUI = criarAcompanhamento({
+  api,
+  $,
+  aoIrParaImportacoes: () => mostrarTela('importacoes'),
+  aoMudar: () => carregarTrabalhos(),
+});
+
 const painelUIReal = criarPainel({ api, aoResumir: id => resumosUI.abrir([id]), aoHistorico: id => resumosUI.abrirHistorico(id) });
 painelUI = painelUIReal;
 
@@ -144,19 +158,95 @@ const arvoreUI = criarArvore({
   aoLimpar: () => bibliotecaUI.limparFiltros(),
 });
 
+/*
+ * Importação pela janela "Adicionar link" (F6-B, parte A).
+ *
+ * Fluxo, na ordem em que o usuário vê:
+ *   1. o backend aceita e a janela fecha;
+ *   2. a Biblioteca ganha uma LINHA PROVISÓRIA com "Na fila"/"Importando";
+ *   3. a cada ciclo da fila a provisória recebe o que o motor já sabe
+ *      (título, miniatura, videoId) — sem segunda fila e sem inventar dados;
+ *   4. quando o vídeo existe na API, a provisória sai e a linha real ocupa o
+ *      lugar dela (reconciliação por `videoId`, sem duplicar);
+ *   5. em falha, a provisória sai e o aviso aponta Importações.
+ */
+const acompanhamentoProvisorio = new Map(); // trabalhoId -> { chave, colecaoId }
+
 const adicionarLinkUI = criarAdicionarLink({
   api,
-  aoEnfileirar: (id) => {
-    estado.pendentes.add(id);
-    void carregarTrabalhos();
+  aoAceitar: async ({ trabalhoId, tipo, url, colecaoId, titulo, videoId, video }) => {
+    /*
+     * Dois desfechos possíveis, e a interface não mente sobre nenhum:
+     *
+     *  A) a rota respondeu com o vídeo (caso atual) — o vídeo JÁ existe. A
+     *     provisória nasce concluída só para dar o feedback imediato de
+     *     "entrou", e é removida no mesmo ciclo, com a Biblioteca recarregada.
+     *     Isto é o que o pedido chama de feedback imediato: linha na tela,
+     *     sem esperar a próxima pintura.
+     *  B) a rota respondeu 202 com um trabalho — a provisória acompanha a fila
+     *     até o vídeo existir (fluxo de polling em `sincronizarProvisorias`).
+     */
+    if (video?.id) {
+      if (estado.tela !== 'biblioteca') mostrarTela('biblioteca');
+      // Coleção: agora é possível vincular, porque o vídeo existe. Corrigido o
+      // contrato (`{ videoIds: [...] }`) e a falha passa a ser visível.
+      if (colecaoId) {
+        try {
+          await api(`/api/colecoes/${encodeURIComponent(colecaoId)}/videos`, {
+            method: 'POST',
+            body: JSON.stringify({ videoIds: [video.id] }),
+          });
+        } catch (erro) {
+          $('#resultado-biblioteca').textContent =
+            `Vídeo importado, mas não entrou na coleção: ${erro.message}`;
+        }
+      }
+      $('#resultado-biblioteca').dataset.tipo = 'ok';
+      $('#resultado-biblioteca').textContent = `“${video.titulo ?? titulo ?? 'Vídeo'}” importado e adicionado à Biblioteca.`;
+      await carregarBiblioteca();
+      await carregarTrabalhos();
+      void arvoreUI.carregar();
+      return;
+    }
+
+    if (!trabalhoId) {
+      $('#resultado-biblioteca').dataset.tipo = 'erro';
+      $('#resultado-biblioteca').textContent = 'O motor aceitou a importação, mas não informou vídeo nem trabalho. Veja Importações.';
+      await carregarTrabalhos();
+      return;
+    }
+
+    estado.pendentes.add(trabalhoId);
+    const chave = bibliotecaUI.adicionarProvisoria({
+      trabalhoId, tipo, url, titulo, videoId, colecaoId,
+      estado: 'na-fila',
+    });
+    acompanhamentoProvisorio.set(trabalhoId, { chave, colecaoId });
+    $('#resultado-biblioteca').dataset.tipo = 'pendente';
+    $('#resultado-biblioteca').textContent = 'Importação na fila. A linha provisória está no topo da Biblioteca.';
+    if (estado.tela !== 'biblioteca') mostrarTela('biblioteca');
+    await carregarTrabalhos();
+    await carregarBiblioteca();
   },
 });
 const resumosUI = criarResumosUI({ api, aoSalvar: () => void carregarConfiguracoes(), aoEnfileirar: async resultado => {
+  /*
+   * Antes: `mostrarTela('importacoes')` — o usuário era ARRANCADO da leitura
+   * só por ter pedido um resumo. Agora:
+   *   - permanece onde estava;
+   *   - o cartão de acompanhamento mostra fila/execução e permite cancelar;
+   *   - a Biblioteca se atualiza sozinha quando cada trabalho termina.
+   * Importações continua acessível, como opção (botão no cartão).
+   */
   for (const t of resultado.trabalhos) estado.pendentes.add(t.id);
   painelUI?.fechar();
   $('#resultado-biblioteca').textContent = `${resultado.trabalhos.length} trabalho(s) de resumo; ${resultado.reutilizados.length} já pronto(s); ${resultado.ignorados.length} ignorado(s).`;
-  if (resultado.trabalhos.length) { mostrarTela('importacoes'); await carregarTrabalhos(); }
-  else await carregarBiblioteca();
+  if (resultado.trabalhos.length) {
+    acompanhamentoUI.acompanhar(resultado.trabalhos.map(t => t.id));
+    await carregarTrabalhos();
+  } else {
+    await carregarBiblioteca();
+  }
 } });
 
 /* --------------------------------------------------------- importações ---- */
@@ -558,11 +648,86 @@ const trabalhosUI = criarTrabalhos({
     estado.pendentes.delete(t.id);
     if (t.tipo === 'gerar-resumo' && t.videoId) bibliotecaUI.invalidarResumos([t.videoId]);
     if (t.id === estado.ultimoTrabalho) mostrarResultadoTrabalho(t);
+    await reconciliarProvisoria(t);
+    // O cartão precisa ver o estado terminal mesmo que o trabalho já tenha
+    // saído da primeira página; `absorver` recebe a lista completa dela.
+    acompanhamentoUI.absorver(trabalhosUI.itens);
     await carregarBiblioteca();
     void arvoreUI.carregar();
   },
-  aoMudarAtivos: (ativos) => desenharAtividadeBiblioteca(ativos),
+  aoMudarAtivos: (ativos) => {
+    desenharAtividadeBiblioteca(ativos);
+    acompanhamentoUI.absorver(trabalhosUI.itens);
+    void sincronizarProvisorias(ativos);
+    // Reconciliação de segurança: se o vídeo já entrou na API por outro
+    // caminho (reload, outra aba), a provisória equivalente sai.
+    if (bibliotecaUI.reconciliarProvisorias() > 0) void carregarBiblioteca();
+  },
 });
+
+/**
+ * Aplica ao estado da linha provisória o que o trabalho já sabe.
+ *
+ * Chamada a cada ciclo do polling (milissegundos de diferença, não uma segunda
+ * fonte de dados). Quando o trabalho termina, a linha sai e — se deu certo —
+ * o vínculo de coleção é feito aqui, porque `videoId` só existe no fim.
+ */
+async function sincronizarProvisorias(ativos) {
+  for (const t of ativos ?? []) {
+    const acompanhamento = acompanhamentoProvisorio.get(t.id);
+    if (!acompanhamento) continue;
+    bibliotecaUI.atualizarProvisoria(acompanhamento.chave, {
+      estado: t.estado,
+      fase: t.fase ? (FASES[t.fase] ?? t.fase) : null,
+      progresso: typeof t.progresso === 'number' ? t.progresso : null,
+      titulo: t.titulo ?? t.resultado?.video?.titulo ?? null,
+      videoId: t.videoId ?? t.resultado?.video?.id ?? null,
+      canalNome: t.resultado?.video?.canalNome ?? null,
+      duracaoSegundos: t.resultado?.video?.duracaoSegundos ?? null,
+      miniaturaUrl: t.resultado?.video?.miniaturaUrl ?? null,
+    });
+  }
+}
+
+async function reconciliarProvisoria(t) {
+  const acompanhamento = acompanhamentoProvisorio.get(t.id);
+  if (!acompanhamento) return;
+  acompanhamentoProvisorio.delete(t.id);
+
+  const videoId = t.videoId ?? t.resultado?.video?.id ?? null;
+  if (t.estado === 'concluido' && videoId) {
+    // Deu certo: a linha real passa a existir. O vínculo de coleção é feito
+    // agora porque o vídeo só existe agora — e a FALHA é reportada, em vez de
+    // engolida (o `catch` vazio anterior escondia um contrato errado).
+    if (acompanhamento.colecaoId) {
+      try {
+        await api(`/api/colecoes/${encodeURIComponent(acompanhamento.colecaoId)}/videos`, {
+          method: 'POST',
+          // Contrato real: `{ videoIds: string[] }` (a rota valida o array).
+          body: JSON.stringify({ videoIds: [videoId] }),
+        });
+        bibliotecaUI.recarregarOpcoes?.();
+        void arvoreUI.carregar();
+      } catch (erro) {
+        $('#resultado-biblioteca').textContent =
+          `Vídeo importado, mas não entrou na coleção: ${erro.message}`;
+      }
+    }
+    // A provisória só sai depois que a Biblioteca recarregar; a deduplicação
+    // por `videoId` evita piscar uma linha a menos no intervalo.
+    bibliotecaUI.atualizarProvisoria(acompanhamento.chave, { estado: 'concluido', videoId });
+    await carregarBiblioteca();
+    bibliotecaUI.removerProvisoria(acompanhamento.chave);
+  } else {
+    // Falhou/cancelou: sai da Biblioteca (o registro fica em Importações) e o
+    // usuário é avisado, sem modal e sem tirá-lo da tela.
+    bibliotecaUI.removerProvisoria(acompanhamento.chave);
+    $('#resultado-biblioteca').textContent = t.estado === 'cancelado'
+      ? 'Importação cancelada. O registro continua em Importações.'
+      : `A importação falhou: ${t.erro ?? 'veja os detalhes em Importações.'}`;
+    await carregarBiblioteca();
+  }
+}
 
 async function carregarTrabalhos() {
   await trabalhosUI.carregar();
@@ -652,6 +817,7 @@ function ligarEventos() {
   // conecta pesquisa, filtros, ordenação, "carregar mais" e ações em lote.
   trabalhosUI.montar($('#lista-trabalhos'));
   trabalhosUI.ligarControles();
+  acompanhamentoUI.ligar();
 
   window.addEventListener('hashchange', () => mostrarTela(telaDaUrl()));
 }

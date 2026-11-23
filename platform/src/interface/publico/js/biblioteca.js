@@ -63,6 +63,22 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel, aoResumir })
   const ordemColunas = Object.keys(colunasPadrao);
 
   const selecionados = new Set();
+  /*
+   * Entradas PROVISÓRIAS (F6-B, parte A).
+   *
+   * São linhas que existem só na apresentação enquanto a importação que o
+   * usuário acabou de pedir está na fila. Regras que este mapa preserva:
+   *
+   *  - não é uma fila paralela: cada provisória guarda o `trabalhoId` e o
+   *    estado vem do MESMO registro de trabalhos do motor;
+   *  - não vira registro persistente: nada é escrito no banco por causa dela;
+   *  - reconciliar por `videoId` quando o trabalho terminar, sem duplicar a
+   *    linha que a API passará a devolver.
+   *
+   * `chave` é `trabalho:<id>` (vídeo) ou `lote:<id>` (playlist/lote, que vira
+   * várias linhas): a chave é o que evita a duplicata na reconciliação.
+   */
+  let provisorias = [];
   let itens = [];
   let total = 0;
   let cursor = null;
@@ -274,10 +290,12 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel, aoResumir })
     const posicao = posicaoInformada ?? (viewport.offsetParent === null ? posicaoSalva : viewport.scrollTop);
     const inicio = Math.max(0, Math.floor((posicao - cabecalho) / altura) - MARGEM_ACIMA);
     const fimBruto = Math.ceil((posicao + (viewport.clientHeight || 600) - cabecalho) / altura) + MARGEM_ABAIXO;
-    // Limite é `itens.length`, NÃO `total`: a lista paginada é a fonte do que
-    // existe para desenhar. Usar `total` fazia a janela pedir índices ainda não
-    // carregados, `exibidos` saía vazio e a lista parecia pular de posição.
-    return { inicio: Math.min(inicio, itens.length), fim: Math.min(itens.length, Math.max(inicio, fimBruto)) };
+    // Limite é a lista carregada, NÃO `total`: a lista paginada é a fonte do
+    // que existe para desenhar. Usar `total` fazia a janela pedir índices ainda
+    // não carregados, `exibidos` saía vazio e a lista parecia pular de posição.
+    // As provisórias somam porque ocupam espaço real na janela.
+    const limite = itens.length + provisorias.length;
+    return { inicio: Math.min(inicio, limite), fim: Math.min(limite, Math.max(inicio, fimBruto)) };
   }
 
   function linhasVisiveis() {
@@ -620,6 +638,149 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel, aoResumir })
     return tr;
   }
 
+  /**
+   * Linha PROVISÓRIA de uma importação em andamento.
+   *
+   * Existe porque o pedido é explícito: ao aceitar a importação, a janela
+   * fecha, o usuário continua na Biblioteca e a linha aparece ali, com
+   * indicador de processamento — sem esperar o backend criar o vídeo.
+   *
+   * O que ela NÃO faz:
+   *  - não é selecionável (não há id de vídeo ainda);
+   *  - não abre painel nem link (não há conteúdo);
+   *  - não entra em `itens`, `total` nem em nenhuma requisição.
+   *
+   * A miniatura/título reais chegam quando o motor tiver metadados: nesse
+   * ponto o trabalho traz `videoId` e `titulo`, e `atualizarProvisoria`
+   * reescreve só o que mudou.
+   */
+  function linhaProvisoria(p) {
+    const tr = document.createElement('tr');
+    tr.className = 'linha-provisoria';
+    tr.dataset.provisorio = p.chave;
+    if (p.videoId) tr.dataset.id = p.videoId;
+    tr.dataset.estado = p.estado;
+
+    // 1. seleção: vazia de propósito. O `aria-label` mantém a coluna alinhada
+    //    para leitor de tela sem prometer um controle que não existe ainda.
+    const tdSelecao = document.createElement('td');
+    tdSelecao.className = 'col-selecao';
+    tdSelecao.setAttribute('aria-hidden', 'true');
+    tr.append(tdSelecao);
+
+    // 2. vídeo: miniatura provisória + título + situação
+    const tdVideo = document.createElement('td');
+    tdVideo.dataset.coluna = 'titulo';
+    const celula = document.createElement('div');
+    celula.className = 'celula-video';
+
+    const caixaMini = document.createElement('div');
+    caixaMini.className = 'miniatura miniatura-provisoria';
+    if (p.miniaturaUrl) {
+      const img = document.createElement('img');
+      img.className = 'miniatura-imagem';
+      img.alt = '';
+      img.loading = 'lazy';
+      img.src = p.miniaturaUrl;
+      caixaMini.append(img);
+    } else {
+      const vazia = document.createElement('div');
+      vazia.className = 'miniatura-vazia-provisoria';
+      vazia.setAttribute('aria-hidden', 'true');
+      caixaMini.append(vazia);
+    }
+    const progresso = document.createElement('div');
+    progresso.className = 'miniatura-progresso';
+    progresso.setAttribute('role', 'presentation');
+    caixaMini.append(progresso);
+
+    const blocoTexto = document.createElement('div');
+    blocoTexto.className = 'celula-video-texto';
+
+    const nome = document.createElement('span');
+    nome.className = 'titulo-video titulo-provisorio';
+    nome.textContent = p.titulo ?? 'Importando vídeo…';
+    if (p.titulo) nome.title = p.titulo;
+
+    const sub = document.createElement('div');
+    sub.className = 'video-sub';
+    sub.append(indicadorProcessamento(p));
+
+    blocoTexto.append(nome, sub);
+    celula.append(caixaMini, blocoTexto);
+    tdVideo.append(celula);
+    tr.append(tdVideo);
+
+    // 3–6. colunas vazias, na ordem do cabeçalho: canal, duração, adicionado,
+    //      estado. Valores provisórios em texto, nunca "—" sozinho.
+    const tdCanal = textoTd(p.canalNome ?? '—');
+    tdCanal.dataset.coluna = 'canal';
+    tdCanal.classList.add('celula-canal');
+    const tdDuracao = textoTd(Number.isFinite(p.duracaoSegundos) ? duracao(p.duracaoSegundos) : '—');
+    tdDuracao.dataset.coluna = 'duracao';
+    tdDuracao.classList.add('celula-duracao');
+    const tdAdicionado = textoTd(p.criadoEm ? dataCurta(p.criadoEm) : 'agora');
+    tdAdicionado.dataset.coluna = 'adicionado';
+    tdAdicionado.classList.add('celula-data');
+    const tdEstado = document.createElement('td');
+    tdEstado.dataset.coluna = 'estado';
+    tdEstado.append(selo(p.estado === 'falhou' ? 'erro' : p.estado === 'na-fila' ? 'novo' : 'importando',
+      p.estado === 'falhou' ? 'Falhou' : p.estado === 'na-fila' ? 'Na fila' : 'Importando'));
+    tr.append(tdCanal, tdDuracao, tdAdicionado, tdEstado);
+
+    // 7–8. resumo e transcrição: ainda não existem. A célula diz o motivo em
+    //      texto, para a linha não parecer "carregando para sempre".
+    const tdResumo = document.createElement('td');
+    tdResumo.dataset.coluna = 'resumo';
+    tdResumo.className = 'celula-resumo';
+    const semResumo = document.createElement('p');
+    semResumo.className = 'resumo-vazio';
+    semResumo.textContent = p.estado === 'falhou'
+      ? p.erro ?? 'A importação falhou. Veja os detalhes em Importações.'
+      : 'O resumo será gerado depois da transcrição.';
+    tdResumo.append(semResumo);
+    const tdResumoEstado = document.createElement('td');
+    tdResumoEstado.dataset.coluna = 'resumo-estado';
+    tdResumoEstado.append(selo('sem', p.estado === 'falhou' ? 'Sem resumo' : 'Aguardando'));
+    tr.append(tdResumo, tdResumoEstado);
+
+    if (p.estado === 'falhou') tr.classList.add('provisoria-falhou');
+    return tr;
+  }
+
+  /** Indicador de processamento — barra animada ou spinner + texto. */
+  function indicadorProcessamento(p) {
+    const caixa = document.createElement('span');
+    caixa.className = 'indicador-processamento';
+    caixa.setAttribute('role', 'status');
+    const texto = document.createElement('span');
+    if (p.estado === 'falhou') {
+      caixa.dataset.tipo = 'erro';
+      texto.textContent = 'Importação falhou';
+    } else if (p.estado === 'na-fila') {
+      caixa.dataset.tipo = 'fila';
+      texto.textContent = 'Na fila de importação';
+    } else {
+      caixa.dataset.tipo = 'executando';
+      texto.textContent = p.fase ? `Importando · ${p.fase}` : 'Importando…';
+    }
+    caixa.append(texto);
+    // Percentual só quando o motor informa; aqui a barra é indeterminada.
+    if (typeof p.progresso === 'number' && Number.isFinite(p.progresso)) {
+      const barra = document.createElement('span');
+      barra.className = 'barra-provisoria';
+      barra.setAttribute('role', 'progressbar');
+      barra.setAttribute('aria-valuenow', String(Math.round(p.progresso * 100)));
+      barra.setAttribute('aria-valuemin', '0');
+      barra.setAttribute('aria-valuemax', '100');
+      const preenchimento = document.createElement('span');
+      preenchimento.style.width = `${Math.round(p.progresso * 100)}%`;
+      barra.append(preenchimento);
+      caixa.append(barra);
+    }
+    return caixa;
+  }
+
   function textoTd(texto, classe) {
     const td = document.createElement('td');
     td.textContent = texto;
@@ -645,13 +806,32 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel, aoResumir })
 
   // ------------------------------------------------------------- renderização
 
+  /**
+   * Lista efetivamente desenhada: provisórias na frente, depois a página da
+   * API. A deduplicação é por `id` de vídeo — quando a API já devolve o vídeo
+   * que a provisória representava, a provisória sai (é a reconciliação).
+   */
+  function itensVisiveis() {
+    if (!provisorias.length) return itens;
+    const jaNaApi = new Set(itens.map((v) => v.id));
+    const restantes = provisorias
+      .filter((p) => !(p.videoId && jaNaApi.has(p.videoId)))
+      // `id` é a identidade de VÍDEO (usada em seleção/link, que a provisória
+      // não tem). A identidade de LINHA é `chaveLinha` — se as duas fossem o
+      // mesmo campo, a troca de `videoId` durante o acompanhamento mudaria a
+      // posição da linha no cache da virtualização.
+      .map((p) => ({ ...p, id: p.videoId ?? p.chave, chaveLinha: p.chave, provisorio: true }));
+    return [...restantes, ...itens];
+  }
+
   function renderizar() {
     quadro = null;
     const altura = alturaLinha();
     const posicao = ancoraAltura ?? posicaoPendente ?? viewport.scrollTop;
     posicaoPendente = null;
     const { inicio, fim } = intervalo(posicao);
-    const exibidos = itens.slice(inicio, fim);
+    const visivel = itensVisiveis();
+    const exibidos = visivel.slice(inicio, fim);
 
     const cabecalho = tabela.tHead?.offsetHeight ?? 38;
     const primeiroVisivel = Math.floor(posicao / altura);
@@ -670,13 +850,18 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel, aoResumir })
 
     exibidos.forEach((video, i) => {
       const indice = inicio + i;
-      const anterior = linhasAtuais.get(video.id);
+      // Chave de linha: `chaveLinha` para provisória, `id` para vídeo real.
+      const chaveLinha = video.chaveLinha ?? video.id;
+      const anterior = linhasAtuais.get(chaveLinha);
       const reutilizavel = anterior?.video === video
         && anterior.indice === indice
         && anterior.altura === altura
         && anterior.versaoPrevias === versaoPrevias;
-      const elemento = reutilizavel ? anterior.elemento : linha(video, indice);
-      proximas.set(video.id, { video, indice, elemento, altura, versaoPrevias });
+      // `provisorio` vem marcado em `itensVisiveis`; a linha não tem id de
+      // vídeo e por isso não passa por seleção, painel ou link.
+      const elemento = reutilizavel ? anterior.elemento
+        : video.provisorio ? linhaProvisoria(video) : linha(video, indice);
+      proximas.set(chaveLinha, { video, indice, elemento, altura, versaoPrevias });
       nodes.push(elemento);
       if (indice >= primeiroVisivel && indice < ultimoVisivel) visiveis.push(elemento);
     });
@@ -712,7 +897,7 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel, aoResumir })
     viewport.dataset.modo = modo;
     atualizarSelecao(visiveis);
 
-    if (fim >= itens.length && itens.length < total && cursor && !carregando && !falhaPagina) {
+    if (fim >= visivel.length && itens.length < total && cursor && !carregando && !falhaPagina) {
       void carregarMais(fim + PAGINA);
     }
 
@@ -1374,6 +1559,89 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel, aoResumir })
   }
 
   return {
+    /**
+     * Registra uma importação em andamento como linha provisória.
+     *
+     * `dados` = { trabalhoId, url, titulo?, tipo, chave? }. Devolve a chave
+     * para o chamador atualizar/remover depois.
+     *
+     * A chave é `lote:<trabalhoId>` para playlist/lote (uma linha só, que
+     * representa N vídeos) e `trabalho:<trabalhoId>` para vídeo único.
+     * Deduplicação: registrar de novo a mesma chave substitui, não duplica —
+     * protege contra duplo clique e contra o reload do painel de resumo.
+     */
+    adicionarProvisoria(dados) {
+      const chave = dados.chave ?? `${dados.tipo === 'importar-video' ? 'trabalho' : 'lote'}:${dados.trabalhoId}`;
+      const existente = provisorias.findIndex((p) => p.chave === chave);
+      const nova = {
+        chave,
+        trabalhoId: dados.trabalhoId,
+        tipo: dados.tipo ?? 'importar-video',
+        url: dados.url ?? '',
+        titulo: dados.titulo ?? null,
+        canalNome: dados.canalNome ?? null,
+        duracaoSegundos: Number.isFinite(dados.duracaoSegundos) ? dados.duracaoSegundos : null,
+        miniaturaUrl: dados.miniaturaUrl ?? null,
+        videoId: dados.videoId ?? null,
+        estado: dados.estado ?? 'na-fila',
+        fase: dados.fase ?? null,
+        progresso: typeof dados.progresso === 'number' ? dados.progresso : null,
+        erro: dados.erro ?? null,
+        criadoEm: dados.criadoEm ?? new Date().toISOString(),
+      };
+      if (existente >= 0) provisorias[existente] = { ...provisorias[existente], ...nova };
+      else provisorias = [nova, ...provisorias];
+      linhasAtuais.delete(nova.videoId ?? chave);
+      if (viewport.offsetParent !== null) viewport.scrollTop = 0;
+      agendar();
+      return chave;
+    },
+
+    /**
+     * Atualiza uma provisória com o que o motor já sabe (título, miniatura,
+     * videoId, fase, progresso). Não reordena nem rola a lista.
+     */
+    atualizarProvisoria(chave, mudancas) {
+      const alvo = provisorias.find((p) => p.chave === chave);
+      if (!alvo) return false;
+      // Só redesenha se algo mudou de fato: o polling chama isto a cada
+      // segundo, e redesenhar sempre invalidaria o cache de linha de graça.
+      let mudou = false;
+      for (const [campo, valor] of Object.entries(mudancas)) {
+        if (valor === undefined) continue;
+        if (alvo[campo] !== valor) { alvo[campo] = valor; mudou = true; }
+      }
+      if (!mudou) return false;
+      linhasAtuais.delete(alvo.videoId ?? chave);
+      agendar();
+      return true;
+    },
+
+    /** Remove a provisória (falha, cancelamento ou fim da reconciliação). */
+    removerProvisoria(chave) {
+      const antes = provisorias.length;
+      provisorias = provisorias.filter((p) => p.chave !== chave);
+      if (provisorias.length !== antes) {
+        agendar();
+        return true;
+      }
+      return false;
+    },
+
+    /**
+     * Reconcilia com o registro definitivo: quando a API já devolve o vídeo,
+     * a provisória equivalente sai (a deduplicação por `videoId` em
+     * `itensVisiveis` também cobre o caso de o reload chegar antes).
+     */
+    reconciliarProvisorias() {
+      if (!provisorias.length) return 0;
+      const ids = new Set(itens.map((v) => v.id));
+      const antes = provisorias.length;
+      provisorias = provisorias.filter((p) => !(p.videoId && ids.has(p.videoId)));
+      return antes - provisorias.length;
+    },
+
+    get provisorias() { return provisorias.map((p) => ({ ...p })); },
     invalidarResumos(ids) {
       for (const id of ids) previas.delete(id);
       versaoPrevias++;
