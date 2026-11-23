@@ -15,6 +15,10 @@ ajustes foram preservados. F7 não iniciada; resultados atuais no estado.
 Depois, recuperada a capa do vídeo relatado (URL localizada404, JPEG padrão
 disponível), com alternativas automáticas/cache e tentativa manual conforme
 `docs/specs/f6a-recuperacao-miniaturas.md`. Prova real e testes no estado vigente.
+Na rodada seguinte, prompt/capa do painel corrigidos em `51ba4a9`; depois o
+painel horizontal de Visualização foi entregue conforme
+`docs/specs/f6a-painel-visualizacao.md`, exclusivamente no frontend. F7 permanece
+fora. Evidências e próximo passo no topo do estado atual.
 
 **Direção vigente (21/11/2026):** após trazer a entrega da Arena, o proprietário
 autorizou o Codex a implementar os refinamentos de alinhamento, leitura ampliada

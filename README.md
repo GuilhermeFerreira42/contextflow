@@ -6,10 +6,11 @@ timestamps, resumos por IA e leitura em planilha de alta densidade.
 Aplicativo local para **Windows e Linux** — motor em Node.js + TypeScript com interface
 web própria. Monólito modular. Chat sobre conteúdo é V2.
 
-> **Estado:** F1–F6 e ajustes pós-F6 implementados. Recuperação de capas:
-> Windows, 231 testes aprovados, seis ignorados; 57/57 CDP, 3/3 Playwright
-> de recuperação e 4/4 de layout. Capa do vídeo relatado recuperada e exibida
-> na aplicação real, sem conversão. Demais suítes/limites da rodada anterior em
+> **Estado:** F1–F6 e ajustes pós-F6 implementados. Visualização agora é um
+> painel horizontal compacto. Windows: 232 testes aprovados, seis ignorados;
+> 57/57 CDP; Playwright: 4/4 Visualização, 9/9 refinamentos e 13/13 pós-F6.
+> Prompt personalizado e capa do painel corrigidos em rodada separada.
+> Homologação humana pendente. Evidências/limites em
 > [`docs/estado-atual.md`](docs/estado-atual.md).
 
 ## Como rodar
@@ -35,6 +36,7 @@ integrada à Biblioteca, com resumo na linha e painel sobreposto.
 | `npm run test:e2e:refinamentos` | Playwright: lateral, arraste de colunas/altura e leitura com 5.000 vídeos descartáveis |
 | `npm run test:e2e:miniatura` | Playwright: crescimento da miniatura, título abaixo, slider/arraste reais, limites da coluna e reload |
 | `npm run test:e2e:capas` | Playwright: erro na capa, recuperação automática/manual, cache, leitura e reload |
+| `npm run test:e2e:visualizacao` | Playwright: painel horizontal, controles, restauros, persistência e responsividade |
 | `npm run test:e2e:pos-f6` | Playwright: oito ajustes de interface e fluxos pós-F6 |
 | `npm run test:e2e:resumos` | Playwright F6: configuração, estimativa, geração/fila, cancelamento/retry, leitura/cópia/histórico; provedor HTTP controlado |
 | `npm run verificar` | fumaça: sobe, confere endpoints e estáticos, derruba |

@@ -25,7 +25,8 @@
     "verificar": "node --experimental-sqlite --experimental-strip-types --disable-warning=ExperimentalWarning scripts/verificar.mjs",
     "test:e2e:pos-f6": "node --experimental-sqlite --experimental-strip-types --disable-warning=ExperimentalWarning testes/e2e/pos-f6.mjs",
     "test:e2e:miniatura": "node --experimental-sqlite --experimental-strip-types --disable-warning=ExperimentalWarning testes/e2e/miniatura-adaptativa.mjs",
-    "test:e2e:capas": "node --experimental-sqlite --experimental-strip-types --disable-warning=ExperimentalWarning testes/e2e/recuperacao-miniaturas.mjs"
+    "test:e2e:capas": "node --experimental-sqlite --experimental-strip-types --disable-warning=ExperimentalWarning testes/e2e/recuperacao-miniaturas.mjs",
+    "test:e2e:visualizacao": "node --experimental-sqlite --experimental-strip-types --disable-warning=ExperimentalWarning testes/e2e/painel-visualizacao.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

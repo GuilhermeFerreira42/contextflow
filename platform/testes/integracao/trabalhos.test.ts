@@ -109,11 +109,20 @@ async function ambiente(t: TestContext, concorrencia = 2) {
 test('202 persiste intenção antes da rede, fase indeterminada e navegação permanece disponível', async (t) => {
     const a = await ambiente(t);
     a.executor.bloquear = true;
+    let intencaoPersistida: string | null = null;
+    const inspecionar = a.executor.inspecionar.bind(a.executor);
+    a.executor.inspecionar = async (entrada, sinal) => {
+        // Verificar no instante da chamada externa. O executor pode começar
+        // antes de o cliente consumir o 202, sem violar a persistência da intenção.
+        const registro = a.app.banco.db.prepare("SELECT id,estado FROM trabalhos WHERE tipo='importar-video'").get();
+        if (registro?.estado === 'executando') intencaoPersistida = String(registro.id);
+        return inspecionar(entrada, sinal);
+    };
     const j = await a.criar();
     assert.equal(j.estado, 'na-fila');
     assert.equal(j.tentativas, 0);
-    assert.equal(a.executor.chamadas.length, 0);
-    const executando = await ate(() => a.obter(j.id), r => r.fase === 'metadados');
+    const executando = await ate(() => a.obter(j.id), r => r.fase === 'metadados' && a.executor.chamadas.length > 0);
+    assert.equal(intencaoPersistida, j.id);
     assert.equal(executando.progresso, null);
     assert.equal(executando.tentativas, 1);
     assert.equal((await fetch(a.base + '/api/saude')).status, 200);

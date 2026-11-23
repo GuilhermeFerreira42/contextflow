@@ -46,6 +46,18 @@ platform/src/interface/publico/
 A antiga tela `leitura` foi absorvida pela Biblioteca. `#leitura` na URL
 redireciona para `#biblioteca` para não quebrar link salvo; não existe aba.
 
+## Painel de Visualização
+
+`abrir-colunas` continua sendo o ID interno do único botão, agora rotulado
+Visualização. `painel-colunas` é a região horizontal antes da tabela, com
+colunas/larguras, altura e fonte; container queries reorganizam três/dois/um
+grupos pela largura real. Controles e persistência são os anteriores.
+Fechar/Escape recolhem e devolvem foco ao acesso; estado aberto não é persistido
+no reload. O restauro geral repõe campos do painel, preservando modo e leitura.
+A tela Biblioteca usa coluna flexível na altura disponível; seu viewport cresce
+ao recolher o painel e diminui ao expandir, sem trocar altura uniforme de linha.
+SPEC: `specs/f6a-painel-visualizacao.md`.
+
 ## Virtualização: a decisão mais importante
 
 A Biblioteca desenha **apenas a janela visível** de linhas, com dois

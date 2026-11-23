@@ -161,7 +161,7 @@
                 2. lote     — SÓ aparece com seleção ativa, agrupado por
                               assunto (vídeo | coleção), com o destrutivo
                               separado dos demais;
-                3. aparência — colunas, densidade e fonte, à direita.
+                3. aparência — Visualização e densidade, à direita.
 
               Nenhum controle foi removido. `#nova-colecao` continua aqui e
               também no painel de lote: é a ação que cria o destino usado pelo
@@ -195,8 +195,8 @@
             </div>
 
             <div class="ferramentas-visual">
-              <button type="button" class="botao-secundario" id="abrir-colunas" aria-expanded="false">
-                <svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="M15 4v16"/></svg> Colunas
+              <button type="button" class="botao-secundario" id="abrir-colunas" aria-expanded="false" aria-controls="painel-colunas">
+                <svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="M15 4v16"/></svg> Visualização
               </button>
               <div class="alternador-modo" role="group" aria-label="Densidade da linha">
                 <button type="button" class="modo-item ativo" data-modo="ampliado" title="Linhas ampliadas">
@@ -209,39 +209,7 @@
             </div>
           </div>
 
-          <!-- Painel de colunas -->
-          <div class="painel-colunas" id="painel-colunas" hidden>
-            <p class="painel-titulo">Colunas visíveis</p>
-            <div class="colunas-lista" id="colunas-lista"></div>
-            <p class="painel-nota">Arraste as divisórias do cabeçalho para ajustar a largura. Duplo clique restaura uma coluna.</p>
-            <button type="button" class="botao-secundario" id="restaurar-larguras">Restaurar larguras</button>
-
-            <!-- Altura das linhas do modo Ampliado. Fica junto de "Colunas"
-                 porque é a mesma família de ajuste: como a linha se apresenta. -->
-            <div class="ajuste-altura" id="ajuste-altura">
-              <label class="painel-titulo" for="altura-linhas">Altura das linhas</label>
-              <div class="altura-linha-controle">
-                <input type="range" id="altura-linhas" min="64" max="600" step="1" value="136" aria-describedby="altura-ajuda" />
-                <output class="altura-valor" id="altura-valor" for="altura-linhas">136 px</output>
-                <button type="button" class="botao-secundario botao-restaurar-altura" id="restaurar-altura">Padrão</button>
-              </div>
-              <p class="painel-nota" id="altura-ajuda">De 64 a 600 px no modo Ampliado. O modo Compacto mantém 64 px.</p>
-            </div>
-
-            <!-- Fonte do resumo: vale para a linha da grade e para o painel de
-                 leitura, porque os dois mostram o mesmo texto. -->
-            <div class="ajuste-fonte" id="ajuste-fonte">
-              <p class="painel-titulo" id="rotulo-fonte">Fonte do resumo</p>
-              <div class="fonte-controle" role="group" aria-labelledby="rotulo-fonte" aria-describedby="fonte-ajuda">
-                <button type="button" class="botao-fonte" id="diminuir-fonte" aria-label="Diminuir fonte do resumo">A<sup>−</sup></button>
-                <output class="fonte-valor" id="fonte-valor" aria-live="polite">13 px</output>
-                <button type="button" class="botao-fonte" id="aumentar-fonte" aria-label="Aumentar fonte do resumo">A<sup>+</sup></button>
-                <button type="button" class="botao-secundario botao-restaurar-fonte" id="restaurar-fonte">Padrão</button>
-              </div>
-              <p class="painel-nota" id="fonte-ajuda">De 11 a 20 px. Ajusta a leitura do resumo na grade e no painel.</p>
-            </div>
-          </div>
-
+          <!-- Aviso sobre a seleção -->
           <p id="aviso-selecao" class="contador" hidden>
             As ações incluem todos os IDs selecionados, inclusive fora do filtro atual.
           </p>
@@ -256,6 +224,46 @@
           -->
           <div class="faixa-atividade" id="atividade-biblioteca" role="status" aria-live="polite" hidden></div>
           <p id="resultado-biblioteca" role="status" aria-live="polite"></p>
+
+          <section class="painel-colunas painel-visualizacao" id="painel-colunas" aria-labelledby="titulo-visualizacao" hidden>
+            <div class="visualizacao-cabecalho">
+              <h2 id="titulo-visualizacao">Visualização</h2>
+              <button type="button" class="botao-secundario" id="restaurar-visualizacao" title="Restaurar colunas, larguras, altura e fonte">Restaurar padrões</button>
+              <button type="button" class="visualizacao-fechar" id="fechar-visualizacao" aria-label="Fechar visualização" title="Fechar visualização">
+                <svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+              </button>
+            </div>
+            <div class="visualizacao-grupos">
+              <div class="visualizacao-grupo visualizacao-colunas" role="group" aria-labelledby="rotulo-colunas">
+                <div class="visualizacao-colunas-topo">
+                  <h3 class="painel-titulo" id="rotulo-colunas">Colunas visíveis</h3>
+                  <button type="button" class="botao-secundario" id="restaurar-larguras" title="Arraste as divisórias da tabela para ajustar a largura; duplo clique restaura uma coluna">Restaurar larguras</button>
+                </div>
+                <div class="colunas-lista" id="colunas-lista"></div>
+              </div>
+              <div class="visualizacao-grupo ajuste-altura" id="ajuste-altura">
+                <label class="painel-titulo" for="altura-linhas">Altura das linhas</label>
+                <div class="altura-linha-controle">
+                  <input type="range" id="altura-linhas" min="64" max="600" step="1" value="136" aria-describedby="altura-ajuda" />
+                  <output class="altura-valor" id="altura-valor" for="altura-linhas">136 px</output>
+                  <button type="button" class="botao-secundario botao-restaurar-altura" id="restaurar-altura" aria-label="Restaurar altura padrão">Padrão</button>
+                </div>
+                <span class="visualizacao-limite" aria-hidden="true">64–600 px · Ampliado</span>
+                <p class="visualmente-oculto" id="altura-ajuda">De 64 a 600 px no modo Ampliado. O modo Compacto mantém 64 px.</p>
+              </div>
+              <div class="visualizacao-grupo ajuste-fonte" id="ajuste-fonte">
+                <h3 class="painel-titulo" id="rotulo-fonte">Fonte do resumo</h3>
+                <div class="fonte-controle" role="group" aria-labelledby="rotulo-fonte" aria-describedby="fonte-ajuda">
+                  <button type="button" class="botao-fonte" id="diminuir-fonte" aria-label="Diminuir fonte do resumo">A<sup>−</sup></button>
+                  <output class="fonte-valor" id="fonte-valor" aria-live="polite">13 px</output>
+                  <button type="button" class="botao-fonte" id="aumentar-fonte" aria-label="Aumentar fonte do resumo">A<sup>+</sup></button>
+                  <button type="button" class="botao-secundario botao-restaurar-fonte" id="restaurar-fonte" aria-label="Restaurar fonte padrão">Padrão</button>
+                </div>
+                <span class="visualizacao-limite" aria-hidden="true">11–20 px</span>
+                <p class="visualmente-oculto" id="fonte-ajuda">Ajusta a leitura do resumo na grade e no painel.</p>
+              </div>
+            </div>
+          </section>
 
           <div
             class="tabela-envoltorio biblioteca-viewport"

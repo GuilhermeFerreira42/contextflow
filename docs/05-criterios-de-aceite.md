@@ -20,6 +20,14 @@
 
 ## Status de execução (atualizado a cada fatia)
 
+**Visualização horizontal (base `51ba4a9`, Windows):** Playwright4/4 específicos,
+CDP57/57, refinamentos9/9 com5.000 vídeos, pós-F6 13/13, suíte238 (232 aprovados,
+seis ignorados), build/typecheck/fumaça aprovados. Controles imediatos, restauros,
+seleção/filtros/modo/leitura preservados, navegação/reload/novo contexto e seis
+larguras; tabela recupera espaço ao recolher. Desktop/mobile inspecionados.
+Apenas frontend de produção; teste da fila estabilizado sem alterar a fila.
+Evidências: `../Continuidade de Projeto/painel-visualizacao-51ba4a9/LEIA-ME.md`.
+
 **Recuperação de capas (base `adb6c57`, Windows):** 231 testes aprovados e seis
 ignorados (237 total), CDP57/57, Playwright recuperação3/3 e layout4/4,
 build/typecheck/fumaça aprovados. Caso real: URL localizada404; JPEG padrão200,

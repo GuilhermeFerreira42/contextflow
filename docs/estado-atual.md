@@ -4,7 +4,63 @@
 > `00-comece-aqui.md`. O que está abaixo da linha "Histórico" é registro, não
 > estado vigente.
 
-## Estado vigente — 22/11/2026 — comando personalizado e painel
+## Estado vigente — 22/11/2026 — painel horizontal de Visualização
+
+Base `51ba4a9`, main limpa. Pedido específico do proprietário: substituir a
+configuração vertical da Biblioteca por painel horizontal compacto/recolhível.
+SPEC prévia: `specs/f6a-painel-visualizacao.md`. Mockup separado não veio anexado;
+foi usada a composição textual, sem alegar comparação com imagem indisponível.
+F7 não iniciada. Produção: somente HTML/CSS/JS da Biblioteca, sem backend,
+banco, contrato, dependência ou armazenamento novos.
+
+**Entrega:** botão único Visualização à direita da barra, junto de
+Ampliado/Compacto; seleção/ações à esquerda. IDs internos anteriores mantidos,
+sem botão Colunas redundante. Região imediatamente acima da tabela, cabeçalho
+com título, Restaurar padrões e fechar; corpo com Colunas visíveis, Altura das
+linhas e Fonte do resumo. Três grupos em desktop; dois/um conforme largura
+efetiva do painel. Descrições longas fora do fluxo visual, sem retirar rótulos.
+
+Mesmos controles e donos de estado: checkboxes, larguras arrastáveis, slider
+64–600/padrão136, fonte11–20/padrão13, modo atual. Ajustes imediatos e persistidos
+nas chaves existentes. Restauros individuais e geral disponíveis. O geral
+redefine colunas/larguras/altura/fonte; preserva modo, seleção, filtros,
+ordenação e preferências da transcrição. Painel recolhido após reload, valores
+conservados. Fechar/Escape devolvem foco ao botão. Tabela usa espaço flexível
+restante e recupera a altura cedida ao painel, sem mudar a altura das linhas
+ou o cálculo de janela virtual.
+
+**Validação Windows/Node v22.12.0, saídas0:**
+
+| Comando | Resultado |
+|---|---|
+| `npm run test:e2e:visualizacao` | 4/4 grupos, teclado/fechar/Escape, todos os controles, arraste, navegação/reload/novo contexto com storage salvo, restauros e larguras1440/1280/1024/768/390/320 |
+| `npm run test:e2e` | 57/57 CDP |
+| `npm run test:e2e:refinamentos` | 9/9, incluindo 5.000 vídeos e âncora/seleção em alturas extremas |
+| `npm run test:e2e:pos-f6` | 13 cenários, zero falhas |
+| `npm test` | 238 testes: 232 aprovados, seis ignorados, zero falhas |
+| `npm run build` | typecheck e compilação aprovados |
+| `npm run verificar` | nove OK, TUDO OK |
+
+Desktop e celular inspecionados visualmente; medidas aberto/recolhido no log
+de Playwright e capturas comparáveis. Desktop1440: painel161,25px; tabela597,5px
+aberta e770,75px recolhida (173,25px recuperados). Nenhuma exceção JavaScript nos fluxos
+testados. Uma falha intermitente antiga da suíte F4 foi corrigida **no teste**:
+verifica-se que a intenção está no banco no início da chamada externa, em vez
+de supor que o executor não começou quando o cliente termina de ler o202.
+Nenhuma alteração na fila de produção. Log intermediário preservado.
+
+Evidências fora do Git: `../Continuidade de Projeto/painel-visualizacao-51ba4a9/`,
+índice `LEIA-ME.md`, logs e `capturas/` (desktop aberto/recolhido e painel em
+1280/1024/768/390/320). Dados descartáveis. Não executados: regressão Linux,
+homologação humana ou nova geração em IA real. As correções anteriores de
+prompt/capa foram entregues separadamente em `51ba4a9` (resumos8/8,capas3/3,
+imagem no painel real1280×720), não repetidas como funcionalidades novas aqui.
+
+**Próxima ação:** proprietário recarregar a página para carregar o frontend,
+conferir visualmente e homologar. Não avançar F7 por inferência. Commit desta
+reformulação contém este registro; localizar com `git log -1`.
+
+## Estado anterior — comando personalizado e imagem do painel
 
 Base `bd41a13`, main limpa. Pedido: comando personalizado não permanecia e a
 capa não aparecia no painel. SPEC: `specs/f6a-prompt-persistente-painel.md`.

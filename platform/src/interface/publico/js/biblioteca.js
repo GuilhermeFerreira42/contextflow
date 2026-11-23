@@ -1174,6 +1174,14 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel, aoResumir })
       agendar();
       salvarVisual();
     });
+    $('#restaurar-visualizacao').addEventListener('click', () => {
+      colunas = { ...colunasPadrao };
+      larguras = {};
+      aplicarFonteResumo(FONTE_PADRAO, { salvar: false });
+      aplicarAlturaAmpliada(ALTURAS_PADRAO.ampliado);
+      montarColunas();
+      salvarVisual();
+    });
 
     viewport.addEventListener('scroll', () => {
       if (viewport.offsetParent !== null) posicaoSalva = viewport.scrollTop;
@@ -1216,12 +1224,21 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel, aoResumir })
       $('#abrir-filtros').setAttribute('aria-expanded', String(abrir));
     });
 
-    // Painel de colunas
-    $('#abrir-colunas').addEventListener('click', () => {
+    // Um único disclosure para colunas, altura e fonte.
+    const mostrarVisualizacao = abrir => {
       const painel = $('#painel-colunas');
-      const abrir = painel.hidden;
       painel.hidden = !abrir;
       $('#abrir-colunas').setAttribute('aria-expanded', String(abrir));
+    };
+    $('#abrir-colunas').addEventListener('click', () => mostrarVisualizacao($('#painel-colunas').hidden));
+    const fecharVisualizacao = () => {
+      mostrarVisualizacao(false);
+      $('#abrir-colunas').focus({ preventScroll: true });
+    };
+    $('#fechar-visualizacao').addEventListener('click', fecharVisualizacao);
+    $('#painel-colunas').addEventListener('keydown', evento => {
+      if (evento.key !== 'Escape') return;
+      evento.preventDefault(); evento.stopPropagation(); fecharVisualizacao();
     });
 
     for (const botao of document.querySelectorAll('button[data-modo]')) {
