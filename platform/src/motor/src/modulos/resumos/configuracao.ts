@@ -123,8 +123,16 @@ export class ConfiguracaoResumos {
   }
   salvar(entrada: unknown) {
     const tarefa = this.#escrita.then(async () => {
-      const c = validarConfig(entrada);
       const e = entrada as Record<string, unknown>;
+      if (e?.somentePrompt === true) {
+        const atual = await this.obter();
+        if (!atual) throw new ErroValidacao('Salve primeiro o provedor e o modelo.');
+        if (typeof e.prompt !== 'string') throw new ErroValidacao('Escreva as instruções do resumo.');
+        const c = validarConfig({ ...atual, prompt: e.prompt });
+        await this.#gravar('config.json', c);
+        return this.publica();
+      }
+      const c = validarConfig(entrada);
       const segredos = await this.#ler<Record<string, string>>('secrets.json', {});
       if (e.apiKey !== undefined && (typeof e.apiKey !== 'string' || e.apiKey.length > 4096)) throw new ErroValidacao('Chave inválida.');
       const chave = typeof e.apiKey === 'string' ? e.apiKey.trim() : '';

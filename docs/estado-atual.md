@@ -4,7 +4,34 @@
 > `00-comece-aqui.md`. O que está abaixo da linha "Histórico" é registro, não
 > estado vigente.
 
-## Estado vigente — 23/11/2026 — F6-B, partes A, B, C, D-1 e D-2 aplicadas
+## Estado vigente — 23/11/2026 — estabilização sobre a entrega F6-B
+
+Base real: `main`, `6c7fdef`, árvore inicialmente limpa. As entregas da Arena
+estão incorporadas (A/B/C/D-1/D-2). **Coleções permanecem integrais**, por
+correção explícita do proprietário. **F7 não autorizada nesta rodada.**
+SPEC: `specs/f6b-estabilizacao-fluxos.md`, escrita antes do código.
+
+Primeira fatia: comando personalizado com salvamento automático após750ms/blur,
+quando já existe configuração. POST atual aceita `somentePrompt:true`, faz merge
+serializado sobre configuração atual e não altera segredos ou outros campos.
+Salvar manual continua disponível; aguarda autosave pendente. Falha conserva
+texto editado; resposta antiga não repõe texto anterior. Não há armazenamento
+paralelo. Confirmação de gravação é o marco da persistência.
+
+Investigação real: o comando pessoal já estava íntegro no arquivo e na API
+(igualdade verificada sem divulgar conteúdo); não houve recuperação nem troca
+pelo padrão. Teste de API confirma preservação de modelo mais recente/chave,
+recusa de prompt vazio e persistência após reiniciar app de teste. Playwright F6
+8/8 aprovado na árvore integrada; outras correções da rodada ainda em preparação
+para commits próprios. Evidências externas: pasta irmã
+`Continuidade de Projeto/estabilizacao-f6b-6c7fdef/`.
+
+### Referência da entrega Arena recebida (histórico da base)
+
+Os detalhes e contagens abaixo registram a entrega recebida, não substituem
+as novas execuções descritas acima.
+
+## Entrega recebida — F6-B, partes A, B, C, D-1 e D-2
 
 Branch de trabalho do Arena (`arena/735d302d-contextflow`), base `e11a748`,
 HEAD local `c3e8286` + os commits desta sessão. **F7 não iniciada.** As quatro

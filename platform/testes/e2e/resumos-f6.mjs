@@ -209,7 +209,7 @@ try {
     await nav('configuracoes');
     const comando = 'Liste decisões e exemplos em linguagem simples, sem inventar dados.';
     await page.locator('#ia-prompt').fill(comando);
-    assert.match(await page.locator('#ia-resultado').innerText(), /não salvas/);
+    assert.match(await page.locator('#ia-resultado').innerText(), /Salvamento automático/);
     await page.locator('#ia-salvar').click();
     await page.waitForFunction(() => document.querySelector('#ia-resultado').textContent.includes('salva'));
     const persistido = await page.locator('#ia-prompt').inputValue();

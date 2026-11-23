@@ -332,3 +332,20 @@ test('F6: instruções sem marcador persistem após reabertura e chegam ao prove
   assert.equal((await a.api('/api/resumos/configuracao', a.config({ prompt: 'x'.repeat(20001) }))).status, 422);
   assert.equal((await a.api('/api/resumos/configuracao')).dados.configuracao.prompt, salvo);
 });
+
+test('salvar somente prompt preserva campos mais recentes, segredo e persiste após reinício', async t => {
+  const a = await ambiente(t);
+  assert.equal((await a.api('/api/resumos/configuracao', a.config({ apiKey: 'fixture-nao-real' }))).status, 200);
+  const antiga = (await a.api('/api/resumos/configuracao')).dados.configuracao;
+  const segredo = readFileSync(join(a.pasta, 'ia', 'secrets.json'), 'utf8');
+  await a.api('/api/resumos/configuracao', a.config({ modelo: 'mais-recente' }));
+  const atualizada = await a.api('/api/resumos/configuracao', { ...antiga, prompt: 'Comando isolado.', somentePrompt: true, removerChave: true });
+  assert.equal(atualizada.status, 200);
+  assert.equal(atualizada.dados.configuracao.modelo, 'mais-recente');
+  assert.match(atualizada.dados.configuracao.prompt, /^Comando isolado\./);
+  assert.equal(readFileSync(join(a.pasta, 'ia', 'secrets.json'), 'utf8'), segredo);
+  const invalida = await a.api('/api/resumos/configuracao', { somentePrompt: true, prompt: '' });
+  assert.equal(invalida.status, 422);
+  await a.reiniciar();
+  assert.equal((await a.api('/api/resumos/configuracao')).dados.configuracao.prompt, atualizada.dados.configuracao.prompt);
+});

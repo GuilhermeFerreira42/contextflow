@@ -4,6 +4,10 @@ export function criarResumosUI({ api, aoEnfileirar, aoSalvar }) {
   const dialogo = $('#dialogo-resumos');
   const historico = $('#dialogo-historico-resumos');
   let ids = [], estimativa = null, pedido = 0, provedores = [];
+  let configurada = false, timerPrompt, revisao = 0, outrosAlterados = false;
+  let gravacaoPrompt = Promise.resolve();
+  const normalizarPrompt = texto => texto.trim() && !texto.includes('{transcricao}')
+    ? texto.trim() + '\n\nTranscrição:\n{transcricao}' : texto.trim();
   const campos = { provedor: 'ia-provedor', modelo: 'ia-modelo', baseUrl: 'ia-endpoint', prompt: 'ia-prompt',
     versaoPrompt: 'ia-versao', contexto: 'ia-contexto', maxSaida: 'ia-saida', concorrencia: 'ia-concorrencia',
     timeoutSegundos: 'ia-timeout', precoEntrada: 'ia-preco-entrada', precoSaida: 'ia-preco-saida' };
@@ -13,6 +17,8 @@ export function criarResumosUI({ api, aoEnfileirar, aoSalvar }) {
     $('#formulario-ia').querySelectorAll('input, select, textarea, button').forEach(el => { el.disabled = bloqueado; });
   };
   function preencherConfiguracao(atual) {
+    configurada = Boolean(atual.configuracao);
+    outrosAlterados = false;
     const c = atual.configuracao ?? { provedor: 'openai', modelo: '', baseUrl: provedores[0].baseUrl, prompt: atual.promptPadrao,
       versaoPrompt: 'v1', contexto: 16384, maxSaida: 1024, concorrencia: 2, timeoutSegundos: 90, precoEntrada: '', precoSaida: '' };
     for (const [nome, id] of Object.entries(campos)) $('#' + id).value = c[nome] ?? '';
@@ -79,14 +85,38 @@ export function criarResumosUI({ api, aoEnfileirar, aoSalvar }) {
     } catch (erro) { $('#historico-resumos-conteudo').textContent = erro.message; }
   }
 
+  function salvarPrompt() {
+    clearTimeout(timerPrompt); timerPrompt = null;
+    if (!configurada || $('#ia-prompt').disabled) return;
+    const texto = normalizarPrompt($('#ia-prompt').value), versao = ++revisao;
+    gravacaoPrompt = gravacaoPrompt.then(async () => {
+      if (versao !== revisao) return;
+      try {
+        avisoConfig('Salvando comando…');
+        const atual = await api('/api/resumos/configuracao');
+        if (versao !== revisao) return;
+        // Snapshot público mantém compatibilidade com motores anteriores.
+        // O motor atual faz merge atômico somente do prompt, preservando os demais campos.
+        const salva = await api('/api/resumos/configuracao', { method: 'POST',
+          body: JSON.stringify({ ...atual.configuracao, prompt: texto, somentePrompt: true }) });
+        if (versao !== revisao) return;
+        if (salva.configuracao?.prompt !== texto) throw new Error('O motor não confirmou o comando. Tente salvar novamente.');
+        avisoConfig('Comando salvo automaticamente.' + (outrosAlterados ? ' Os outros campos ainda precisam ser salvos.' : ''));
+        aoSalvar?.();
+      } catch (erro) { if (versao === revisao) avisoConfig(`Comando não salvo: ${erro.message}`); }
+    });
+  }
+
   async function salvarConfiguracao() {
       if (!$('#formulario-ia').reportValidity()) { avisoConfig('Revise os campos indicados antes de salvar.'); return false; }
+      clearTimeout(timerPrompt); timerPrompt = null; revisao++;
       bloquearFormulario(true); avisoConfig('Salvando…');
       const dados = Object.fromEntries(Object.entries(campos).map(([nome, id]) => [nome, $('#' + id).value]));
       dados.apiKey = $('#ia-chave').value; dados.removerChave = $('#ia-remover-chave').checked;
       // Compatível também com motores anteriores, que exigem o marcador.
       if (dados.prompt.trim() && !dados.prompt.includes('{transcricao}')) dados.prompt = dados.prompt.trim() + '\n\nTranscrição:\n{transcricao}';
       try {
+        await gravacaoPrompt;
         const salva = await api('/api/resumos/configuracao', { method: 'POST', body: JSON.stringify(dados) });
         preencherConfiguracao(salva); avisoConfig('Configuração de IA salva.'); aoSalvar?.(); return true;
       } catch (erro) { avisoConfig(erro.message); return false; }
@@ -95,7 +125,17 @@ export function criarResumosUI({ api, aoEnfileirar, aoSalvar }) {
 
   function ligar() {
     bloquearFormulario(true);
-    $('#formulario-ia').addEventListener('input', () => avisoConfig('Alterações não salvas. Clique em Salvar configuração de IA para manter suas instruções.'));
+    $('#formulario-ia').addEventListener('input', e => {
+      if (e.target.id === 'ia-prompt' && configurada) {
+        revisao++; clearTimeout(timerPrompt);
+        avisoConfig('Comando alterado. Salvamento automático em andamento…');
+        timerPrompt = setTimeout(salvarPrompt, 750);
+      } else {
+        outrosAlterados = true;
+        avisoConfig('Alterações não salvas. Clique em Salvar configuração de IA.');
+      }
+    });
+    $('#ia-prompt').addEventListener('blur', () => { if (timerPrompt) salvarPrompt(); });
     $('#formulario-ia').addEventListener('submit', async e => {
       e.preventDefault(); await salvarConfiguracao();
     });
