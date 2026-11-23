@@ -168,6 +168,65 @@ test('rota de miniatura inexistente responde 404, não 500', async () => {
 
 // ------------------------------------------------- histórico de importações
 
+/*
+ * Remoção individual (F6-B, item 3 do pedido).
+ *
+ * A regra que estes testes protegem é a distinção entre três coisas que a
+ * interface mostra juntas:
+ *   - remover do histórico = apagar o REGISTRO da tarefa;
+ *   - cancelar            = interromper a tarefa;
+ *   - remover da biblioteca = apagar vídeo + transcrição + resumo.
+ * Trocar uma pela outra apaga dados do usuário — por isso cada uma tem teste.
+ */
+
+test('DELETE /api/trabalhos/:id remove só o registro e preserva a biblioteca', async () => {
+  criarTrabalho('tr-individual', 'concluido');
+  const antes = await json(await fetch(`${base}/api/biblioteca?limite=10`));
+  const resposta = await fetch(`${base}/api/trabalhos/tr-individual`, { method: 'DELETE' });
+  assert.equal(resposta.status, 200);
+  const corpo = await json(resposta);
+  assert.equal(corpo.dados.removido, true);
+
+  const detalhe = await fetch(`${base}/api/trabalhos/tr-individual`);
+  assert.equal(detalhe.status, 404, 'o trabalho sai do histórico de verdade');
+
+  const depois = await json(await fetch(`${base}/api/biblioteca?limite=10`));
+  assert.equal(depois.dados.total, antes.dados.total, 'nenhum vídeo é apagado junto');
+});
+
+test('DELETE /api/trabalhos/:id recusa trabalho ativo com 409', async () => {
+  criarTrabalho('tr-individual-ativo', 'executando');
+  const resposta = await fetch(`${base}/api/trabalhos/tr-individual-ativo`, { method: 'DELETE' });
+  assert.equal(resposta.status, 409);
+  const corpo = await json(resposta);
+  assert.equal(corpo.erro?.codigo, 'trabalho_ativo');
+  // Continua existindo: recusar não pode ser um "apagou pela metade".
+  assert.equal((await fetch(`${base}/api/trabalhos/tr-individual-ativo`)).status, 200);
+
+  // Higiene: os testes seguintes contam ativos. Este trabalho é um ativo de
+  // mentira (não tem executor), então sai por SQL em vez de cancelamento.
+  app.banco.db.prepare("DELETE FROM trabalhos WHERE id='tr-individual-ativo'").run();
+});
+
+test('DELETE /api/trabalhos/:id inexistente responde 404 (não 500)', async () => {
+  const resposta = await fetch(`${base}/api/trabalhos/nunca-existiu`, { method: 'DELETE' });
+  assert.equal(resposta.status, 404);
+});
+
+test('DELETE /api/trabalhos/historico não é capturado pela rota :id', async () => {
+  // Regressão de ordem de rotas: `:id` antes da literal fazia a limpeza por
+  // categoria responder 404 — o caminho "historico" virava um id.
+  // O corpo pede um estado sem nenhuma linha: só a ROTA é o que se testa aqui
+  // (limpar 'concluido' aqui apagaria dados que os testes acima usam).
+  const resposta = await fetch(`${base}/api/trabalhos/historico`, {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ estados: ['cancelado'] }),
+  });
+  assert.equal(resposta.status, 200);
+  assert.equal(resposta.status === 200 && (await resposta.json()).dados.removidos, 0);
+});
+
 test('histórico recusa estado não terminal em vez de apagar em silêncio', async () => {
   criarTrabalho('tr-ativo', 'executando');
   const resposta = await fetch(`${base}/api/trabalhos/historico`, {

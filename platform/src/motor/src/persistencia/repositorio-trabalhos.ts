@@ -317,6 +317,57 @@ export class RepositorioTrabalhos {
      *
      * Devolve quantos saíram e quais estados, para a UI confirmar.
      */
+    /**
+     * Apaga as linhas de trabalho dadas (raízes + filhos) e seus dependentes.
+     *
+     * Existe como método próprio porque DUAS operações precisam da mesma
+     * limpeza: a limpeza por categoria e a remoção individual. Duplicar a
+     * ordem de DELETE é como se cria órfão de FK.
+     *
+     * `requisicoes_trabalho` sai junto: sem isso, repetir a mesma
+     * `chaveRequisicao` encontraria uma chave apontando para um trabalho
+     * inexistente e devolveria 404 em vez de criar a operação.
+     */
+    #apagarTrabalhos(ids: string[]): void {
+        if (!ids.length) return;
+        const marcas = ids.map(() => '?').join(',');
+        this.banco.db.prepare(`DELETE FROM tentativas_trabalho WHERE trabalho_id IN (
+          SELECT id FROM trabalhos WHERE pai_id IN (${marcas}) OR id IN (${marcas})
+        )`).run(...ids, ...ids);
+        this.banco.db.prepare(`DELETE FROM resumos_execucoes WHERE trabalho_id IN (
+          SELECT id FROM trabalhos WHERE pai_id IN (${marcas}) OR id IN (${marcas})
+        )`).run(...ids, ...ids);
+        this.banco.db.prepare(`DELETE FROM requisicoes_trabalho WHERE trabalho_id IN (
+          SELECT id FROM trabalhos WHERE pai_id IN (${marcas}) OR id IN (${marcas})
+        )`).run(...ids, ...ids);
+        this.banco.db.prepare(`DELETE FROM trabalhos WHERE pai_id IN (${marcas})`).run(...ids);
+        this.banco.db.prepare(`DELETE FROM trabalhos WHERE id IN (${marcas})`).run(...ids);
+    }
+
+    /**
+     * Remove UM trabalho do histórico.
+     *
+     * Só trabalho terminal: apagar um trabalho em execução deixaria o executor
+     * gravando num id que não existe. Recusa com 409 (conflito de estado, não
+     * erro de entrada) — o cliente deve cancelar antes.
+     *
+     * Não toca em `videos`: remover do histórico ≠ remover da biblioteca.
+     */
+    removerDoHistorico(id: string): { removido: true; filhos: number } {
+        const registro = this.registro(id);
+        if (registro.estado === 'na-fila' || registro.estado === 'executando') {
+            throw new ErroDominio('trabalho_ativo',
+                'Este trabalho ainda está em andamento. Cancele antes de remover do histórico.', 409);
+        }
+        return this.banco.executarTransacao(() => {
+            const filhos = Number((this.banco.db
+                .prepare('SELECT COUNT(*) n FROM trabalhos WHERE pai_id=?')
+                .get(id) as { n: number }).n);
+            this.#apagarTrabalhos([id]);
+            return { removido: true as const, filhos };
+        });
+    }
+
     limparHistorico(estados: string[]): { removidos: number; estados: string[]; preservados: number } {
         const permitidos = ['concluido', 'falhou', 'cancelado'];
         const pedidos = estados.filter(e => permitidos.includes(e));
@@ -333,19 +384,7 @@ export class RepositorioTrabalhos {
             .get() as { n: number }).n);
           if (!alvos.length) return { removidos: 0, estados: pedidos, preservados };
           const ids = alvos.map(a => a.id);
-          const marcas = ids.map(() => '?').join(',');
-          // Filhos primeiro, depois chaves de requisição, depois as raízes.
-          this.banco.db.prepare(`DELETE FROM tentativas_trabalho WHERE trabalho_id IN (
-            SELECT id FROM trabalhos WHERE pai_id IN (${marcas}) OR id IN (${marcas})
-          )`).run(...ids, ...ids);
-          this.banco.db.prepare(`DELETE FROM resumos_execucoes WHERE trabalho_id IN (
-            SELECT id FROM trabalhos WHERE pai_id IN (${marcas}) OR id IN (${marcas})
-          )`).run(...ids, ...ids);
-          this.banco.db.prepare(`DELETE FROM requisicoes_trabalho WHERE trabalho_id IN (
-            SELECT id FROM trabalhos WHERE pai_id IN (${marcas}) OR id IN (${marcas})
-          )`).run(...ids, ...ids);
-          this.banco.db.prepare(`DELETE FROM trabalhos WHERE pai_id IN (${marcas})`).run(...ids);
-          this.banco.db.prepare(`DELETE FROM trabalhos WHERE id IN (${marcas})`).run(...ids);
+          this.#apagarTrabalhos(ids);
           return { removidos: ids.length, estados: pedidos, preservados };
         });
     }

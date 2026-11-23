@@ -401,6 +401,55 @@
                     aria-expanded="false" aria-controls="painel-limpeza-historico">Limpar histórico…</button>
           </div>
 
+          <!-- Barra de controle da tabela: pesquisa, filtros e ordenação.
+               A tabela é construída por js/trabalhos.js — aqui fica só o
+               contêiner, para não haver duas fontes de verdade sobre colunas. -->
+          <div class="barra-trabalhos" role="search" aria-label="Pesquisar e filtrar importações">
+            <label class="campo-pesquisa">
+              <span class="visualmente-oculto">Pesquisar importações</span>
+              <!-- `type="text"` + `role="searchbox"`: a semântica de pesquisa é
+                   preservada, e `input[type="search"]` continua único na página
+                   (o teste de Visualização do proprietário depende disso). -->
+              <input type="text" role="searchbox" id="pesquisa-trabalhos"
+                     placeholder="Pesquisar por nome, URL ou erro…" autocomplete="off" />
+            </label>
+            <label class="visualmente-oculto" for="filtro-tipo-trabalhos">Filtrar por tipo</label>
+            <select id="filtro-tipo-trabalhos" aria-label="Filtrar por tipo">
+              <option value="todos">Todos os tipos</option>
+              <option value="importar-video">Vídeo</option>
+              <option value="importar-playlist">Playlist</option>
+              <option value="importar-lote">Lote</option>
+              <option value="gerar-resumo">Resumo</option>
+            </select>
+            <label class="visualmente-oculto" for="filtro-estado-trabalhos">Filtrar por estado</label>
+            <select id="filtro-estado-trabalhos" aria-label="Filtrar por estado">
+              <option value="todos">Todos os estados</option>
+              <option value="na-fila">Na fila</option>
+              <option value="executando">Executando</option>
+              <option value="concluido">Concluído</option>
+              <option value="falhou">Falhou</option>
+              <option value="cancelado">Cancelado</option>
+            </select>
+            <label class="visualmente-oculto" for="ordem-trabalhos">Ordenar</label>
+            <select id="ordem-trabalhos" aria-label="Ordenar trabalhos">
+              <option value="recentes">Mais recentes</option>
+              <option value="antigos">Mais antigos</option>
+              <option value="nome">Nome (A–Z)</option>
+            </select>
+            <span class="contagem-selecao" id="contagem-selecao" role="status"></span>
+          </div>
+
+          <!-- Ações em lote: aparecem só com seleção ativa. Cada botão é
+               habilitado conforme o conjunto marcado (cancelar só ativos,
+               repetir só falhos/cancelados, remover só terminais). -->
+          <div class="barra-trabalhos" id="acoes-lote" hidden>
+            <button type="button" class="botao-secundario" data-lote="cancelar">Cancelar ativos</button>
+            <button type="button" class="botao-secundario" data-lote="repetir">Repetir falhos</button>
+            <button type="button" class="botao-perigo" data-lote="remover">Remover do histórico</button>
+            <button type="button" class="botao-secundario" id="limpar-selecao-trabalhos">Limpar seleção</button>
+            <span id="resultado-lote" role="status" aria-live="polite"></span>
+          </div>
+
           <!-- Limpeza do histórico de importações.
                A cópia deixa explícito o que NÃO é apagado: remover da
                biblioteca (com vídeo, transcrição e resumo) é outra ação, e
@@ -422,7 +471,9 @@
             </div>
           </div>
           <p id="erro-trabalhos" role="status"></p>
-          <div id="lista-trabalhos" class="lista-trabalhos"></div>
+          <!-- `lista-trabalhos` passa a ser o <tbody>: os E2E leem linhas por
+               `.trabalho[data-id]`, e a linha da tabela mantém essa classe. -->
+          <div class="caixa-tabela-trabalhos" id="lista-trabalhos"></div>
           <button id="mais-trabalhos" class="botao-secundario" type="button" hidden>Carregar mais</button>
         </section>
 

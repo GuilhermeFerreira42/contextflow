@@ -4,6 +4,87 @@
 > `00-comece-aqui.md`. O que está abaixo da linha "Histórico" é registro, não
 > estado vigente.
 
+## Estado vigente — 23/11/2026 — F6-B, partes D-1 e B aplicadas
+
+Branch de trabalho do Arena (`arena/735d302d-contextflow`), base `e11a748`,
+HEAD local `c3e8286` + os commits desta sessão. **F7 não iniciada.** As quatro
+alterações do proprietário (`adb6c57`, `bd41a13`, `51ba4a9`, `c3e8286`) estão
+preservadas; as specs `f6a-*` continuam valendo e não foram contraditadas.
+
+Comando em execução: `specs/f6b-refinamento-visual-e-funcional.md` — refinamento
+funcional, organização e identidade visual antes da F7, em quatro partes
+(A estados/feedback, B Importações, C organização, D confiabilidade/acabamento).
+
+### D-1 — tokens e identidade visual (aplicada)
+
+Paleta neutra centralizada em `principal.css`: fundo `#0b0b0b`, lateral
+`#101012`, superfícies `#151517`, campos `#1c1c1f`, bordas `#272727`/`#3f3f46`,
+textos `#f4f4f5`/`#e4e4e7`/`#a1a1aa`, ação primária clara `#e4e4e7` com texto
+`#18181b`, sucesso `#22c55e`, atenção `#f59e0b`, informação `#3b82f6`, erro
+`#ef4444`. **Nomes de token preservados** (`--grafite-*`, `--azul*`, `--texto*`,
+`--sucesso`, `--alerta`, `--erro`) para não quebrar as regras que os usam.
+Novos: `--texto-sobre-primario`, `--azul-forte-hover`, `--trilho`,
+`--progresso-info/andamento/ok`.
+
+Correções de causa: `.botao-primario`, `.pular-conteudo` e o contador de
+filtros passaram a usar `--texto-sobre-primario` (o primário virou claro);
+`.nav-item.ativo` usa azul translúcido + barra interna, sem gradiente;
+`.marca-simbolo` sem gradiente/sombra; `accent-color`, focos e barras de
+progresso passaram de `--azul-forte` (agora claro) para `--azul`; selos de
+estado refeitos com `color-mix` sobre os tokens e **texto sempre presente**
+(nenhum estado depende só de cor). Nenhum hex fora do `:root`.
+
+Defeito encontrado e corrigido: o selo "Concluído" aparecia como bolha de
+58 px porque, sendo flex item de uma coluna `auto`, herdava `stretch`. Agora
+`width: fit-content` + `align-self: center` → 22 px.
+
+### B — Importações como tabela compacta (aplicada)
+
+`js/trabalhos.js` (novo, ~470 linhas) assume a tabela: colunas
+nome/tipo/data/progresso/estado/ações, checkbox por linha, cabeçalho com
+"selecionar todos" (indeterminate), pesquisa por nome/URL/erro, filtros de tipo
+e estado, ordenação (recentes/antigos/nome), barra de ações em lote (cancelar
+ativos, repetir falhos/cancelados, remover terminais) e detalhe expansível com
+os itens filhos. Ação em lote desabilita o que não se aplica ao conjunto.
+
+Barra + `%` só com número finito em [0,1]; sem número confiável, o texto diz
+"processando" ou "interrompido". Nunca se inventa percentual.
+
+Backend: `DELETE /api/trabalhos/:id` (`removerDoHistorico`) remove **só o
+registro** — vídeos, transcrições, resumos e coleções ficam. Trabalho ativo é
+recusado com 409 `trabalho_ativo`. A limpeza por categoria foi refatorada para
+reaproveitar `#apagarTrabalhos` (ordem de DELETE num só lugar). Rota literal
+`/historico` declarada antes de `/:id` — a suíte pegou o 404 quando estava na
+ordem inversa.
+
+Defeito encontrado e corrigido: ao repetir um trabalho pela tabela, nada entrava
+em `estado.pendentes`, então o polling só atualizava em Importações e a linha
+nunca saía de "Na fila". Agora `trabalhosUI.possuiAtivo()` alimenta o polling.
+
+Defeito encontrado e corrigido: a classe `.trabalho` (legada, `display:grid`)
+foi para a `<tr>` e colapsava as células sobrepostas. O item filho passou a usar
+`.item-filho`; a classe na `<tr>` é mantida porque é o seletor dos E2E.
+
+**Validação (Linux/Node, saídas 0):**
+
+| Comando | Resultado |
+|---|---|
+| `npm test` | 242/242 (238 anteriores + 4 de remoção individual) |
+| `npm run test:e2e:pos-f6` | 13 cenários, zero falhas |
+| `npm run test:e2e:refinamentos` | 9/9 |
+| `npm run test:e2e:visualizacao` | 4/4 |
+| `npm run test:e2e:resumos` | 8/8 |
+| Playwright manual (`testes/.tmp`) | tabela, filtros, lote, remoção com confirmação e biblioteca preservada |
+
+Evidências: `Continuidade de Projeto/f6b-refinamento/01..06`. Os E2E do
+proprietário rodaram **sem alteração**; duas colisões de seletor que eu havia
+introduzido foram corrigidas do meu lado (`input[type="search"]` →
+`type="text" role="searchbox"`; `#limpar-selecao` → `#limpar-selecao-trabalhos`).
+
+Pendente: partes A (estados/feedback na Biblioteca), C (árvore com vídeos,
+chips de filtro, coleções CRUD + correção `videoIds`) e D-2 (reparo em lote de
+miniaturas). Homologação humana pendente.
+
 ## Estado vigente — 22/11/2026 — painel horizontal de Visualização
 
 Base `51ba4a9`, main limpa. Pedido específico do proprietário: substituir a

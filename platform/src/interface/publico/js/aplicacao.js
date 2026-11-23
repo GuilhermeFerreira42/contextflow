@@ -3,6 +3,7 @@ import { criarPainel } from './painel-leitura.js';
 import { criarArvore } from './arvore-organizacao.js';
 import { criarAdicionarLink } from './adicionar-link.js';
 import { criarResumosUI } from './resumos.js';
+import { criarTrabalhos } from './trabalhos.js';
 
 /**
  * Interface do ContextFlow — camada de apresentação.
@@ -20,8 +21,6 @@ const estado = {
   ultimoStatus: null,
   ultimoTrabalho: null,
   pendentes: new Set(),
-  trabalhos: new Map(),
-  limiteTrabalhos: 50,
 };
 
 const $ = (seletor) => document.querySelector(seletor);
@@ -271,9 +270,18 @@ const FASES = {
   finalizado: 'Finalizado',
 };
 
+/**
+ * Linha de um trabalho FILHO (item de playlist ou de lote).
+ *
+ * A tabela de Importações desenha as raízes; itens filhos aparecem dentro do
+ * detalhe da raiz, num contêiner estreito. Por isso esta marcação é simples
+ * (título + meta + selo) e não replica colunas — a tabela cuidaria mal de um
+ * item que não tem data nem ação próprias.
+ */
 function linhaTrabalho(trabalho) {
-  const linha = document.createElement('article');
-  linha.className = 'trabalho';
+  const linha = document.createElement('div');
+  // Nome próprio: `.trabalho` agora identifica a <tr> da tabela de Importações.
+  linha.className = 'item-filho';
   linha.dataset.id = trabalho.id;
 
   const titulo = document.createElement('strong');
@@ -286,7 +294,6 @@ function linhaTrabalho(trabalho) {
   resumo.textContent = `${ESTADOS_TRABALHO[trabalho.estado]} · ${FASES[trabalho.fase] ?? trabalho.fase} · tentativa ${trabalho.tentativas}`;
   if (trabalho.cancelamentoSolicitado && trabalho.estado === 'executando') resumo.textContent += ' · encerrando…';
 
-  // Estado como selo, para a fila ser lida de relance.
   const estadoSelo = document.createElement('span');
   estadoSelo.className = 'selo';
   estadoSelo.dataset.estado = trabalho.estado === 'concluido' ? 'pronto'
@@ -295,124 +302,12 @@ function linhaTrabalho(trabalho) {
         : trabalho.estado === 'falhou' ? 'erro' : 'pendente';
   estadoSelo.textContent = ESTADOS_TRABALHO[trabalho.estado];
 
-  const cabecalho = document.createElement('div');
-  cabecalho.append(titulo, resumo);
-
-  const acoes = document.createElement('div');
-  acoes.className = 'trabalho-acoes';
-  acoes.append(estadoSelo);
-
-  const acao = ['na-fila', 'executando'].includes(trabalho.estado)
-    ? 'cancelar'
-    : ['falhou', 'cancelado'].includes(trabalho.estado) ? 'repetir' : null;
-
-  linha.append(cabecalho, acoes);
-
-  if (['importar-playlist', 'importar-lote'].includes(trabalho.tipo)) {
-    const c = trabalho.contadores;
-    const contagem = document.createElement('p');
-    contagem.className = 'trabalho-meta';
-    contagem.style.gridColumn = '1 / -1';
-    contagem.textContent = `${c.total} itens · ${c.concluidos} concluídos (${c.semLegenda} sem legenda) · ${c.falhos} falhos · ${c.cancelados} cancelados`;
-    linha.append(contagem);
-  }
-
-  if (trabalho.progresso !== null && trabalho.progresso !== undefined) {
-    const barra = document.createElement('div');
-    barra.className = 'trabalho-barra';
-    const preenchimento = document.createElement('span');
-    preenchimento.style.width = `${Math.round(trabalho.progresso * 100)}%`;
-    barra.append(preenchimento);
-    barra.setAttribute('role', 'progressbar');
-    barra.setAttribute('aria-valuenow', String(Math.round(trabalho.progresso * 100)));
-    barra.setAttribute('aria-valuemin', '0');
-    barra.setAttribute('aria-valuemax', '100');
-    barra.setAttribute('aria-label', trabalho.tipo === 'gerar-resumo' ? 'Progresso do resumo' : 'Progresso da importação');
-    linha.append(barra);
-  }
-
-  if (trabalho.erro) {
-    const erro = document.createElement('p');
-    erro.className = 'erro-trabalho';
-    erro.style.gridColumn = '1 / -1';
-    erro.textContent = trabalho.erro;
-    linha.append(erro);
-  }
-
-  if (trabalho.resultado?.transcricao?.estado === 'indisponivel') {
-    const motivo = document.createElement('p');
-    motivo.className = 'trabalho-meta';
-    motivo.style.gridColumn = '1 / -1';
-    motivo.textContent = trabalho.resultado.transcricao.motivo;
-    linha.append(motivo);
-  }
-
-  if (acao) {
-    const botao = document.createElement('button');
-    botao.type = 'button';
-    botao.className = 'botao-secundario';
-    botao.dataset.acao = acao;
-    botao.textContent = acao === 'cancelar' ? 'Cancelar' : 'Repetir';
-    botao.disabled = trabalho.cancelamentoSolicitado && trabalho.estado === 'executando';
-    botao.addEventListener('click', async () => {
-      botao.disabled = true;
-      try {
-        const atualizado = await api(`/api/trabalhos/${trabalho.id}/${acao}`, {
-          method: 'POST',
-          body: JSON.stringify({ chaveRequisicao: crypto.randomUUID() }),
-        });
-        if (acao === 'repetir') acompanharTrabalho(atualizado);
-        await carregarTrabalhos();
-      } catch (erro) {
-        $('#erro-trabalhos').textContent = erro.message;
-      } finally {
-        botao.disabled = false;
-      }
-    });
-    acoes.append(botao);
-  }
-
-  if (['importar-playlist', 'importar-lote'].includes(trabalho.tipo)) {
-    const itens = document.createElement('details');
-    itens.dataset.pai = trabalho.id;
-    itens.style.gridColumn = '1 / -1';
-    const sumario = document.createElement('summary');
-    sumario.textContent = 'Ver itens';
-    itens.append(sumario);
-    const lista = document.createElement('div');
-    itens.append(lista);
-    let cursor = null;
-
-    const botaoMais = document.createElement('button');
-    botaoMais.type = 'button';
-    botaoMais.textContent = 'Mais itens';
-    botaoMais.className = 'botao-secundario';
-    botaoMais.hidden = true;
-
-    const carregarItens = async (mais = false) => {
-      try {
-        const pagina = await api(`/api/trabalhos/${trabalho.id}/itens?limite=50${mais && cursor ? '&cursor=' + encodeURIComponent(cursor) : ''}`);
-        if (!mais) lista.replaceChildren();
-        lista.append(...pagina.itens.map(linhaTrabalho));
-        cursor = pagina.proximoCursor;
-        botaoMais.hidden = !cursor;
-      } catch (erro) {
-        lista.textContent = erro.message;
-      }
-    };
-
-    botaoMais.addEventListener('click', () => carregarItens(true));
-    itens.append(botaoMais);
-    itens.addEventListener('toggle', () => {
-      if (itens.open) void carregarItens();
-    });
-    linha.append(itens);
-  }
-
+  const caixa = document.createElement('div');
+  caixa.append(titulo, resumo);
+  linha.append(caixa, estadoSelo);
   return linha;
 }
 
-let carregandoTrabalhos = false;
 /*
  * Limpeza do histórico de importações.
  *
@@ -647,63 +542,34 @@ function desenharAtividadeBiblioteca(ativos) {
   }
 }
 
+/*
+ * A tabela de Importações vive em `js/trabalhos.js`.
+ *
+ * `carregarTrabalhos` continua existindo com o mesmo nome porque é chamada em
+ * oito pontos deste arquivo (navegação, importação, limpeza, foco da janela).
+ * Manter a costura aqui evita espalhar `trabalhosUI.carregar()` por toda parte
+ * e deixa um único lugar para reações pós-carregamento.
+ */
+const trabalhosUI = criarTrabalhos({
+  api,
+  $,
+  // Um trabalho terminou: atualiza Biblioteca, árvore e o cartão de resumo.
+  aoConcluir: async (t) => {
+    estado.pendentes.delete(t.id);
+    if (t.tipo === 'gerar-resumo' && t.videoId) bibliotecaUI.invalidarResumos([t.videoId]);
+    if (t.id === estado.ultimoTrabalho) mostrarResultadoTrabalho(t);
+    await carregarBiblioteca();
+    void arvoreUI.carregar();
+  },
+  aoMudarAtivos: (ativos) => desenharAtividadeBiblioteca(ativos),
+});
+
 async function carregarTrabalhos() {
-  if (carregandoTrabalhos) return;
-  carregandoTrabalhos = true;
-  try {
-    let cursor = null;
-    const itens = [];
-    do {
-      const pagina = await api(`/api/trabalhos?raizes=1&limite=50${cursor ? '&cursor=' + encodeURIComponent(cursor) : ''}`);
-      itens.push(...pagina.itens);
-      cursor = pagina.proximoCursor;
-    } while (cursor && itens.length < estado.limiteTrabalhos);
-
-    $('#mais-trabalhos').hidden = !cursor;
-    const lista = $('#lista-trabalhos');
-    if (itens.length && !lista.querySelector('.trabalho')) lista.replaceChildren();
-
-    for (const trabalho of itens) {
-      const atual = lista.querySelector(`.trabalho[data-id="${trabalho.id}"]`);
-      const anterior = estado.trabalhos.get(trabalho.id);
-      if (!atual || JSON.stringify(anterior) !== JSON.stringify(trabalho)) {
-        const novo = linhaTrabalho(trabalho);
-        const aberto = atual?.querySelector('details[open]');
-        if (aberto) novo.querySelector('details').open = true;
-        if (atual) atual.replaceWith(novo);
-        else lista.append(novo);
-      }
-      estado.trabalhos.set(trabalho.id, trabalho);
-    }
-
-    // Ordenação vinda do servidor, sem recriar botões que não mudaram.
-    itens.forEach((t, i) => {
-      const linha = lista.querySelector(`.trabalho[data-id="${t.id}"]`);
-      if (lista.children[i] !== linha) lista.insertBefore(linha, lista.children[i] ?? null);
-    });
-    if (!itens.length) lista.textContent = 'Nenhuma importação na fila.';
-
-    for (const id of [...estado.pendentes]) {
-      const t = itens.find(t => t.id === id) ?? await api(`/api/trabalhos/${id}`);
-      if (['concluido', 'falhou', 'cancelado'].includes(t.estado)) {
-        estado.pendentes.delete(id);
-        if (t.tipo === 'gerar-resumo' && t.videoId) bibliotecaUI.invalidarResumos([t.videoId]);
-        if (id === estado.ultimoTrabalho) mostrarResultadoTrabalho(t);
-        // A Biblioteca reflete a importação sem recarregar a página.
-        await carregarBiblioteca();
-        void arvoreUI.carregar();
-      }
-    }
-
-    const ativos = itens.filter(t => ['na-fila', 'executando'].includes(t.estado)).length;
-    $('#atividade-importacoes').textContent = ativos ? `${ativos} importações ativas nesta página` : 'Fila atualizada';
-    desenharAtividadeBiblioteca(itens.filter(t => ['na-fila', 'executando'].includes(t.estado)));
-    $('#erro-trabalhos').textContent = '';
-  } catch (erro) {
-    $('#erro-trabalhos').textContent = erro.message;
-  } finally {
-    carregandoTrabalhos = false;
-  }
+  await trabalhosUI.carregar();
+  // A reconciliação de `estado.pendentes` fica com o módulo; aqui só sobra o
+  // aviso de erro limpo, que é específico desta tela.
+  const erro = $('#erro-trabalhos');
+  if (erro) erro.textContent = '';
 }
 
 /* -------------------------------------------------------- configurações ---- */
@@ -779,12 +645,13 @@ function ligarEventos() {
     }
   });
 
-  $('#mais-trabalhos').addEventListener('click', () => {
-    estado.limiteTrabalhos += 50;
-    void carregarTrabalhos();
-  });
-
   ligarLimpezaHistorico();
+
+  // A tabela de Importações é montada aqui, uma vez. `montar` cria
+  // `<table>`/`<thead>`/`<tbody>` dentro de `#lista-trabalhos`; `ligarControles`
+  // conecta pesquisa, filtros, ordenação, "carregar mais" e ações em lote.
+  trabalhosUI.montar($('#lista-trabalhos'));
+  trabalhosUI.ligarControles();
 
   window.addEventListener('hashchange', () => mostrarTela(telaDaUrl()));
 }
@@ -799,7 +666,14 @@ async function iniciar() {
   // Atividade global discreta: o status do motor se atualiza sem recarregar a tela.
   setInterval(verificarMotor, 15000);
   setInterval(() => {
-    if (!document.hidden && (estado.tela === 'importacoes' || estado.pendentes.size)) void carregarTrabalhos();
+    // O polling também precisa rodar quando a TABELA tem trabalho ativo —
+    // antes só `estado.pendentes` e a tela de Importações contavam. Repetir um
+    // trabalho pela tabela não marcava nada em `pendentes`, então o
+    // acompanhamento parava e a linha nunca saía de "Na fila".
+    const temAtivo = trabalhosUI.possuiAtivo();
+    if (!document.hidden && (estado.tela === 'importacoes' || estado.pendentes.size || temAtivo)) {
+      void carregarTrabalhos();
+    }
   }, 1000);
 }
 

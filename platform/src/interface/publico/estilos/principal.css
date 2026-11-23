@@ -6,33 +6,68 @@
    ========================================================================= */
 
 :root {
-  /* Superfícies: mais próximas do mockup (#090d16 … #212c3d) */
-  --grafite-950: #080b12;
-  --grafite-900: #0d111a;
-  --grafite-850: #111723;
-  --grafite-800: #161f30;
-  --grafite-700: #1f293d;
-  --grafite-600: #2b3750;
-  --grafite-500: #46536b;
+  /*
+   * Tema neutro escuro (F6-B, item 1).
+   *
+   * Nomes preservados de propósito: `--grafite-*` continua sendo a escala de
+   * superfícies. Trocar só os VALORES aplica o novo tema em todos os
+   * componentes de uma vez, sem reescrever CSS de layout — que é o que o
+   * pedido exige ("centralize em tokens", "não espalhe hex pelo componente").
+   *
+   * Valores amostrados da imagem de referência: o fundo real é #0B0B0B, não
+   * um azulado; as barras usam verde/âmbar/azul dessaturados; o trilho é
+   * #272727. Contraste conferido em docs/specs/f6b (§1).
+   *
+   * Escala de superfícies (cada degrau é discreto — nada de "cards" gritando):
+   *   950 fundo da aplicação        0B0B0B
+   *   900 barra lateral             101012
+   *   850 superfícies e painéis     151517
+   *   800 campos e controles        1C1C1F
+   *   700 trilho/hover              272727
+   *   600 borda em destaque         3F3F46
+   *   500 texto discreto            71717A
+   */
+  --grafite-950: #0b0b0b;
+  --grafite-900: #101012;
+  --grafite-850: #151517;
+  --grafite-800: #1c1c1f;
+  --grafite-700: #272727;
+  --grafite-600: #3f3f46;
+  --grafite-500: #71717a;
 
-  --texto-forte: #e8ecf3;
-  --texto: #b9c2d0;
-  --texto-fraco: #8593a8;
+  --texto-forte: #f4f4f5;
+  --texto: #e4e4e7;
+  --texto-fraco: #a1a1aa;
 
-  --azul: #4c9aff;
-  --azul-forte: #0070f3;
-  --azul-fraco: rgba(76, 154, 255, 0.12);
-  --azul-brilho: rgba(76, 154, 255, 0.25);
+  /* Azul = informação (barras, links, foco). */
+  --azul: #3b82f6;
+  /*
+   * Ação primária. Na referência ela é CLARA, não colorida: fundo quase branco
+   * com texto escuro. Por isso `--azul-forte` passa a ser claro e ganha o par
+   * `--texto-sobre-primario` — sem isso, todo botão primário ficaria com texto
+   * branco sobre branco.
+   */
+  --azul-forte: #e4e4e7;
+  --texto-sobre-primario: #18181b;
+  --azul-forte-hover: #fafafa;
+  /* Realce de seleção/linha ativa continua sendo azul, discretamente. */
+  --azul-fraco: rgba(59, 130, 246, 0.14);
+  --azul-brilho: rgba(59, 130, 246, 0.22);
 
-  --borda: #212c3d;
-  --borda-forte: #2d3a4f;
-  --sucesso: #3fb950;
-  --sucesso-fraco: rgba(63, 185, 80, 0.14);
-  --alerta: #d29922;
-  --alerta-fraco: rgba(210, 153, 34, 0.14);
-  --erro: #f85149;
-  --erro-fraco: rgba(248, 81, 73, 0.14);
-  --aviso: #d8a12a;
+  --borda: #272727;
+  --borda-forte: #3f3f46;
+  --sucesso: #22c55e;
+  --sucesso-fraco: rgba(34, 197, 94, 0.14);
+  --alerta: #f59e0b;
+  --alerta-fraco: rgba(245, 158, 11, 0.14);
+  --erro: #ef4444;
+  --erro-fraco: rgba(239, 68, 68, 0.14);
+  --aviso: #f59e0b;
+  /* Progresso: mesmos matizes da referência, um pouco dessaturados. */
+  --progresso-info: #3b82f6;
+  --progresso-andamento: #f59e0b;
+  --progresso-ok: #22c55e;
+  --trilho: #272727;
 
   --raio: 8px;
   --raio-pequeno: 5px;
@@ -108,7 +143,7 @@ body {
   left: -9999px;
   z-index: 100;
   background: var(--azul-forte);
-  color: #fff;
+  color: var(--texto-sobre-primario);
   padding: 8px 16px;
   border-radius: var(--raio);
 }
@@ -237,15 +272,15 @@ body {
   height: 26px;
   flex-shrink: 0;
   border-radius: 7px;
-  background: linear-gradient(145deg, var(--azul), var(--azul-forte));
-  box-shadow: 0 0 0 1px rgba(76, 154, 255, 0.35), 0 4px 12px -4px var(--azul-brilho);
+  background: var(--texto-forte);
+  box-shadow: none;
   position: relative;
 }
 .marca-simbolo::after {
   content: '';
   position: absolute;
   inset: 8px 0 0 9px;
-  border-left: 7px solid rgba(255, 255, 255, 0.92);
+  border-left: 7px solid var(--grafite-950);
   border-top: 5px solid transparent;
   border-bottom: 5px solid transparent;
 }
@@ -346,10 +381,12 @@ body {
   color: var(--texto-forte);
 }
 .nav-item.ativo {
-  background: var(--azul-forte);
-  color: #fff;
+  /* Realce discreto: fundo azul translúcido com texto forte. Um bloco claro
+     aqui competiria com a ação primária do topo. */
+  background: var(--azul-fraco);
+  color: var(--texto-forte);
   font-weight: 500;
-  box-shadow: 0 2px 10px -4px var(--azul-brilho);
+  box-shadow: inset 2px 0 0 var(--azul);
 }
 
 .nav-icone {
@@ -598,7 +635,7 @@ body {
   font-size: 24px;
   font-weight: 700;
   letter-spacing: -0.4px;
-  color: #fff;
+  color: var(--texto-forte);
   vertical-align: middle;
 }
 
@@ -679,13 +716,15 @@ body {
 .botao-primario {
   background: var(--azul-forte);
   border: 1px solid var(--azul-forte);
-  color: #fff;
-  font-weight: 500;
-  box-shadow: 0 2px 12px -4px var(--azul-brilho);
+  color: var(--texto-sobre-primario);
+  font-weight: 600;
+  /* Sem brilho: a referência é chapada. O contraste do fundo claro já
+     destaca a ação. */
+  box-shadow: none;
 }
 .botao-primario:hover:not(:disabled) {
-  background: #0060df;
-  border-color: #0060df;
+  background: var(--azul-forte-hover);
+  border-color: var(--azul-forte-hover);
 }
 
 .botao-secundario {
@@ -781,7 +820,7 @@ body {
 }
 
 .botao-filtros[aria-expanded='true'] {
-  border-color: var(--azul-forte);
+  border-color: var(--azul);
   color: var(--azul);
   background: var(--azul-fraco);
 }
@@ -794,7 +833,7 @@ body {
   padding: 0 4px;
   border-radius: 999px;
   background: var(--azul-forte);
-  color: #fff;
+  color: var(--texto-sobre-primario);
   font-size: 9.5px;
   font-weight: 700;
 }
@@ -1351,7 +1390,7 @@ body {
 input[type='checkbox'] {
   width: 14px;
   height: 14px;
-  accent-color: var(--azul-forte);
+  accent-color: var(--azul);
   cursor: pointer;
 }
 
@@ -1520,8 +1559,8 @@ input[type='checkbox'] {
   bottom: 5px;
   padding: 1px 5px;
   border-radius: 3px;
-  background: rgba(4, 7, 12, 0.86);
-  color: #e8ecf3;
+  background: rgba(11, 11, 11, 0.86);
+  color: var(--texto-forte);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
@@ -1543,9 +1582,9 @@ input[type='checkbox'] {
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  background: rgba(0, 112, 243, 0.94);
+  background: rgba(24, 24, 27, 0.82);
   box-shadow: 0 3px 14px -2px rgba(0, 0, 0, 0.6);
-  border-left: 10px solid #fff;
+  border-left: 10px solid var(--texto-forte);
   border-top: 7px solid transparent;
   border-bottom: 7px solid transparent;
   margin-left: 4px;
@@ -1698,6 +1737,12 @@ input[type='checkbox'] {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  /* `fit-content` + `align-self` impedem o efeito "bolha": como o selo é um
+     flex item numa coluna `auto`, o padrão `stretch` o esticava na vertical e
+     o fundo translúcido preenchia 58px de altura em vez de ~20px. */
+  width: fit-content;
+  align-self: center;
+  flex: 0 0 auto;
   padding: 2px 8px;
   border-radius: 999px;
   font-size: 10.5px;
@@ -1714,31 +1759,50 @@ input[type='checkbox'] {
   background: currentColor;
   flex-shrink: 0;
 }
+/*
+ * Selos de estado (referência: badges discretos).
+ *
+ * Regras que valem para todos:
+ *  - o TEXTO sempre acompanha a cor — nenhum estado depende só do matiz
+ *    (requisito de acessibilidade do pedido);
+ *  - fundo translúcido + borda de 1px na mesma família, sem brilho;
+ *  - o pontinho à esquerda é reforço visual, não a informação.
+ *
+ * As cores vêm de tokens; os `rgba` de borda derivam das mesmas matizes para
+ * manter a hierarquia sem introduzir hex solto.
+ */
 .selo[data-estado='pronto'],
 .selo[data-estado='concluida'] {
   background: var(--sucesso-fraco);
-  border-color: rgba(63, 185, 80, 0.4);
-  color: #56d364;
+  border-color: color-mix(in srgb, var(--sucesso) 38%, transparent);
+  color: var(--sucesso);
 }
 .selo[data-estado='parcial'],
 .selo[data-estado='processando'],
 .selo[data-estado='pendente'] {
   background: var(--alerta-fraco);
-  border-color: rgba(210, 153, 34, 0.4);
-  color: #e3b341;
+  border-color: color-mix(in srgb, var(--alerta) 38%, transparent);
+  color: var(--alerta);
 }
 .selo[data-estado='erro'],
 .selo[data-estado='falhou'] {
   background: var(--erro-fraco);
-  border-color: rgba(248, 81, 73, 0.4);
-  color: #ff7b72;
+  border-color: color-mix(in srgb, var(--erro) 38%, transparent);
+  color: var(--erro);
 }
 .selo[data-estado='novo'],
 .selo[data-estado='importando'],
 .selo[data-estado='na-fila'] {
   background: var(--azul-fraco);
-  border-color: rgba(76, 154, 255, 0.4);
+  border-color: color-mix(in srgb, var(--azul) 38%, transparent);
   color: var(--azul);
+}
+.selo[data-estado='cancelado'] {
+  background: var(--grafite-800);
+  border-color: var(--borda-forte);
+  color: var(--texto-fraco);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
 }
 .selo[data-estado='sem'] {
   background: var(--grafite-800);
@@ -2462,7 +2526,7 @@ dialog p {
 .campo-url input:focus,
 .campo-url textarea:focus,
 .campo-url select:focus {
-  border-color: var(--azul-forte);
+  border-color: var(--azul);
   outline: none;
   box-shadow: 0 0 0 3px var(--azul-fraco);
 }
@@ -2564,10 +2628,14 @@ dialog p {
   gap: 8px;
 }
 
-.trabalho {
+/* Item filho de playlist/lote. Antes era `.trabalho` (compartilhada com o
+   cartão antigo da fila); a tabela substituiu o cartão, então o nome agora
+   descreve só o que sobrou. */
+.item-filho {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 6px 14px;
+  align-items: start;
+  gap: 4px 14px;
   padding: 12px 14px;
   background: var(--grafite-900);
   border: 1px solid var(--borda);
@@ -2582,6 +2650,9 @@ dialog p {
   font-size: 11px;
   color: var(--texto-fraco);
 }
+.item-filho .selo {
+  align-self: start;
+}
 .trabalho-barra {
   grid-column: 1 / -1;
   height: 3px;
@@ -2592,12 +2663,14 @@ dialog p {
 .trabalho-barra > span {
   display: block;
   height: 100%;
-  background: var(--azul-forte);
+  background: var(--azul);
   transition: width 0.3s;
 }
 .trabalho-acoes {
   display: flex;
   gap: 6px;
+  align-items: center;
+  align-self: start;
 }
 .trabalho-acoes .botao-secundario {
   padding: 4px 9px;
@@ -2644,7 +2717,7 @@ dialog p {
 .aviso-fase {
   margin-top: 16px;
   border: 1px solid var(--borda);
-  border-left: 3px solid var(--azul-forte);
+  border-left: 3px solid var(--azul);
   background: var(--grafite-900);
   border-radius: var(--raio);
   padding: 11px 15px;
@@ -2800,4 +2873,319 @@ dialog p {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ==================================================== importações: tabela */
+/*
+ * Reformulação da tela de Importações (F6-B, parte B).
+ *
+ * Antes: uma pilha de "cartões" altos, com selo gigante e barra de 3px por
+ * linha — três ou quatro trabalhos já tomavam a tela inteira.
+ * Agora: tabela compacta, uma linha por trabalho, com colunas estáveis
+ * (nome, tipo, data, progresso, estado, ações), porque o uso real é varrer
+ * o histórico e agir sobre ele em lote.
+ *
+ * Regras que a marcação precisa respeitar para este CSS funcionar:
+ *  - `<table class="tabela-trabalhos">` com `<colgroup>` de larguras fixas
+ *    nas colunas numéricas (progresso, data) e elástica no nome;
+ *  - o nome é o único alvo com truncamento (`text-overflow`), para a linha
+ *    nunca crescer em altura;
+ *  - `data-estado` na `<tr>` permite destacar por estado sem depender de cor
+ *    no texto: o selo sempre traz a palavra.
+ */
+/*
+ * A classe `.trabalho` é usada em dois contextos:
+ *   1. a <tr> da tabela (raízes)  → precisa ser `table-row`, nunca `grid`;
+ *   2. o <div> de um item filho   → herda `.trabalho{display:grid}` legado.
+ * A regra abaixo restaura o comportamento de linha. Sem ela, `display:grid`
+ * vence a apresentação padrão de <tr> e as células se sobrepõem (defeito
+ * encontrado ao rodar o E2E com fila real).
+ */
+.tabela-trabalhos {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  table-layout: fixed;
+}
+.tabela-trabalhos thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--grafite-900);
+  border-bottom: 1px solid var(--borda);
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--texto-fraco);
+  white-space: nowrap;
+}
+.tabela-trabalhos thead th[data-ordenavel] {
+  cursor: pointer;
+  user-select: none;
+}
+.tabela-trabalhos thead th[data-ordem] {
+  color: var(--texto-forte);
+}
+.tabela-trabalhos tbody tr {
+  border-bottom: 1px solid color-mix(in srgb, var(--borda) 70%, transparent);
+}
+.tabela-trabalhos tbody tr:hover {
+  background: color-mix(in srgb, var(--grafite-850) 70%, transparent);
+}
+.tabela-trabalhos tbody tr[data-estado='executando'],
+.tabela-trabalhos tbody tr[data-estado='na-fila'] {
+  background: color-mix(in srgb, var(--azul) 6%, transparent);
+}
+.tabela-trabalhos td {
+  padding: 6px 10px;
+  vertical-align: middle;
+  color: var(--texto);
+  /* Altura de linha compacta: a referência mostra ~6 linhas visíveis sem
+     rolagem. O `line-height` menor é o que mais contribui para isso. */
+  line-height: 1.35;
+}
+.tabela-trabalhos tbody tr {
+  height: 44px;
+}
+/* Colunas numéricas: algarismos tabulares evitam o texto "pular" ao atualizar. */
+.tabela-trabalhos td[data-coluna='data'],
+.tabela-trabalhos td[data-coluna='progresso'] {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--texto-fraco);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.tabela-trabalhos td[data-coluna='selecao'],
+.tabela-trabalhos thead th[data-coluna='selecao'] {
+  width: 34px;
+  padding-left: 12px;
+}
+.tabela-trabalhos input[type='checkbox'] {
+  accent-color: var(--azul);
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+/* Nome: duas linhas no máximo, sem empurrar as outras colunas. */
+.celula-nome {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+.nome-trabalho {
+  font-weight: 600;
+  color: var(--texto-forte);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nome-trabalho-sub {
+  font-size: 10.5px;
+  color: var(--texto-fraco);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nome-trabalho.mono {
+  font-family: var(--mono);
+  font-weight: 500;
+  font-size: 11.5px;
+}
+
+/* Progresso: barra fina + % só quando o valor é confiável. */
+.celula-progresso {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.trilho-progresso {
+  flex: 1 1 auto;
+  min-width: 28px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--trilho);
+  overflow: hidden;
+}
+.trilho-progresso > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--azul);
+  transition: width 0.3s;
+}
+.trilho-progresso[data-resultado='ok'] > span { background: var(--sucesso); }
+.trilho-progresso[data-resultado='falhou'] > span { background: var(--erro); }
+.trilho-progresso[data-resultado='cancelado'] > span { background: var(--texto-fraco); }
+.trilho-progresso[data-indeterminado] {
+  background-image: repeating-linear-gradient(
+    115deg, transparent 0 6px,
+    color-mix(in srgb, var(--texto-fraco) 22%, transparent) 6px 12px
+  );
+  background-color: var(--trilho);
+}
+.percentual {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--texto-fraco);
+  font-variant-numeric: tabular-nums;
+  min-width: 30px;
+  text-align: right;
+}
+/* Quando não há número confiável, diz o motivo em texto — nunca inventa %. */
+.progresso-indefinido {
+  font-size: 11px;
+  color: var(--texto-fraco);
+  font-style: italic;
+}
+
+/* Ações: ícone-botão compacto, com rótulo acessível. */
+.celula-acoes {
+  display: flex;
+  gap: 2px;
+  justify-content: flex-end;
+}
+.botao-icone {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--texto-fraco);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+}
+.botao-icone:hover:not(:disabled) {
+  background: var(--grafite-800);
+  border-color: var(--borda);
+  color: var(--texto-forte);
+}
+.botao-icone:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.botao-icone[data-acao='remover']:hover:not(:disabled) {
+  color: var(--erro);
+  border-color: color-mix(in srgb, var(--erro) 40%, transparent);
+}
+.botao-icone:focus-visible {
+  outline: 2px solid var(--azul);
+  outline-offset: 1px;
+}
+
+/* Linha de detalhe (filhos de uma playlist/lote): ocupa a tabela toda. */
+.tabela-trabalhos tr.linha-detalhe > td {
+  padding: 0 10px 10px 44px;
+  background: color-mix(in srgb, var(--grafite-850) 45%, transparent);
+}
+.tabela-trabalhos .lista-filhos {
+  display: grid;
+  gap: 2px;
+  margin-top: 6px;
+}
+.tabela-trabalhos .lista-filhos .item-filho {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  padding: 6px 10px;
+  background: transparent;
+  border: 0;
+  border-left: 2px solid var(--borda);
+  border-radius: 0 6px 6px 0;
+  font-size: 12px;
+}
+
+/* Barra de ferramentas da tabela: pesquisa, filtros e ações em lote. */
+.barra-trabalhos {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.barra-trabalhos .campo-pesquisa {
+  position: relative;
+  flex: 1 1 220px;
+  max-width: 320px;
+}
+.barra-trabalhos .campo-pesquisa input {
+  width: 100%;
+  padding: 7px 10px 7px 30px;
+  border: 1px solid var(--borda);
+  border-radius: 7px;
+  background: var(--grafite-800);
+  color: var(--texto-forte);
+  font: inherit;
+  font-size: 12.5px;
+}
+.barra-trabalhos .campo-pesquisa input:focus {
+  outline: none;
+  border-color: var(--azul);
+  box-shadow: 0 0 0 3px var(--azul-fraco);
+}
+.barra-trabalhos .campo-pesquisa::before {
+  content: '⌕';
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--texto-fraco);
+  font-size: 13px;
+  pointer-events: none;
+}
+.barra-trabalhos select {
+  padding: 7px 9px;
+  border: 1px solid var(--borda);
+  border-radius: 7px;
+  background: var(--grafite-800);
+  color: var(--texto);
+  font: inherit;
+  font-size: 12.5px;
+}
+.barra-trabalhos .contagem-selecao {
+  font-size: 11.5px;
+  color: var(--texto-fraco);
+  margin-right: auto;
+}
+.linha-vazia-trabalhos {
+  padding: 26px 10px;
+  text-align: center;
+  color: var(--texto-fraco);
+  font-size: 12.5px;
+}
+
+/* Rolagem da tabela: cabeçalho fixo e corpo com altura máxima própria.
+   Sem isso, um histórico de 200 linhas empurraria o rodapé para fora da tela. */
+.caixa-tabela-trabalhos {
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  background: var(--grafite-900);
+  overflow: auto;
+  max-height: min(62vh, 720px);
+}
+.caixa-tabela-trabalhos:has(td.linha-vazia-trabalhos) {
+  max-height: none;
+}
+.caixa-tabela-trabalhos table {
+  min-width: 720px;
+}
+.tabela-trabalhos tbody tr[data-destaque='true'] {
+  animation: destacar-linha 2.4s ease-out 1;
+}
+@keyframes destacar-linha {
+  from { background: color-mix(in srgb, var(--azul) 22%, transparent); }
+  to { background: transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tabela-trabalhos tbody tr[data-destaque='true'] { animation: none; }
+  .trilho-progresso > span { transition: none; }
 }

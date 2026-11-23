@@ -340,6 +340,23 @@ export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}
       registrador.info('histórico de importações limpo', resultado);
       return resultado;
     })
+    /*
+     * Remoção de UM trabalho do histórico.
+     *
+     * ORDEM IMPORTA: esta rota fica DEPOIS de `/api/trabalhos/historico`.
+     * O roteador casa por caminho, então `:id` captura a palavra "historico"
+     * e a limpeza por categoria nunca seria alcançada (foi o que a suíte
+     * pegou: 404 em vez de 422/200). Rota literal sempre antes de curinga.
+     *
+     * Remover do histórico NÃO apaga vídeo, coleção nem arquivo baixado.
+     * Trabalho ativo é recusado com 409 — cancelar é operação explícita.
+     */
+    .remover('/api/trabalhos/:id', async ({ requisicao }) => {
+      const id = requisicao.caminho.split('/')[3]!;
+      const resultado = repositorioTrabalhos.removerDoHistorico(id);
+      registrador.info('trabalho removido do histórico', { id, filhos: resultado.filhos });
+      return resultado;
+    })
     .obter('/api/trabalhos', ({ requisicao }) => repositorioTrabalhos.pagina({
       raizes: requisicao.consulta.get('raizes') === '1', estado: requisicao.consulta.get('estado') ?? undefined, cursor: requisicao.consulta.get('cursor') ?? undefined,
       limite: Number(requisicao.consulta.get('limite') ?? 50),
