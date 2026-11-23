@@ -4,7 +4,7 @@
 > `00-comece-aqui.md`. O que está abaixo da linha "Histórico" é registro, não
 > estado vigente.
 
-## Estado vigente — 23/11/2026 — F6-B, partes D-1, B, A e C aplicadas
+## Estado vigente — 23/11/2026 — F6-B, partes A, B, C, D-1 e D-2 aplicadas
 
 Branch de trabalho do Arena (`arena/735d302d-contextflow`), base `e11a748`,
 HEAD local `c3e8286` + os commits desta sessão. **F7 não iniciada.** As quatro
@@ -176,6 +176,63 @@ introduzido foram corrigidas do meu lado (`input[type="search"]` →
 Pendente: partes A (estados/feedback na Biblioteca), C (árvore com vídeos,
 chips de filtro, coleções CRUD + correção `videoIds`) e D-2 (reparo em lote de
 miniaturas). Homologação humana pendente.
+
+### D-2 — reparo em lote de miniaturas (aplicada)
+
+**Problema real medido na base do proprietário:** os seis vídeos estavam com
+`miniaturas.falha` preenchida e `tentativas = 2`, nenhum com arquivo. Cinco
+apareciam com capa na tela apenas porque `videos.miniatura_url` apontava para
+`/miniaturas-teste/thumbN.png` — caminho **relativo**, servido pela própria
+interface. O sexto não tinha nem isso. Como a F6-A só derivava candidatos do
+CDN quando a URL existente já era do `ytimg.com`, um caminho relativo nunca
+produzia candidato: `new URL()` lançava, e o vídeo ficava sem capa para sempre,
+com motivo "URL de miniatura inválida".
+
+**Correção na derivação de candidatos (`modulos/miniaturas/servico.ts`).**
+Passa a derivar quando a URL existente é do `ytimg.com` **ou não é absoluta**
+(caminho local não é fonte: não há host que possa responder). URL absoluta de
+outro host continua com uma tentativa só — a spec da F6-A proíbe inventar
+candidatos para fonte arbitrária, e isso não mudou.
+
+**Serviço de reparo (`modulos/miniaturas/reparo.ts`, novo).** `reparar({forcar})`
+varre os ids em páginas e tenta, **em série**, só quem está sem cópia local;
+`forcar` inclui quem já carregou (decisão explícita para arte trocada na
+origem). Não cria tabela nem fila: o estado vem do repositório de miniaturas
+que já existe. Reutiliza `garantir()` — logo herda o teto de três tentativas, a
+deduplicação de buscas simultâneas e a validação de host.
+
+**`POST /api/miniaturas/reparar`** devolve `{total, recuperados, falhas[]}`.
+`total` é o número de analisados, `falhas` são `{videoId, motivo}` — falha é
+relatada com motivo, nunca omitida nem convertida em sucesso. Detalhe de
+comportamento aprendido no teste: `garantir(id, {forcar:false})` retorna cedo
+`{ok:true}` quando já existe arquivo, então o reparo usa `temCopiaLocal()` para
+decidir quem entra, em vez de comparar `ok`.
+
+**Novo `ServicoMiniaturas.temCopiaLocal(videoId)`** — distingue "tem arquivo"
+de `urlPublica()`, que devolve `null` também quando não há registro.
+
+**UI (Configurações → Miniaturas).** Botão "Reparar miniaturas faltantes" com
+checkbox "Refazer também as que já carregaram". Durante a operação o botão fica
+desabilitado e a tela não muda — nada arranca o usuário do lugar. O relatório é
+texto com números ("0 capas recuperadas de 6 vídeos analisados; 6 sem
+recuperação") seguido dos motivos **agrupados e traduzidos**: `fetch failed`
+virou "sem conexão com o servidor de imagens do YouTube", `sem candidatos` virou
+"origem sem candidatos conhecidos para a capa". Motivo desconhecido passa direto,
+sem inventar causa.
+
+**Testes (`testes/integracao/reparo-miniaturas.test.ts`, 3 cenários, CDN local).**
+Recupera o que falta e serve pela própria origem; não rebaixa quem já tem cópia
+sem `forcar`; respeita o teto (nenhum pedido novo, contador intacto) e `forcar`
+destrava.
+
+**Limitação do ambiente, registrada:** este sandbox só alcança GitHub, npm e
+PyPI. Contra o YouTube real a chamada termina em `fetch failed` — o teste com CDN
+local cobre a regra; a validação contra a internet fica para a homologação do
+proprietário. Nada de URL é inventado: o relatório declarou a falha.
+
+Suítes após D-2: `npm test` **248/248** · `test:e2e` **57/57** · `pos-f6`
+**13/13** · `refinamentos` **9/9** · `visualizacao` **4/4** · `resumos` **8/8** ·
+`build` ok.
 
 ## Estado vigente — 22/11/2026 — painel horizontal de Visualização
 

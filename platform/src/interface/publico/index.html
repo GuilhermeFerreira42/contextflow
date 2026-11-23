@@ -517,6 +517,21 @@
             </div>
             <p id="ia-resultado" class="ia-linha-inteira" role="status" aria-live="polite"></p>
           </form>
+          <h2 class="subtitulo">Miniaturas</h2>
+          <p class="painel-nota">
+            Vídeos importados antes da correção da F6-A podem continuar sem capa.
+            O reparo tenta os que faltam, um por vez, respeitando o limite de três
+            tentativas. Nenhum endereço é inventado para fonte que não seja do YouTube,
+            e o que não puder ser recuperado é listado como falha — não como sucesso.
+          </p>
+          <div class="barra-ferramentas barra-ferramentas-miniaturas">
+            <button class="botao-secundario" id="miniaturas-reparar" type="button">Reparar miniaturas faltantes</button>
+            <label class="filtro-checkbox">
+              <input id="miniaturas-forcar" type="checkbox" />
+              Refazer também as que já carregaram
+            </label>
+          </div>
+          <p id="miniaturas-reparo-resultado" class="ia-linha-inteira" role="status" aria-live="polite"></p>
           <div class="aviso-fase">
             Provedor de IA editável nesta tela. As demais preferências gerais ainda
             são de leitura. A chave salva nunca é devolvida pela API.

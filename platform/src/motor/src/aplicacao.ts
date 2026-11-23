@@ -29,6 +29,7 @@ import { ClienteProvedor } from './modulos/resumos/provedores.ts';
 import type { ServicoConfiguracao } from './modulos/configuracao/servico.ts';
 import { RepositorioMiniaturas } from './persistencia/repositorio-miniaturas.ts';
 import { ServicoMiniaturas } from './modulos/miniaturas/servico.ts';
+import { ServicoReparoMiniaturas } from './modulos/miniaturas/reparo.ts';
 
 export const VERSAO_API = '0.1.0';
 
@@ -415,6 +416,74 @@ export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}
       await biblioteca.obter(id); // 404 se o vídeo não existe
       const transcricao = await repositorioTranscricoes.porVideo(id);
       return transcricao ?? { videoId: id, idioma: '', origem: 'auto', estado: 'pendente', segmentos: [], motivo: 'Transcrição ainda não importada.', atualizadoEm: '' };
+    })
+    /*
+     * Reparo em lote de miniaturas (F6-B, parte D-2).
+     *
+     * Varre a biblioteca e tenta recuperar as capas que faltam, usando o MESMO
+     * serviço da recuperação individual (`garantir`) — com o limite de
+     * tentativas, a deduplicação e os candidatos que a F6-A definiu. Nenhuma
+     * URL é inferida para fonte que não seja YouTube.
+     *
+     * Por que síncrona: o relatório é a informação útil ("3 recuperadas, 2 sem
+     * candidato"). Criar um tipo de trabalho só para isto faria o usuário caçar
+     * o resultado em Importações, e a operação é limitada pela quantidade de
+     * vídeos sem capa — pequena por definição, já que o caminho normal
+     * (`garantir`) roda na importação.
+     *
+     * `forcar: true` refaz até quem já tem imagem (arte trocada na origem);
+     * é decisão explícita do usuário, nunca padrão.
+     */
+    .postar('/api/miniaturas/reparar', async ({ requisicao }) => {
+      const forcar = (requisicao.corpo as { forcar?: unknown } | undefined)?.forcar === true;
+      const servico = new ServicoReparoMiniaturas({
+        // A listagem varre os ids na ordem padrão. `limite: 200` cabe no que
+        // `consultar` aceita (máximo 500) e mantém o cursor pequeno.
+        listarVideoIds: async ({ cursor, limite }) => {
+          const pagina = await biblioteca.consultar({ cursor: cursor ?? undefined, limite: String(limite) });
+          return { ids: pagina.itens.map((v) => v.id), proximoCursor: pagina.proximoCursor ?? null };
+        },
+        // `forcar` do REPARO não é o mesmo do `garantir`.
+        //
+        // `garantir(id, { forcar })` com forcar=false retorna cedo quando já
+        // existe arquivo — e retornar cedo é `ok: true`. Passar `forcar: true`
+        // para rebaixar capas boas seria errado. Então:
+        //   - vídeo sem cópia local: `forcar: false` (caminho normal de busca);
+        //   - vídeo com cópia e `forcar` pedido: `forcar: true` (refaz).
+        // O filtro de quem entra na varredura é `temCopiaLocal` abaixo.
+        garantir: (videoId, opcoes) => miniaturas.garantir(videoId, opcoes),
+        temCopiaLocal: (videoId) => miniaturas.temCopiaLocal(videoId),
+        /*
+         * Quem pode ser tentado.
+         *
+         * `youtube_id` é obrigatório no schema, então "tem youtubeId" não
+         * distingue nada — todo vídeo tem. O que decide é haver candidato
+         * legítimo: ou a capa é do CDN, ou é um caminho local (sem host, logo
+         * derivável do youtubeId). Uma URL absoluta de outro host é a fonte
+         * que o usuário importou: a spec proíbe inventar candidato para ela,
+         * e tentar de novo só gastaria uma das três tentativas.
+         */
+        podeTentar: async (videoId) => {
+          const video = await biblioteca.obter(videoId);
+          if (!video.youtubeId || !/^[A-Za-z0-9_-]{11}$/.test(video.youtubeId)) return false;
+          const registro = miniaturas.temCopiaLocal(videoId);
+          if (registro) return true;
+          const capa = video.miniaturaUrl;
+          if (!capa) return true; // sem capa informada: nada a inferir, será declarado
+          try {
+            const host = new URL(capa).hostname;
+            return host === 'ytimg.com' || host.endsWith('.ytimg.com');
+          } catch {
+            return true; // caminho local: derivável
+          }
+        },
+        aoProgredir: (estado) => registrador.debug('reparo de miniaturas', estado),
+      });
+      const resultado = await servico.reparar({ forcar });
+      registrador.info('reparo de miniaturas concluído', {
+        total: resultado.total, recuperados: resultado.recuperados, falhas: resultado.falhas.length,
+      });
+      return resultado;
     })
     .postar('/api/miniaturas/:id/buscar', async ({ requisicao }) => {
       const id = requisicao.caminho.split('/').at(-2)!;

@@ -779,6 +779,121 @@ async function carregarConfiguracoes() {
   }
 }
 
+/* --------------------------------------------------- reparo de miniaturas ---- */
+
+/**
+ * Reparo em lote das capas (F6-B, D-2).
+ *
+ * Três decisões que o relatório precisa deixar visíveis:
+ *
+ *  1. O botão fica desabilitado durante a operação com texto que diz o que
+ *     está acontecendo. Não se troca o conteúdo da tela nem se abre outro
+ *     painel — o usuário continua onde estava (o app não arranca ninguém do
+ *     lugar ao enfileirar trabalho).
+ *  2. O resultado é um texto com números reais: recuperadas, falhas e o motivo
+ *     agrupado. "Concluído" sem número é o que a spec proíbe.
+ *  3. Recarregar a biblioteca é necessário porque a miniatura recuperada muda
+ *     a lista — mas só ao final.
+ */
+function ligarReparoMiniaturas() {
+  const botao = $('#miniaturas-reparar');
+  const forcar = $('#miniaturas-forcar');
+  const saida = $('#miniaturas-reparo-resultado');
+  if (!botao || !saida) return;
+
+  botao.addEventListener('click', async () => {
+    const rotulo = botao.textContent;
+    botao.disabled = true;
+    if (forcar) forcar.disabled = true;
+    botao.textContent = 'Reparando…';
+    saida.dataset.tipo = '';
+    saida.textContent = 'Procurando capas faltantes. Isso pode levar alguns segundos.';
+
+    try {
+      const resultado = await api('/api/miniaturas/reparar', {
+        method: 'POST',
+        body: JSON.stringify({ forcar: Boolean(forcar?.checked) }),
+      });
+      const linha = resumoDoReparo(resultado);
+      saida.textContent = linha;
+      saida.dataset.tipo = resultado.recuperados > 0 ? 'sucesso' : 'neutro';
+      // Motivos agrupados: o usuário vê o padrão ("sem miniatura", "sem
+      // candidato") em vez de uma lista de ids que não significam nada para ele.
+      if (resultado.falhas?.length) {
+        // O `<p>` é `role="status"`: inserir texto antes da lista mantém o
+        // anúncio com uma frase completa, em vez de números soltos.
+        const resumo = document.createElement('p');
+        resumo.className = 'reparo-resumo';
+        resumo.textContent = linha;
+        saida.textContent = '';
+        saida.append(resumo);
+        const lista = document.createElement('ul');
+        lista.className = 'reparo-motivos';
+        for (const [motivo, quantidade] of agruparMotivos(resultado.falhas)) {
+          const item = document.createElement('li');
+          item.textContent = `${quantidade} ${quantidade === 1 ? 'vídeo' : 'vídeos'}: ${motivo}`;
+          lista.append(item);
+        }
+        saida.append(lista);
+      }
+      if (resultado.recuperados > 0) {
+        await carregarBiblioteca();
+        // A miniatura só aparece depois de redesenhar; a Biblioteca é a tela
+        // onde o efeito é visível, então é lá que se confere o resultado.
+      }
+    } catch (erro) {
+      saida.dataset.tipo = 'erro';
+      saida.textContent = `Não foi possível reparar: ${erro.message}`;
+    } finally {
+      botao.disabled = false;
+      if (forcar) forcar.disabled = false;
+      botao.textContent = rotulo;
+    }
+  });
+}
+
+/** Texto do relatório. Separado para poder ser testado sem browser. */
+function resumoDoReparo(resultado) {
+  const total = Number(resultado?.total ?? 0);
+  const recuperados = Number(resultado?.recuperados ?? 0);
+  const falhas = Number(resultado?.falhas?.length ?? 0);
+  if (total === 0) return 'Nada a reparar: todas as capas já estão carregadas.';
+  if (falhas === 0) return `Pronto: ${recuperados} de ${total} ${recuperados === 1 ? 'capa recuperada' : 'capas recuperadas'}.`;
+  const alvo = total === 1 ? 'vídeo analisado' : 'vídeos analisados';
+  return `${recuperados} ${recuperados === 1 ? 'capa recuperada' : 'capas recuperadas'} de ${total} ${alvo}; ${falhas} sem recuperação.`;
+}
+
+/**
+ * Motivo técnico → frase para o usuário.
+ *
+ * "fetch failed" é o texto do Node quando não há rede ou o host não responde;
+ * mostrado cru, parece defeito do app. Cada motivo conhecido ganha uma frase
+ * que diz o que fazer, e o desconhecido passa direto (não se inventa causa).
+ */
+const MOTIVOS_LEGIVEIS = [
+  [/fetch failed|network|ECONN|ENOTFOUND|ETIMEDOUT/i, 'sem conexão com o servidor de imagens do YouTube'],
+  [/^sem miniatura|sem miniatura|não tem miniatura/i, 'o vídeo não tem miniatura disponível na origem'],
+  [/URL inválida|inválida/i, 'endereço de capa inválido — a correção depende de importar de novo'],
+  [/sem candidatos/i, 'origem sem candidatos conhecidos para a capa'],
+];
+
+function motivoLegivel(motivo) {
+  const texto = String(motivo ?? '').trim();
+  if (!texto) return 'motivo não informado';
+  for (const [padrao, frase] of MOTIVOS_LEGIVEIS) if (padrao.test(texto)) return frase;
+  return texto;
+}
+
+/** Agrupa os motivos para o relatório não virar uma parede de ids. */
+function agruparMotivos(falhas) {
+  const contagem = new Map();
+  for (const falha of falhas ?? []) {
+    const motivo = motivoLegivel(falha?.motivo);
+    contagem.set(motivo, (contagem.get(motivo) ?? 0) + 1);
+  }
+  return [...contagem.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+}
+
 /* ---------------------------------------------------------------- boot ---- */
 
 function ligarEventos() {
@@ -823,6 +938,7 @@ function ligarEventos() {
   });
 
   ligarLimpezaHistorico();
+  ligarReparoMiniaturas();
 
   // A tabela de Importações é montada aqui, uma vez. `montar` cria
   // `<table>`/`<thead>`/`<tbody>` dentro de `#lista-trabalhos`; `ligarControles`

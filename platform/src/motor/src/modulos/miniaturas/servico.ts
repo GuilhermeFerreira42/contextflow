@@ -35,6 +35,18 @@ export class ServicoMiniaturas {
     this.#deps = deps;
   }
 
+  /**
+   * Há arquivo local registrado para este vídeo?
+   *
+   * Diferente de `urlPublica`, que devolve `null` quando não há registro —
+   * o reparo precisa saber se o vídeo JÁ está resolvido sem depender de a
+   * URL pública estar montada, e sem baixar de novo o que está bom.
+   */
+  temCopiaLocal(videoId: string): boolean {
+    const registro = this.#deps.repositorio.obter(videoId);
+    return Boolean(registro?.arquivo && !registro.falha);
+  }
+
   /** URL pública da miniatura, ou `null` se não há cópia local. */
   urlPublica(videoId: string): string | null {
     const registro = this.#deps.repositorio.obter(videoId);
@@ -103,9 +115,26 @@ export class ServicoMiniaturas {
     const candidatos = [url];
     const video = await this.#deps.buscarUrlDoVideo(videoId);
     const id = video?.youtubeId;
+    let absoluta = true;
     let host = '';
-    try { host = new URL(url).hostname; } catch { /* baixarMiniatura registra a URL inválida */ }
-    if (id && /^[A-Za-z0-9_-]{11}$/.test(id) && (host === 'ytimg.com' || host.endsWith('.ytimg.com'))) {
+    try { host = new URL(url).hostname; } catch { absoluta = false; }
+    /*
+     * Derivação de candidatos do CDN.
+     *
+     * A F6-A só derivava quando a URL já era do `ytimg.com`. Isso deixava de
+     * fora o caso encontrado na base real: `miniatura_url` apontando para um
+     * caminho LOCAL (`/miniaturas-teste/thumb1.png`). Caminho relativo não é
+     * "fonte" nenhuma — não há host que possa responder —, então o vídeo ficava
+     * sem capa para sempre, e o reparo não tinha por onde começar.
+     *
+     * Regra: com `youtubeId` válido, o CDN entra quando a URL existente é do
+     * `ytimg.com` OU não é absoluta. Para uma URL absoluta de OUTRO host nada é
+     * inferido — é a fonte que o usuário importou, e a spec proíbe inventar
+     * candidatos para ela. Fonte arbitrária continua com uma tentativa só.
+     */
+    const doCdn = host === 'ytimg.com' || host.endsWith('.ytimg.com');
+    if (id && /^[A-Za-z0-9_-]{11}$/.test(id) && (doCdn || !absoluta)) {
+      if (!absoluta) candidatos.length = 0; // caminho local não é pedido válido
       candidatos.push(`https://i.ytimg.com/vi/${id}/maxresdefault.jpg`, `https://i.ytimg.com/vi/${id}/hqdefault.jpg`);
     }
     let resultado: { ok: boolean; motivo?: string } = { ok: false, motivo: 'sem miniatura' };

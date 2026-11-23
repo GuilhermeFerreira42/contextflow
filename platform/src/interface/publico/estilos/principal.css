@@ -3687,3 +3687,41 @@ tr.linha-provisoria.provisoria-falhou > td:first-child {
 }
 .chip-limpar-todos:hover { color: var(--texto-forte); border-color: var(--texto-fraco); }
 .chip-limpar-todos:focus-visible { outline: 2px solid var(--azul); outline-offset: 1px; }
+
+/* ------------------------------------ reparo de miniaturas (F6-B, parte D-2) */
+
+#miniaturas-reparo-resultado[data-tipo="sucesso"] {
+  color: var(--sucesso);
+}
+
+#miniaturas-reparo-resultado[data-tipo="erro"] {
+  color: var(--erro);
+}
+
+.reparo-resumo {
+  margin: 0;
+}
+
+/* Motivos agrupados: lista curta, sem parede de ids. */
+.reparo-motivos {
+  margin: 0.35rem 0 0;
+  padding-left: 1.15rem;
+  color: var(--texto-fraco);
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+
+.reparo-motivos li::marker {
+  color: var(--borda-forte);
+}
+
+/*
+ * O formulário de miniaturas usa `.barra-ferramentas`, que distribui com
+ * `space-between` — pensado para par de ações com peso igual. Aqui o botão e o
+ * checkbox são uma frase só ("reparar", "e refazer as que já existem"): colados
+ * um no outro, e com a caixa alinhada ao centro do botão.
+ */
+.barra-ferramentas-miniaturas {
+  justify-content: flex-start;
+  gap: 0.75rem;
+}
