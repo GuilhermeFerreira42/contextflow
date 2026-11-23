@@ -70,3 +70,17 @@ scroll horizontal em desktop/mobile. Testes de idiomas: preferido falha, outra
 faixa funciona; limite429; cancelamento; vazio/sem faixa. Prova real controlada
 nos parciais existentes quando YouTube permitir, sem resumos pagos. Registrar
 o que foi executado, evidências externas e commits separados por fatia.
+
+## Resultado executado em 23/11/2026
+
+Implementação e validação concluídas; detalhes e commits em `../estado-atual.md`.
+252 testes aprovados, 6 ignorados no Windows, 0 falhas; navegador: 57 CDP e
+Playwright 8 resumos, 13 pós-F6, 9 refinamentos, 4 visualização e 9 estabilização.
+Build/typecheck e fumaça aprovados. Os dois parciais reais foram reimportados
+pela fila com es-orig e agora têm transcrições prontas (223 e 390 segmentos).
+Configuração pessoal preservada. Coleções intactas, F7 fora.
+
+Referência primária consultada para 429 em traduções automáticas:
+[yt-dlp, issue 13831](https://github.com/yt-dlp/yt-dlp/issues/13831).
+A solução limita alternativas e registra o idioma efetivo; não promete
+contornar restrições nem interpreta toda faixa-orig como idioma original.

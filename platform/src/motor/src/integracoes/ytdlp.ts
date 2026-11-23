@@ -29,6 +29,7 @@ export interface MetadadosYtdlp {
   duracaoSegundos: number | null;
   miniaturaUrl: string | null;
   publicadoEm: string | null;
+  idiomaAudio?: string | null;
   legendasManuais: string[];
   legendasAutomaticas: string[];
 }
@@ -51,8 +52,9 @@ export interface ItemPlaylist { youtubeId: string | null; titulo: string; posica
 export interface OpcoesYtdlp {
   binario?: string;
   timeoutMs?: number;
-  /** Injetável nos testes: substitui a execução real do processo. */
   registrarErro?: (mensagem: string) => void;
+  /** Injetável nos testes: substitui a execução real do processo. */
+  executar?: typeof executarProcesso;
 }
 
 // --------------------------------------------------------------- execução ----
@@ -199,16 +201,19 @@ interface JsonYtdlp {
   duration?: number;
   thumbnail?: string;
   upload_date?: string;
+  language?: string;
   subtitles?: Record<string, unknown>;
   automatic_captions?: Record<string, unknown>;
 }
 
 export class Ytdlp implements ExecutorYtdlp {
+  readonly #executar: typeof executarProcesso;
   readonly #binario: string;
   readonly #timeoutMs: number;
   readonly #aoErro: (mensagem: string) => void;
 
   constructor(opcoes: OpcoesYtdlp = {}) {
+    this.#executar = opcoes.executar ?? executarProcesso;
     this.#binario = opcoes.binario ?? process.env.CONTEXTFLOW_YTDLP ?? 'yt-dlp';
     this.#timeoutMs = opcoes.timeoutMs ?? Number(process.env.CONTEXTFLOW_YTDLP_TIMEOUT ?? 60_000);
     this.#aoErro = opcoes.registrarErro ?? (() => {});
@@ -216,7 +221,7 @@ export class Ytdlp implements ExecutorYtdlp {
 
   async disponivel(): Promise<{ disponivel: boolean; versao: string | null; caminho: string }> {
     try {
-      const resultado = await executarProcesso(this.#binario, ['--version'], 10_000, this.#aoErro);
+      const resultado = await this.#executar(this.#binario, ['--version'], 10_000, this.#aoErro);
       const versao = resultado.stdout.trim().split('\n')[0] ?? null;
       return { disponivel: resultado.codigo === 0, versao, caminho: this.#binario };
     } catch {
@@ -234,7 +239,7 @@ export class Ytdlp implements ExecutorYtdlp {
       url,
     ];
 
-    const resultado = await executarProcesso(this.#binario, args, this.#timeoutMs, this.#aoErro, sinal);
+    const resultado = await this.#executar(this.#binario, args, this.#timeoutMs, this.#aoErro, sinal);
     if (resultado.codigo !== 0) throw traduzirErroYtdlp(resultado.stderr);
 
     let dados: JsonYtdlp;
@@ -256,6 +261,7 @@ export class Ytdlp implements ExecutorYtdlp {
       duracaoSegundos: typeof dados.duration === 'number' ? Math.round(dados.duration) : null,
       miniaturaUrl: dados.thumbnail ?? null,
       publicadoEm: normalizarDataPublicacao(dados.upload_date) ?? null,
+      idiomaAudio: typeof dados.language === 'string' ? dados.language : null,
       legendasManuais: Object.keys(dados.subtitles ?? {}),
       legendasAutomaticas: Object.keys(dados.automatic_captions ?? {}),
     };
@@ -268,13 +274,46 @@ export class Ytdlp implements ExecutorYtdlp {
   async baixarLegenda(url: string, idiomas: string[], sinal?: AbortSignal): Promise<LegendaBaixada | null> {
     const metadados = await this.inspecionar(url, sinal);
 
-    const manual = escolherIdioma(metadados.legendasManuais, idiomas);
-    const origem: 'manual' | 'auto' = manual ? 'manual' : 'auto';
-    const automatica = manual ? null : escolherIdioma(metadados.legendasAutomaticas, idiomas);
+    const valida = (idioma: string) => /^[A-Za-z0-9][A-Za-z0-9._-]{0,40}$/.test(idioma) && idioma !== 'live_chat';
+    const manuais = metadados.legendasManuais.filter(valida);
+    const automaticas = metadados.legendasAutomaticas.filter(valida);
+    const candidatas: Array<{ idioma: string; origem: 'manual' | 'auto' }> = [];
+    const adicionar = (idioma: string | null, origem: 'manual' | 'auto') => {
+      if (idioma && !candidatas.some(c => c.idioma === idioma && c.origem === origem)) candidatas.push({ idioma, origem });
+    };
+    adicionar(escolherIdioma(manuais, idiomas), 'manual');
+    adicionar(escolherIdioma(automaticas, idiomas), 'auto');
+    // '-orig' também pode ser de dublagem. Priorizar o idioma informado
+    // pelo YouTube, sem afirmar que toda faixa '-orig' seja o áudio original.
+    const baseAudio = metadados.idiomaAudio?.split('-')[0]?.toLowerCase();
+    const originais = automaticas.filter(i => i.endsWith('-orig')).sort((a, b) =>
+      Number(b.split('-')[0]?.toLowerCase() === baseAudio) - Number(a.split('-')[0]?.toLowerCase() === baseAudio));
+    // Depois da preferência explícita, a alternativa sem tradução vem antes de outra tradução.
+    const preferida = candidatas.shift();
+    const restantes = candidatas.splice(0);
+    if (preferida) candidatas.push(preferida);
+    for (const i of originais) adicionar(i, 'auto');
+    for (const c of restantes) adicionar(c.idioma, c.origem);
+    for (const i of manuais) adicionar(i, 'manual');
+    for (const i of automaticas) adicionar(i, 'auto');
+    if (!candidatas.length) return null;
+    let ultimo: unknown;
+    let alternativaAposLimite = false;
+    for (const { idioma, origem } of candidatas.slice(0, 3)) {
+      if (sinal?.aborted) throw erroAbortado();
+      if (alternativaAposLimite && !idioma.endsWith('-orig')) continue;
+      try { return await this.#baixarFaixa(url, idioma, origem, sinal); }
+      catch (erro) {
+        ultimo = erro;
+        if (!(erro instanceof ErroDominio) || ['video_indisponivel', 'trabalho_cancelado', 'ytdlp_timeout'].includes(erro.codigo)) throw erro;
+        if (alternativaAposLimite) throw erro;
+        if (erro.codigo === 'limite_youtube') alternativaAposLimite = true;
+      }
+    }
+    throw ultimo;
+  }
 
-    const idioma = manual ?? automatica;
-    if (!idioma) return null;
-
+  async #baixarFaixa(url: string, idioma: string, origem: 'manual' | 'auto', sinal?: AbortSignal): Promise<LegendaBaixada> {
     const pasta = await mkdtemp(join(tmpdir(), 'contextflow-legenda-'));
 
     try {
@@ -282,7 +321,7 @@ export class Ytdlp implements ExecutorYtdlp {
         '--skip-download',
         origem === 'manual' ? '--write-subs' : '--write-auto-subs',
         '--sub-langs',
-        idioma,
+        '^' + idioma.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$',
         '--sub-format',
         'vtt/json3',
         '--no-warnings',
@@ -293,7 +332,7 @@ export class Ytdlp implements ExecutorYtdlp {
         url,
       ];
 
-      const resultado = await executarProcesso(this.#binario, args, this.#timeoutMs, this.#aoErro, sinal);
+      const resultado = await this.#executar(this.#binario, args, this.#timeoutMs, this.#aoErro, sinal);
       if (resultado.codigo !== 0) throw traduzirErroYtdlp(resultado.stderr);
 
       const arquivos = await readdir(pasta);
@@ -329,7 +368,7 @@ export class Ytdlp implements ExecutorYtdlp {
   }
   async descobrirPlaylist(url: string, aoItem: (item: ItemPlaylist) => void, sinal?: AbortSignal): Promise<void> {
     let posicao = 0;
-    const resultado = await executarProcesso(this.#binario, [
+    const resultado = await this.#executar(this.#binario, [
       '--flat-playlist', '--dump-json', '--skip-download', '--yes-playlist', '--no-warnings', '--no-progress', url,
     ], this.#timeoutMs, this.#aoErro, sinal, (linha) => {
       let item: { id?: unknown; title?: unknown; playlist_index?: unknown; playlist_title?: unknown };

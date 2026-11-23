@@ -8,6 +8,13 @@ com provedores HTTP controlados no Windows**; homologação com provedor real pe
 Base documental: pacote `ContextFlow_Pacote_Execucao_V1` (2026-11-18). Estado vivo em
 `docs/estado-atual.md`.
 
+**Rodada vigente (23/11/2026):** F6-B da Arena incorporada até `6c7fdef`, seguida
+pela estabilização descrita em `docs/specs/f6b-estabilizacao-fluxos.md`:
+comando com autosave, modal assíncrono, acompanhamento limpável/ocultável,
+mais área útil e alternativas limitadas de legenda. Coleções preservadas por
+instrução explícita. Dois vídeos reais parciais reparados; resultados completos
+no topo de `docs/estado-atual.md`. F7 não iniciada.
+
 **Rodadas recentes (22/11/2026):** entrega pós-F6 da Arena incorporada em
 `5dbb7e0`/`76e57d1`; correção da miniatura/título conforme
 `docs/specs/f6a-miniatura-adaptativa.md`, validada no Windows. Os outros sete

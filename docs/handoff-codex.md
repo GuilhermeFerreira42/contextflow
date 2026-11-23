@@ -2,7 +2,7 @@
 
 > **Retomada vigente:** o texto abaixo é histórico da transferência inicial.
 > F4, F5, F5-UI e F6 já foram implementadas; não repetir a tarefa inicial como se
-> estivessem ausentes. Começar pelo estado vigente de 22/11/2026 em
+> estivessem ausentes. Começar pelo estado vigente de 23/11/2026 em
 > `docs/estado-atual.md`. F5-UI aguarda homologação humana; F6 tem validação
 > controlada, sem geração em provedor real. A pasta operacional é irmã do repositório,
 > atualmente em `Desktop/projeto/Continuidade de Projeto`.

@@ -4,46 +4,93 @@
 > `00-comece-aqui.md`. O que está abaixo da linha "Histórico" é registro, não
 > estado vigente.
 
-## Estado vigente — 23/11/2026 — estabilização sobre a entrega F6-B
+## Estado vigente — 23/11/2026 — estabilização F6-B validada no Windows
 
-Base real: `main`, `6c7fdef`, árvore inicialmente limpa. As entregas da Arena
-estão incorporadas (A/B/C/D-1/D-2). **Coleções permanecem integrais**, por
-correção explícita do proprietário. **F7 não autorizada nesta rodada.**
-SPEC: `specs/f6b-estabilizacao-fluxos.md`, escrita antes do código.
+Base real: `main`, `6c7fdef`, árvore inicialmente limpa. Entrega da Arena
+A/B/C/D-1/D-2 incorporada e preservada, incluindo a paleta neutra e a árvore.
+**Coleções permanecem integrais**, por correção explícita do proprietário.
+**F7 não iniciada.** SPEC anterior ao código: `specs/f6b-estabilizacao-fluxos.md`.
 
-Primeira fatia: comando personalizado com salvamento automático após750ms/blur,
-quando já existe configuração. POST atual aceita `somentePrompt:true`, faz merge
-serializado sobre configuração atual e não altera segredos ou outros campos.
-Salvar manual continua disponível; aguarda autosave pendente. Falha conserva
-texto editado; resposta antiga não repõe texto anterior. Não há armazenamento
-paralelo. Confirmação de gravação é o marco da persistência.
+### Correções entregues
 
-Investigação real: o comando pessoal já estava íntegro no arquivo e na API
-(igualdade verificada sem divulgar conteúdo); não houve recuperação nem troca
-pelo padrão. Teste de API confirma preservação de modelo mais recente/chave,
-recusa de prompt vazio e persistência após reiniciar app de teste. Playwright F6
-8/8 aprovado na árvore integrada; outras correções da rodada ainda em preparação
-para commits próprios. Evidências externas: pasta irmã
-`Continuidade de Projeto/estabilizacao-f6b-6c7fdef/`.
+1. **Comando personalizado (`59aedf2`).** Salvamento automático após pausa de
+   750 ms ou saída do campo, quando já existe configuração. O POST existente
+   aceita `somentePrompt:true`: merge serializado sobre a configuração atual,
+   sem alterar outros campos ou segredos. Save manual aguarda autosave pendente;
+   resposta atrasada não repõe texto antigo; erro conserva edição e informa
+   que não salvou. Não há outro arquivo/localStorage de prompt. Confirmar
+   “Comando salvo automaticamente” antes de fechar a aplicação. Primeira
+   configuração e demais campos continuam usando Salvar.
+2. **Adicionar/acompanhamento/espaço (`484bfda`).** Modal usa `/api/trabalhos`
+   e fecha no aceite 202, antes de metadados/legenda. Destino de coleção é
+   capturado antes do envio e vinculado quando o vídeo existe. Sessão antiga
+   não interfere em formulário reaberto. Cartão com mais largura, nomes em
+   duas linhas e sem scroll horizontal; scroll vertical apenas quando houver
+   muitos itens. **Limpar finalizados** retira somente a apresentação de
+   concluídos/falhas/cancelados, preservando ativos e todo o histórico.
+   Ocultar remove o cartão inteiro, não cancela e polling não reabre;
+   nova ação explícita pode abrir. Margens menores liberam área de leitura;
+   aviso de fila sai após reconciliação. Corrigida a sobreposição dos botões
+   em telas estreitas, inclusive com ações de coleção visíveis. Modo, altura,
+   fonte, larguras e seleção continuam preservados; linhas não são esticadas
+   para ocupar artificialmente o vazio de uma lista curta.
+3. **Legendas alternativas (commit desta atualização).** Primeira preferência
+   manual/automática mantida. Falha pode tentar outra faixa anunciada; pistas
+   `-orig` priorizam o idioma de áudio informado pelo YouTube. Máximo de três
+   tentativas; após 429, somente uma alternativa `-orig`. Sem varrer traduções,
+   cookies, Whisper ou download de mídia. Idioma/origem exatos são persistidos;
+   faixa vazia nunca vira pronta. Cancelamento/restrições interrompem o fluxo,
+   temporários são removidos e argumentos continuam em array com shell:false.
 
-Segunda fatia: Adicionar link usa `/api/trabalhos` e fecha no aceite202, sem
-esperar metadados/legenda. Captura coleção antes do envio; resposta de sessão
-anterior não fecha nem limpa novo formulário. Cartão abre com ID real, permite
-ocultar inteiro e limpar somente finalizados da apresentação (sem DELETE do
-histórico). Fechar não cancela; polling não reabre. Títulos longos quebram sem
-scroll horizontal. Margens menores ampliam a área útil da grade; aviso de fila
-sai após reconciliação. Altura/modo escolhidos não são alterados para preencher
-vazios. Corrigida também sobreposição real da barra em390px, com e sem seleção;
-coleções continuam aparecendo/funcionando.
+### Prova real e limites
 
-Validação integrada executada: `test:e2e`57/57, `pos-f6`13/13, F6 resumos8/8,
-Visualização4/4 e `test:e2e:estabilizacao`9/9 (Playwright). A nova suíte comprova
-aceite enquanto executor permanece bloqueado, vínculo de coleção ao concluir,
-limpar preservando trabalho ativo/histórico, ocultar sem reabrir, resposta
-antiga após reabertura, autosave/reload/erro e ordem com Save manual.
-Capturas de barra/card em1440/768/390/320px nas evidências externas.
-Primeiro commit desta rodada: `59aedf2` (comando persistente). A alternativa
-de legenda fica em commit próprio; não considerar F7 iniciada.
+O comando pessoal já estava íntegro no arquivo e na API (igualdade conferida
+sem divulgar conteúdo); não foi substituído pelo padrão. A correção cobre o
+fluxo de edição/ack de gravação. Persistência após encerrar uma requisição
+antes da confirmação não é prometida.
+
+Os vídeos `cL25NruYopo` e `zF1ZdfSTG_w` estavam parciais por **429**, não por
+inexistência de legenda. O adaptador atualizado baixou `es-orig` com 223 e 390
+segmentos. Reimportação real, sequencial, pela fila do app em execução com
+idioma explícito deixou **ambos prontos**, transcrição automática em espanhol
+persistida e motivo de indisponibilidade removido. Configuração de IA
+conferida antes/depois e preservada. Não foi solicitada geração paga.
+`-orig` pode corresponder a áudio dublado; não afirmar que sempre é o idioma
+original. Não há garantia de sucesso futuro diante de limitação externa.
+
+O processo pessoal em `127.0.0.1:4780` não foi reiniciado nesta rodada. Reabrir
+ContextFlow para carregar o motor atualizado; os testes abaixo iniciaram
+aplicações isoladas com o código novo. Reparo dos dois registros já foi feito
+pela API antiga, sem acesso direto ao banco pessoal.
+
+### Validações executadas nesta rodada
+
+| Comando em platform/ | Resultado real |
+|---|---|
+| `npm test` (base recebida) | 248 testes: 242 passaram, 6 skips Windows, 0 falhas |
+| `npm test` (final) | 258 testes: 252 passaram, 6 skips Windows, 0 falhas |
+| `npm run test:e2e` | 57/57 cenários CDP |
+| `npm run test:e2e:resumos` | 8/8 Playwright, provedor HTTP controlado |
+| `npm run test:e2e:pos-f6` | 13/13 Playwright |
+| `npm run test:e2e:refinamentos` | 9/9 Playwright, incluindo 5.000 vídeos |
+| `npm run test:e2e:visualizacao` | 4/4 Playwright |
+| `npm run test:e2e:estabilizacao` | 9/9 Playwright novos |
+| `npm run build` | typecheck e build concluídos |
+| `npm run verificar` | TUDO OK |
+
+A nova suíte cobre autosave/reload/erro/concorrência com Save manual; aceite
+com executor bloqueado; coleção vinculada ao concluir; limpar preservando
+ativos/histórico; ocultar sem reabrir; sessão antiga após reabertura; barra
+em 1440/768/390/320 px, com e sem seleção. Nove testes do adaptador exercitam
+alternativa real no disco, 429 limitado, preferência manual, privado,
+cancelamento, vazio, ausência, três tentativas e regex exata de idioma.
+
+Evidências externas: `Continuidade de Projeto/estabilizacao-f6b-6c7fdef/`
+(pasta irmã do repositório): logs, capturas e LEIA-ME. Sem dados pessoais no
+Git. Homologação humana da interface e de geração em provedor real continua
+pendente; não confundir testes de IA controlada com geração real.
+Próxima ação: reabrir app, conferir visualmente os fluxos corrigidos e aguardar
+nova autorização de escopo; coleções ficam para discussão futura.
 
 ### Referência da entrega Arena recebida (histórico da base)
 
