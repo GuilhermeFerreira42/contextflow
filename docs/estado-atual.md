@@ -26,6 +26,25 @@ recusa de prompt vazio e persistência após reiniciar app de teste. Playwright 
 para commits próprios. Evidências externas: pasta irmã
 `Continuidade de Projeto/estabilizacao-f6b-6c7fdef/`.
 
+Segunda fatia: Adicionar link usa `/api/trabalhos` e fecha no aceite202, sem
+esperar metadados/legenda. Captura coleção antes do envio; resposta de sessão
+anterior não fecha nem limpa novo formulário. Cartão abre com ID real, permite
+ocultar inteiro e limpar somente finalizados da apresentação (sem DELETE do
+histórico). Fechar não cancela; polling não reabre. Títulos longos quebram sem
+scroll horizontal. Margens menores ampliam a área útil da grade; aviso de fila
+sai após reconciliação. Altura/modo escolhidos não são alterados para preencher
+vazios. Corrigida também sobreposição real da barra em390px, com e sem seleção;
+coleções continuam aparecendo/funcionando.
+
+Validação integrada executada: `test:e2e`57/57, `pos-f6`13/13, F6 resumos8/8,
+Visualização4/4 e `test:e2e:estabilizacao`9/9 (Playwright). A nova suíte comprova
+aceite enquanto executor permanece bloqueado, vínculo de coleção ao concluir,
+limpar preservando trabalho ativo/histórico, ocultar sem reabrir, resposta
+antiga após reabertura, autosave/reload/erro e ordem com Save manual.
+Capturas de barra/card em1440/768/390/320px nas evidências externas.
+Primeiro commit desta rodada: `59aedf2` (comando persistente). A alternativa
+de legenda fica em commit próprio; não considerar F7 iniciada.
+
 ### Referência da entrega Arena recebida (histórico da base)
 
 Os detalhes e contagens abaixo registram a entrega recebida, não substituem

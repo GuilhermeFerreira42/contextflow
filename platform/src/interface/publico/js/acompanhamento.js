@@ -95,7 +95,10 @@ export function criarAcompanhamento({ api, $, aoIrParaImportacoes, aoMudar }) {
       const igual = anterior.estado === atual.estado
         && anterior.fase === atual.fase
         && anterior.progresso === atual.progresso
-        && anterior.tentativas === atual.tentativas;
+        && anterior.tentativas === atual.tentativas
+        && anterior.titulo === (atual.titulo ?? atual.resultado?.video?.titulo ?? anterior.titulo)
+        && anterior.erro === (atual.erro ?? null)
+        && Boolean(anterior.cancelamentoSolicitado) === Boolean(atual.cancelamentoSolicitado);
       if (!igual) {
         estado.trabalhos.set(id, {
           id,
@@ -130,7 +133,8 @@ export function criarAcompanhamento({ api, $, aoIrParaImportacoes, aoMudar }) {
     if (!lista) return;
 
     const itens = [...estado.trabalhos.values()];
-    const todosTerminais = itens.length > 0 && itens.every((t) => TERMINAIS.includes(t.estado));
+    const limpar = $('#acompanhamento-limpar');
+    if (limpar) limpar.disabled = !itens.some(t => TERMINAIS.includes(t.estado));
 
     lista.replaceChildren(...itens.map((t) => {
       const caixa = document.createElement('div');
@@ -214,9 +218,9 @@ export function criarAcompanhamento({ api, $, aoIrParaImportacoes, aoMudar }) {
 
     const ir = $('#acompanhamento-ir');
     if (ir) ir.hidden = !itens.length;
-    // "Fechar" só quando tudo acabou: fechar no meio esconderia o andamento.
+    // Fechar só oculta a apresentação; os trabalhos continuam na fila.
     const fechar = $('#acompanhamento-fechar');
-    if (fechar) fechar.hidden = !todosTerminais;
+    if (fechar) fechar.hidden = false;
   }
 
   async function cancelarTrabalho(id) {
@@ -266,20 +270,21 @@ export function criarAcompanhamento({ api, $, aoIrParaImportacoes, aoMudar }) {
     }
   }
 
+  function ocultar() {
+    if (cartao()) cartao().hidden = true;
+    estado.trabalhos.clear(); estado.vistos.clear();
+  }
+
   function ligar() {
-    $('#acompanhamento-recolher')?.addEventListener('click', (ev) => {
-      estado.recolhido = !estado.recolhido;
-      ev.currentTarget.setAttribute('aria-expanded', String(!estado.recolhido));
-      ev.currentTarget.setAttribute('aria-label', estado.recolhido ? 'Expandir acompanhamento' : 'Minimizar acompanhamento');
-      ev.currentTarget.textContent = estado.recolhido ? '▸' : '▾';
-      desenhar();
-    });
+    $('#acompanhamento-recolher')?.addEventListener('click', ocultar);
     $('#acompanhamento-ir')?.addEventListener('click', () => aoIrParaImportacoes?.());
-    $('#acompanhamento-fechar')?.addEventListener('click', () => {
-      const alvo = cartao();
-      if (alvo) alvo.hidden = true;
-      estado.trabalhos.clear();
-      estado.vistos.clear();
+    $('#acompanhamento-fechar')?.addEventListener('click', ocultar);
+    $('#acompanhamento-limpar')?.addEventListener('click', () => {
+      for (const [id, t] of estado.trabalhos) {
+        if (!TERMINAIS.includes(t.estado)) continue;
+        estado.trabalhos.delete(id); estado.vistos.delete(id);
+      }
+      if (!estado.trabalhos.size) ocultar(); else desenhar();
     });
   }
 

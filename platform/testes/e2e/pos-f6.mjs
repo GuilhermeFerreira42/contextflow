@@ -705,7 +705,7 @@ try {
   await pagina.fill('#adicionar-url', 'https://www.youtube.com/watch?v=abcdefghijk');
 
   // Interceptar o POST para segurar a resposta e conferir o estado "enviando".
-  await pagina.route('**/api/ingestao/importar', async rota => {
+  await pagina.route('**/api/trabalhos', async rota => {
     await new Promise(ok => setTimeout(ok, 900));
     void rota.fulfill({
       status: 202,
@@ -735,13 +735,13 @@ try {
     rotulo: document.querySelector('#confirmar-adicionar').textContent.trim(),
     mensagem: document.querySelector('#adicionar-resultado').textContent,
   }));
-  verificar(depois.estado === 'na-fila', `carregamento: estado final deveria ser na-fila, veio ${depois.estado}`);
+  verificar(await pagina.locator('#dialogo-adicionar').isHidden(), 'aceite da fila deve fechar o diálogo imediatamente');
   verificar(/fila/i.test(depois.mensagem), `carregamento: mensagem final confusa (${depois.mensagem})`);
-  await pagina.unroute('**/api/ingestao/importar');
+  await pagina.unroute('**/api/trabalhos');
 
   // Clique repetido não gera segundo envio.
   let envios = 0;
-  await pagina.route('**/api/ingestao/importar', async rota => {
+  await pagina.route('**/api/trabalhos', async rota => {
     envios++;
     await new Promise(ok => setTimeout(ok, 700));
     void rota.fulfill({
@@ -759,7 +759,7 @@ try {
   });
   await esperar(1500);
   verificar(envios === 1, `carregamento: cliques repetidos geraram ${envios} envios`);
-  await pagina.unroute('**/api/ingestao/importar');
+  await pagina.unroute('**/api/trabalhos');
   await pagina.keyboard.press('Escape');
   await esperar(300);
 

@@ -229,6 +229,7 @@ const adicionarLinkUI = criarAdicionarLink({
     }
 
     estado.pendentes.add(trabalhoId);
+    acompanhamentoUI.acompanhar([trabalhoId]);
     const chave = bibliotecaUI.adicionarProvisoria({
       trabalhoId, tipo, url, titulo, videoId, colecaoId,
       estado: 'na-fila',
@@ -730,6 +731,11 @@ async function reconciliarProvisoria(t) {
     bibliotecaUI.atualizarProvisoria(acompanhamento.chave, { estado: 'concluido', videoId });
     await carregarBiblioteca();
     bibliotecaUI.removerProvisoria(acompanhamento.chave);
+    const aviso = $('#resultado-biblioteca');
+    if (!acompanhamentoProvisorio.size && aviso.textContent === 'Importação na fila. A linha provisória está no topo da Biblioteca.') {
+      aviso.textContent = '';
+      delete aviso.dataset.tipo;
+    }
   } else {
     // Falhou/cancelou: sai da Biblioteca (o registro fica em Importações) e o
     // usuário é avisado, sem modal e sem tirá-lo da tela.

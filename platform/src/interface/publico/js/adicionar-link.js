@@ -1,20 +1,10 @@
-/**
- * Janela "Adicionar link".
- *
- * Encaminha para a MESMA importação que já existe (`/api/ingestao/importar` e
- * `/api/ingestao/lote`): nada de segundo caminho. A validação local só evita
- * ida ao servidor com URL obviamente errada; quem decide é o motor.
- *
- * O resumo por IA fica desabilitado com motivo até a F6 — nada de prometer o
- * que a fase não entrega.
- */
+/** Adiciona à fila persistente existente; o diálogo espera apenas o aceite. */
 export function criarAdicionarLink({ api, aoEnfileirar, aoAceitar }) {
   const $ = seletor => document.querySelector(seletor);
   const fundo = $('#dialogo-adicionar');
   let focoAnterior = null;
   let colecoes = [];
-  /** Timer do fechamento pós-aceite; cancelado se o usuário fechar antes. */
-  let timerFechar = null;
+  let sessao = 0;
 
   const PADRAO_VIDEO = /^https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)[\w-]{6,}/i;
   const PADRAO_PLAYLIST = /^https?:\/\/(www\.)?youtube\.com\/playlist\?list=[\w-]{6,}/i;
@@ -53,6 +43,7 @@ export function criarAdicionarLink({ api, aoEnfileirar, aoAceitar }) {
   }
 
   function abrir() {
+    sessao++;
     focoAnterior = document.activeElement;
     fundo.hidden = false;
     document.body.style.overflow = 'hidden';
@@ -65,7 +56,7 @@ export function criarAdicionarLink({ api, aoEnfileirar, aoAceitar }) {
   }
 
   function fechar() {
-    clearTimeout(timerFechar);
+    sessao++;
     fundo.hidden = true;
     document.body.style.overflow = '';
     if (focoAnterior && document.contains(focoAnterior)) focoAnterior.focus({ preventScroll: true });
@@ -124,85 +115,42 @@ export function criarAdicionarLink({ api, aoEnfileirar, aoAceitar }) {
     // Trava de clique repetido: `disabled` já impede, mas o guarda fecha a
     // janela entre o submit e a resposta (duplo Enter, por exemplo).
     if (botao.dataset.estado === 'enviando') return;
+    const envio = sessao;
+    const colecaoId = $('#adicionar-colecao-destino').value;
     botao.disabled = true;
     estadoBotao('enviando', 'Enviando…');
     avisar('Enviando para a fila…', 'pendente');
 
     try {
-      /*
-       * Contrato REAL de `POST /api/ingestao/importar` (conferido no motor):
-       * a rota AGUARDA a ingestão e devolve o resultado
-       * `{ video: {...}, transcricao: {...}, criado: bool }` — não o trabalho.
-       * O tipo pedido (`tipo`) é validado aqui; o motor sempre cria
-       * `importar-video` nesta rota, e playlist sai por `/api/ingestao/lote`.
-       */
-      const resposta = await api('/api/ingestao/importar', {
+      const resposta = await api('/api/trabalhos', {
         method: 'POST',
-        body: JSON.stringify({ url, chaveRequisicao: crypto.randomUUID() }),
+        body: JSON.stringify({ tipo, escopo: { url, chaveRequisicao: crypto.randomUUID() } }),
       });
-      // `id` só existe no formato de trabalho (fila assíncrona). Mantido como
-      // defesa: se o motor passar a responder 202 com o trabalho, o fluxo de
-      // provisória continua funcionando sem nova mudança aqui.
-      const id = resposta?.id ?? resposta?.trabalhoId ?? null;
-      const video = resposta?.video ?? null;
-
-      /*
-       * Fechamento da janela — pelo formato da resposta, não por um timer cego.
-       *
-       *  - resposta com `video` (ingestão já concluída): não há o que
-       *    acompanhar. Fecha imediatamente e o `aoAceitar` leva o usuário à
-       *    Biblioteca com a linha já criada.
-       *  - resposta 202 com trabalho: a importação está na FILA. A janela
-       *    mostra o estado "Na fila" (contrato do E2E do proprietário) e
-       *    fecha logo em seguida — quem acompanha é o cartão/linha provisória
-       *    da Biblioteca, não uma janela presa. O tempo é curto de propósito:
-       *    basta para o estado ser lido, sem prender o usuário.
-       *
-       * Em nenhum caso há navegação automática para Importações.
-       */
-      $('#adicionar-url').value = '';
-      const colecaoId = $('#adicionar-colecao-destino').value;
-      const jaConcluida = Boolean(video?.id);
-      if (jaConcluida) fechar();
-      else {
-        estadoBotao('na-fila', 'Na fila');
-        // Fechar depois de pintar o estado. `fechar()` cancela o timer se o
-        // usuário fechar antes (Escape/botão) — daí o guarda `fundo.hidden`.
-        clearTimeout(timerFechar);
-        timerFechar = setTimeout(() => { if (!fundo.hidden) fechar(); }, 2200);
+      const id = resposta?.id;
+      if (!id) throw new Error('A fila não confirmou o trabalho.');
+      // Mesmo se o usuário já fechou/reabriu, registrar o trabalho aceito,
+      // mas nunca limpar ou fechar o novo formulário.
+      if (envio === sessao) {
+        $('#adicionar-url').value = '';
+        fechar();
       }
-      avisar(
-        jaConcluida
-          ? 'Importação concluída. O vídeo está na Biblioteca.'
-          : 'Importação adicionada à fila. Acompanhe pela linha no topo da Biblioteca.',
-        jaConcluida ? 'ok' : 'pendente',
-      );
-
       aoAceitar?.({
         trabalhoId: id,
         tipo,
         url,
         colecaoId: colecaoId || null,
-        titulo: video?.titulo ?? resposta?.titulo ?? null,
-        videoId: video?.id ?? resposta?.videoId ?? null,
-        // Presente quando a ingestão é síncrona (caso atual): a Biblioteca já
-        // pode entrar com a linha definitiva em vez de uma provisória.
-        video: video ? {
-          id: video.id,
-          titulo: video.titulo,
-          canalNome: video.canalNome ?? null,
-          duracaoSegundos: video.duracaoSegundos ?? null,
-          miniaturaUrl: video.miniaturaUrl ?? null,
-          estado: video.estado ?? 'novo',
-        } : null,
+        titulo: resposta?.titulo ?? null,
+        videoId: resposta?.videoId ?? null,
+        video: null,
       });
     } catch (erro) {
+      if (envio !== sessao) return;
       estadoBotao('erro');
       avisar(`Não foi possível enfileirar: ${erro.message}`, 'erro');
     } finally {
       // Reabilita sempre: um erro de rede não pode deixar a janela travada.
-      botao.disabled = false;
-      if (botao.dataset.estado !== 'na-fila') estadoBotao(null);
+      if (envio === sessao) botao.disabled = false;
+      if (envio === sessao && botao.dataset.estado !== 'na-fila') estadoBotao(null);
     }
   }
 

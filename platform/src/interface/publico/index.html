@@ -505,7 +505,7 @@
             <p id="ia-protecao" class="painel-nota ia-linha-inteira"></p>
             <label>Versão do prompt<input id="ia-versao" value="v1" required maxlength="40" /></label>
             <label>Contexto (tokens)<input id="ia-contexto" type="number" min="2048" max="1000000" value="16384" required /></label>
-            <label class="ia-linha-inteira">Prompt<textarea id="ia-prompt" rows="5" required maxlength="20000" placeholder="Escreva suas instruções personalizadas para o resumo."></textarea><small>A transcrição é incluída automaticamente. Use {transcricao} para escolher sua posição. Salve para manter suas instruções.</small></label>
+            <label class="ia-linha-inteira">Prompt<textarea id="ia-prompt" rows="5" required maxlength="20000" placeholder="Escreva suas instruções personalizadas para o resumo."></textarea><small>A transcrição é incluída automaticamente. Use {transcricao} para escolher sua posição. Após configurar o provedor, o comando é salvo automaticamente.</small></label>
             <label>Saída máxima (tokens)<input id="ia-saida" type="number" min="128" max="1000000" value="1024" required /><small>Até 1.000.000, conforme o modelo. O contexto precisa comportar a saída, o prompt e a entrada.</small></label>
             <label>Gerações simultâneas<input id="ia-concorrencia" type="number" min="1" max="4" value="2" required /></label>
             <label>Tempo limite por chamada (segundos)<input id="ia-timeout" type="number" min="1" max="300" value="90" required /></label>
@@ -701,11 +701,12 @@
       <header class="acompanhamento-topo">
         <h2 id="acompanhamento-titulo">Acompanhamento</h2>
         <button type="button" class="botao-icone" id="acompanhamento-recolher"
-                aria-label="Minimizar acompanhamento" aria-expanded="true" title="Minimizar acompanhamento">▾</button>
+                aria-label="Ocultar acompanhamento" title="Ocultar acompanhamento">×</button>
       </header>
       <div class="acompanhamento-corpo" id="acompanhamento-lista" role="status" aria-live="polite"></div>
       <div class="acompanhamento-acoes">
         <button type="button" class="botao-secundario" id="acompanhamento-ir" hidden>Ir para Importações</button>
+        <button type="button" class="botao-secundario" id="acompanhamento-limpar" disabled>Limpar finalizados</button>
         <button type="button" class="botao-secundario" id="acompanhamento-fechar" hidden>Fechar</button>
       </div>
     </aside>

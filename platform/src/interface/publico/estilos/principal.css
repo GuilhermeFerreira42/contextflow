@@ -1068,7 +1068,8 @@ body {
   align-items: center;
   gap: 7px;
   flex-wrap: wrap;
-  flex: 1;
+  flex: 1 1 420px;
+  max-width: 100%;
   min-width: 0;
 }
 .acoes-lote select {
@@ -3303,7 +3304,7 @@ tr.linha-provisoria.provisoria-falhou > td:first-child {
   right: 18px;
   bottom: 18px;
   z-index: 60;
-  width: min(340px, calc(100vw - 32px));
+  width: min(460px, calc(100vw - 32px));
   border: 1px solid var(--borda-forte);
   border-radius: 12px;
   background: var(--grafite-850);
@@ -3330,35 +3331,44 @@ tr.linha-provisoria.provisoria-falhou > td:first-child {
   display: grid;
   gap: 9px;
   padding: 11px 13px;
-  max-height: 40vh;
-  overflow: auto;
+  max-height: min(50vh, 420px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-width: 0;
 }
 .cartao-acompanhamento[data-recolhido='true'] .acompanhamento-corpo,
 .cartao-acompanhamento[data-recolhido='true'] .acompanhamento-acoes {
   display: none;
 }
 .acompanhamento-item {
+  min-width: 0;
   display: grid;
   gap: 5px;
 }
 .acompanhamento-linha {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(70px, 35%);
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
 }
 .acompanhamento-nome {
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
   font-size: 12px;
   font-weight: 600;
   color: var(--texto-forte);
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
 }
 .acompanhamento-situacao {
   font-size: 10.5px;
   color: var(--texto-fraco);
-  white-space: nowrap;
+  white-space: normal;
   font-variant-numeric: tabular-nums;
 }
 .acompanhamento-item[data-estado='falhou'] .acompanhamento-situacao { color: var(--erro); }
@@ -3388,12 +3398,14 @@ tr.linha-provisoria.provisoria-falhou > td:first-child {
    em texto e a mensagem é que informam. */
 .acompanhamento-item[data-estado='falhou'] .acompanhamento-barra > span { background: transparent; }
 .acompanhamento-erro {
+  overflow-wrap: anywhere;
   margin: 0;
   font-size: 11px;
   color: var(--erro);
 }
 .acompanhamento-acoes {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 9px 13px;
   border-top: 1px solid var(--borda);
@@ -3724,4 +3736,14 @@ tr.linha-provisoria.provisoria-falhou > td:first-child {
 .barra-ferramentas-miniaturas {
   justify-content: flex-start;
   gap: 0.75rem;
+}
+
+/* A Biblioteca reserva mais área de leitura sem alterar a altura escolhida. */
+.conteudo:has(> .tela[data-tela-nome='biblioteca']:not([hidden])) {
+  padding: 16px 18px;
+}
+.tela[data-tela-nome='biblioteca'] { height: calc(100dvh - 32px); }
+.tela[data-tela-nome='biblioteca'] > .topo-tela { margin-bottom: 12px; }
+@media (max-width: 900px) {
+  .tela[data-tela-nome='biblioteca'] { height: calc(100dvh - 78px); }
 }
