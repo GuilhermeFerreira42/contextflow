@@ -41,6 +41,61 @@ export class RepositorioColecoes {
       this.#banco.db.prepare('DELETE FROM colecao_videos WHERE colecao_id=? AND video_id=?').run(id, videoId);
     });
   }
+
+  /**
+   * Renomeia uma coleção.
+   *
+   * As mesmas regras do `criar` (1..200, sem espaços nas pontas) — a validação
+   * fica no repositório, não na rota, para que qualquer chamador (CLI, teste,
+   * importação) obedeça à mesma regra sem duplicá-la.
+   */
+  renomear(id: string, titulo: string): Colecao {
+    const nome = titulo.trim();
+    if (!nome || nome.length > 200) throw new ErroValidacao('Título da coleção deve ter entre 1 e 200 caracteres.');
+    this.#conferir(id);
+    this.#banco.db.prepare('UPDATE colecoes SET titulo=? WHERE id=?').run(nome, id);
+    const contagem = Number((this.#banco.db
+      .prepare('SELECT COUNT(*) n FROM colecao_videos WHERE colecao_id=?')
+      .get(id) as { n: number }).n);
+    return { id, titulo: nome, contagem };
+  }
+
+  /**
+   * Exclui a coleção e SÓ as associações.
+   *
+   * Nunca toca em `videos`: sair de uma coleção não é apagar o vídeo. O
+   * `DELETE` explícito das associações (em vez de confiar em cascade) torna a
+   * intenção legível — se um dia a FK mudar, o comportamento continua igual.
+   */
+  excluir(id: string): { removida: true; desvinculados: number } {
+    return this.#banco.executarTransacao(() => {
+      this.#conferir(id);
+      const desvinculados = Number(this.#banco.db
+        .prepare('DELETE FROM colecao_videos WHERE colecao_id=?')
+        .run(id).changes);
+      this.#banco.db.prepare('DELETE FROM colecoes WHERE id=?').run(id);
+      return { removida: true as const, desvinculados };
+    });
+  }
+
+  /** Esvazia a coleção: remove todas as associações, mantém a coleção. */
+  esvaziar(id: string): { removidos: number } {
+    return this.#banco.executarTransacao(() => {
+      this.#conferir(id);
+      return { removidos: Number(this.#banco.db
+        .prepare('DELETE FROM colecao_videos WHERE colecao_id=?')
+        .run(id).changes) };
+    });
+  }
+
+  /** Coleção por id, com a contagem — usada para responder após mutações. */
+  obter(id: string): Colecao {
+    const linha = this.#banco.db.prepare(`SELECT c.id, c.titulo, COUNT(cv.video_id) contagem
+      FROM colecoes c LEFT JOIN colecao_videos cv ON cv.colecao_id=c.id
+      WHERE c.id=? GROUP BY c.id`).get(id) as unknown as Colecao | undefined;
+    if (!linha) throw new ErroNaoEncontrado('Coleção não encontrada.');
+    return { ...linha };
+  }
   canais(): { itens: { id: string; nome: string; contagem: number }[] } {
     const linhas = this.#banco.db.prepare(`SELECT canal_id id, MAX(canal_nome) nome, COUNT(*) contagem
       FROM videos WHERE canal_id IS NOT NULL GROUP BY canal_id`).all() as unknown as {id:string;nome:string|null;contagem:number}[];

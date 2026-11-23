@@ -94,6 +94,10 @@ export class ServicoBiblioteca {
     return this.#colecoes().adicionar(id, validarIds(entrada));
   }
   async removerVideoColecao(id: string, videoId: string): Promise<void> { this.#colecoes().remover(id, videoId); }
+  async renomearColecao(id: string, titulo: string): Promise<Colecao> { return this.#colecoes().renomear(id, titulo); }
+  async excluirColecao(id: string): Promise<{removida:true;desvinculados:number}> { return this.#colecoes().excluir(id); }
+  async esvaziarColecao(id: string): Promise<{removidos:number}> { return this.#colecoes().esvaziar(id); }
+  async obterColecao(id: string): Promise<Colecao> { return this.#colecoes().obter(id); }
   async listarPlaylists() { return this.#colecoes().playlists(); }
   async listarCanais() { return this.#colecoes().canais(); }
   async listarMeses() { return this.#colecoes().meses(); }

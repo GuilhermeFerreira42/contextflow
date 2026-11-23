@@ -4,7 +4,7 @@
 > `00-comece-aqui.md`. O que está abaixo da linha "Histórico" é registro, não
 > estado vigente.
 
-## Estado vigente — 23/11/2026 — F6-B, partes D-1, B e A aplicadas
+## Estado vigente — 23/11/2026 — F6-B, partes D-1, B, A e C aplicadas
 
 Branch de trabalho do Arena (`arena/735d302d-contextflow`), base `e11a748`,
 HEAD local `c3e8286` + os commits desta sessão. **F7 não iniciada.** As quatro
@@ -14,6 +14,47 @@ preservadas; as specs `f6a-*` continuam valendo e não foram contraditadas.
 Comando em execução: `specs/f6b-refinamento-visual-e-funcional.md` — refinamento
 funcional, organização e identidade visual antes da F7, em quatro partes
 (A estados/feedback, B Importações, C organização, D confiabilidade/acabamento).
+
+### C — organização: árvore com vídeos, chips e coleções completas (aplicada)
+
+**Árvore lateral (`js/arvore-organizacao.js` reescrito, 520 linhas).**
+Cada nó (canal, playlist, mês, coleção) lista seus vídeos com **carregamento
+progressivo de 50 em 50** por `/api/biblioteca` — nada é persistido para
+navegação. Botão próprio de expandir por nó (○/▸) sem disparar o filtro; a
+lista recua com guia vertical. Vídeos fora da página caem na busca por título.
+Os quatro grupos originais continuam sendo quatro: a seção **Todos os vídeos**
+tem classe própria (`.secao-todos`), porque é navegação e não eixo de
+organização — e um cenário F5-UI conta `#arvore-grupos .grupo-arvore`.
+
+**Todos os vídeos.** Primeira seção: busca própria na lateral, "Selecionar" (marca
+na Biblioteca os ids listados) e "Ver todos" (limpa filtros). Abre com o
+primeiro bloco; cresce por "Ver mais (50 de N)".
+
+**Chips de filtro.** `#chips-filtros` mostra `Canal: Alejavi Rivera ×` por filtro
+ativo, com remoção individual que **preserva busca, ordenação e os demais
+filtros**; "Limpar todos" aparece a partir de dois. O rótulo vem do texto da
+opção, sem a contagem `(N)` que existe no menu.
+
+**Coleções completas.** Novas rotas, todas sem tocar em `videos`:
+`PATCH /api/colecoes/:id` (renomear), `DELETE /api/colecoes/:id` (excluir),
+`DELETE /api/colecoes/:id/videos` (esvaziar), `GET /api/colecoes/:id`. Menu `⋯`
+por coleção na árvore (renomear/esvaziar/excluir) com confirmação que diz, por
+extenso, que os vídeos continuam na biblioteca. Botão `+` no cabeçalho do grupo
+cria coleção. Trio de rotas testado em `biblioteca-f5.test.ts` (renomear
+preserva vínculos; excluir deixa vídeos/resumos e zero vínculos órfãos;
+esvaziar é idempotente).
+
+**Defeito real corrigido:** `#adicionar-colecao` existia **duas vezes** (botão da
+barra de seleção da Biblioteca e `<select>` do diálogo "Adicionar link"). O
+módulo do diálogo lia o primeiro elemento do DOM — o botão — e o destino da
+coleção ficava sempre vazio. O select passou a ser `#adicionar-colecao-destino`.
+Mesma família de correção: `input[type="search"]` e `.botao-mini` (22×22, só
+ícone) usados por engano em controles de texto.
+
+**Validação:** `npm test` 245/245 (3 novos de coleção) · `test:e2e` 57/57 ·
+`pos-f6` 13/13 · `refinamentos` 9/9 · `visualizacao` 4/4 · `resumos` 8/8 ·
+`npm run build` verde. Ciclo de coleção exercitado no navegador com 6 vídeos
+preservados antes e depois da exclusão (evidências 14–18).
 
 ### D-1 — tokens e identidade visual (aplicada)
 

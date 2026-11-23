@@ -781,6 +781,17 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel, aoResumir })
     return caixa;
   }
 
+  /**
+   * Destaque temporário da linha localizada. Puro efeito visual: não muda
+   * seleção, filtro nem dados; some sozinho via CSS (`animation`).
+   */
+  function destaqueTemporario(id) {
+    const tr = corpo.querySelector(`tr[data-id="${CSS.escape(id)}"]`);
+    if (!tr) return;
+    tr.dataset.destaque = 'true';
+    setTimeout(() => { delete tr.dataset.destaque; }, 2600);
+  }
+
   function textoTd(texto, classe) {
     const td = document.createElement('td');
     td.textContent = texto;
@@ -1069,7 +1080,106 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel, aoResumir })
       || intervaloData !== null;
   }
 
-  /** Contador no botão "Filtros" — deixa visível que há filtro aplicado. */
+  /**
+   * Chips dos filtros ativos (F6-B, item 7).
+   *
+   * Cada filtro aplicado vira um chip `Rótulo: valor ×`, removível de forma
+   * independente; "Limpar todos" remove tudo. Regras:
+   *
+   *  - nada é persistido: o chip é a representação do filtro que já existe no
+   *    formulário (fonte única). Remover um chip é o mesmo que zerar o campo.
+   *  - a remoção PRESERVA busca, ordenação e os outros filtros — por isso cada
+   *    handler mexe só no seu campo e chama `carregar()`.
+   *  - o rótulo vem do texto visível do `<select>`, então o chip diz "Canal:
+   *    Alejavi Rivera" e não o id interno.
+   */
+  const ROTULOS_CHIP = {
+    'filtro-estado': 'Estado',
+    'filtro-canal': 'Canal',
+    'filtro-playlist': 'Playlist',
+    'filtro-colecao': 'Coleção',
+  };
+
+  /**
+   * Texto legível do valor selecionado num `<select>`.
+   *
+   * As opções são preenchidas como `"Nome (12)"` — a contagem serve no menu,
+   * mas num chip "Canal: Nome (12)" parece parte do nome. Por isso o sufixo
+   * numérico entre parênteses é removido AQUI, e não no momento de criar a
+   * opção (o menu continua mostrando a contagem, que é útil lá).
+   */
+  function textoDaOpcao(select) {
+    if (!select?.value) return '';
+    const opcao = [...select.options].find(o => o.value === select.value);
+    // O primeiro item de cada select é o "Todos…" (value vazio) — não chega aqui.
+    const bruto = (opcao?.textContent ?? select.value).trim();
+    return bruto.replace(/\s*\(\d+\)$/, '');
+  }
+
+  function desenharChips() {
+    const caixa = $('#chips-filtros');
+    if (!caixa) return;
+    const chips = [];
+    const criar = (rotulo, aoRemover) => {
+      const chip = document.createElement('span');
+      chip.className = 'chip-filtro';
+      const texto = document.createElement('span');
+      texto.className = 'chip-texto';
+      texto.textContent = rotulo;
+      const remover = document.createElement('button');
+      remover.type = 'button';
+      remover.className = 'chip-remover';
+      remover.setAttribute('aria-label', `Remover filtro ${rotulo}`);
+      remover.title = `Remover filtro ${rotulo}`;
+      remover.textContent = '×';
+      remover.addEventListener('click', aoRemover);
+      chip.append(texto, remover);
+      chips.push(chip);
+    };
+
+    for (const [id, prefixo] of Object.entries(ROTULOS_CHIP)) {
+      const select = $('#' + id);
+      const texto = textoDaOpcao(select);
+      if (!texto) continue;
+      criar(`${prefixo}: ${texto}`, () => {
+        select.value = '';
+        // Remover UM chip não mexe em busca, ordenação nem nos demais filtros.
+        void carregar({ reset: true });
+        atualizarResumoFiltros();
+      });
+    }
+    if ($('#filtro-resumo')?.checked) {
+      criar('Com resumo', () => {
+        $('#filtro-resumo').checked = false;
+        void carregar({ reset: true });
+        atualizarResumoFiltros();
+      });
+    }
+    if (intervaloData) {
+      const fmt = (iso) => new Date(iso).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' });
+      // O fim é semiaberto (primeiro dia do mês seguinte): mostra o mês anterior.
+      const fimMostrado = new Date(new Date(intervaloData.fim).getTime() - 86400000);
+      criar(`Data: ${fmt(intervaloData.inicio)}–${fimMostrado.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })}`, () => {
+        intervaloData = null;
+        void carregar({ reset: true });
+        atualizarResumoFiltros();
+      });
+    }
+
+    if (chips.length > 1) {
+      const limpar = document.createElement('button');
+      limpar.type = 'button';
+      limpar.className = 'chip-limpar-todos';
+      limpar.textContent = 'Limpar todos';
+      limpar.addEventListener('click', () => limparFiltros());
+      chips.push(limpar);
+    }
+
+    caixa.replaceChildren(...chips);
+    caixa.hidden = chips.length === 0;
+  }
+
+  /** Contador no botão "Filtros" + chips. Fonte única: os campos do formulário. */
   function atualizarResumoFiltros() {
     let n = 0;
     if ($('#filtro-estado').value) n++;
@@ -1082,6 +1192,7 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel, aoResumir })
     selo.hidden = n === 0;
     selo.textContent = String(n);
     $('#abrir-filtros').classList.toggle('botao-filtros', true);
+    desenharChips();
   }
 
   // -------------------------------------------------------------- opções
@@ -1642,6 +1753,48 @@ export function criarBiblioteca({ api, aoEnfileirar, aoAbrirPainel, aoResumir })
     },
 
     get provisorias() { return provisorias.map((p) => ({ ...p })); },
+
+    /**
+     * "Localizar vídeo" vindo da árvore lateral.
+     *
+     * Estratégia que NÃO cria estado paralelo: procura o vídeo na lista
+     * carregada pelo id e, se ele estiver entre os itens, aplica a busca pelo
+     * título exato e rola até a linha. Procurar por id (`busca` na API casa
+     * título/URL) é o que a Biblioteca já sabe fazer; não há filtro novo.
+     *
+     * Se o vídeo não estiver na página atual (fora dos 500 primeiros), cai na
+     * busca por título — que é o comportamento visível mais próximo de
+     * "levar até o vídeo" sem inventar scroll infinito por id.
+     */
+    /** Marca na Biblioteca os ids indicados (todos devem estar carregados). */
+    selecionarIds(ids) {
+      const carregados = new Set(itens.map((v) => v.id));
+      for (const id of ids) if (carregados.has(id)) selecionados.add(id);
+      linhasAtuais = new Map();
+      renderizar();
+      atualizarSelecao();
+    },
+
+    abrirVideo(video) {
+      if (!video) return;
+      // 1. já está carregado? rola até ele, sem tocar em filtros.
+      const naLista = itens.find((v) => v.id === video.id);
+      const indice = itens.findIndex((v) => v.id === video.id);
+      if (naLista && indice >= 0) {
+        selecionados.clear();
+        selecionados.add(naLista.id);
+        viewport.scrollTop = Math.max(0, indice * alturaLinha() - alturaLinha());
+        posicaoSalva = viewport.scrollTop;
+        linhasAtuais = new Map();
+        renderizar();
+        atualizarSelecao();
+        destaqueTemporario(naLista.id);
+        return;
+      }
+      // 2. fora da página: usa a busca existente com o título do vídeo.
+      $('#busca').value = video.titulo ?? '';
+      void carregar({ reset: true });
+    },
     invalidarResumos(ids) {
       for (const id of ids) previas.delete(id);
       versaoPrevias++;

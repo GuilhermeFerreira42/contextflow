@@ -63,6 +63,11 @@ export class Roteador {
     return this.adicionar('DELETE', caminho, manipulador);
   }
 
+  /** PATCH: atualização PARCIAL. `Metodo` já previa; faltava o atalho. */
+  patchar(caminho: string, manipulador: Manipulador): this {
+    return this.adicionar('PATCH', caminho, manipulador);
+  }
+
   /** Casa `:param` com qualquer segmento e devolve os parâmetros capturados. */
   casar(metodo: string, caminho: string): { manipulador: Manipulador; params: Record<string, string> } | null {
     const partes = caminho.split('/').filter(Boolean);

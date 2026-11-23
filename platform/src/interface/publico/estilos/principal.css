@@ -3411,3 +3411,279 @@ tr.linha-provisoria.provisoria-falhou > td:first-child {
     width: auto;
   }
 }
+
+/* =================================== árvore lateral: vídeos e coleções */
+/*
+ * A lateral deixou de ser só contagens: cada nó pode listar seus vídeos
+ * (carregamento progressivo, 50 por vez) e as coleções ganharam menu de ações.
+ *
+ * Regras de layout que sustentam isso:
+ *  - a linha do nó é um grid `[expandir][rótulo][menu]`, para o botão de
+ *    expandir não competir com o clique de filtro;
+ *  - a lista de vídeos recua com uma guia vertical, sem caixa própria — ela é
+ *    continuação do nó, não um segundo painel;
+ *  - nada anima no hover: a lateral é densa e movimento ali distrai.
+ */
+.no-linha {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px;
+}
+.botao-expandir-no {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--texto-fraco);
+  font-size: 8px;
+  line-height: 1;
+  cursor: pointer;
+}
+.botao-expandir-no:hover { color: var(--texto-forte); background: var(--grafite-800); }
+.botao-expandir-no[aria-expanded='true'] { transform: rotate(90deg); color: var(--texto); }
+.botao-expandir-no:focus-visible { outline: 2px solid var(--azul); outline-offset: 1px; }
+
+.arvore-videos {
+  display: grid;
+  gap: 1px;
+  margin: 2px 0 6px 14px;
+  padding-left: 8px;
+  border-left: 1px solid var(--borda);
+}
+.no-video {
+  padding: 4px 6px;
+  font-size: 12px;
+  color: var(--texto-fraco);
+}
+.no-video:hover { color: var(--texto-forte); }
+.no-video .rotulo-no {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.marca-video {
+  flex: 0 0 auto;
+  font-size: 9px;
+  color: var(--texto-fraco);
+  opacity: 0.8;
+}
+.marca-video[data-estado='parcial'] { color: var(--alerta); }
+.marca-video[data-estado='erro'] { color: var(--erro); }
+.no-mais {
+  font-size: 11.5px;
+  color: var(--azul);
+  padding: 4px 6px;
+}
+.no-vazio {
+  cursor: default;
+  font-style: italic;
+  color: var(--texto-fraco);
+  opacity: 0.8;
+  font-size: 11.5px;
+}
+.no-vazio:hover { background: transparent; }
+
+/* Seção "Todos os vídeos": primeira do painel, com busca própria. */
+.secao-todos {
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--borda);
+}
+/* O cabeçalho da seção reaproveita a métrica do cabeçalho de grupo. */
+.secao-todos .grupo-cabecalho {
+  margin-bottom: 2px;
+}
+.arvore-busca {
+  width: calc(100% - 14px);
+  margin: 2px 0 6px 14px;
+  padding: 5px 8px;
+  border: 1px solid var(--borda);
+  border-radius: 6px;
+  background: var(--grafite-800);
+  color: var(--texto-forte);
+  font: inherit;
+  font-size: 12px;
+}
+.arvore-busca:focus {
+  outline: none;
+  border-color: var(--azul);
+  box-shadow: 0 0 0 2px var(--azul-fraco);
+}
+.arvore-acoes-todos {
+  display: flex;
+  gap: 4px;
+  margin: 0 0 6px 14px;
+  flex-wrap: wrap;
+}
+/*
+ * Botões de AÇÃO COM TEXTO dentro da árvore.
+ *
+ * Não usam `.botao-mini`: aquela classe é quadrada (22×22) porque nasceu para
+ * ícones, e aplicá-la a texto espremia "Selecionar" em 22 px — os dois botões
+ * ficavam sobrepostos no print. Esta classe tem largura livre e foco visível.
+ */
+.botao-acao-todos {
+  padding: 3px 8px;
+  border: 1px solid var(--borda);
+  border-radius: 6px;
+  background: var(--grafite-800);
+  color: var(--texto);
+  font: inherit;
+  font-size: 10.5px;
+  line-height: 1.5;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.botao-acao-todos:hover {
+  background: var(--grafite-700);
+  color: var(--texto-forte);
+  border-color: var(--borda-forte);
+}
+.botao-acao-todos:focus-visible { outline: 2px solid var(--azul); outline-offset: 1px; }
+
+/* Menu de ações da coleção (details/summary nativo, sem dependência). */
+.acoes-no { display: inline-flex; }
+.menu-no { position: relative; }
+.menu-no > summary {
+  list-style: none;
+  cursor: pointer;
+  width: 20px;
+  height: 20px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 4px;
+  color: var(--texto-fraco);
+  font-size: 13px;
+  line-height: 1;
+}
+.menu-no > summary::-webkit-details-marker { display: none; }
+.menu-no > summary:hover { background: var(--grafite-800); color: var(--texto-forte); }
+.menu-no[open] > summary { background: var(--grafite-800); color: var(--texto-forte); }
+.menu-no-lista {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 40;
+  min-width: 172px;
+  padding: 4px;
+  border: 1px solid var(--borda-forte);
+  border-radius: 8px;
+  background: var(--grafite-850);
+  box-shadow: 0 14px 30px -14px rgba(0, 0, 0, 0.9);
+  display: grid;
+  gap: 1px;
+}
+.menu-item {
+  text-align: left;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--texto);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.menu-item:hover { background: var(--grafite-800); color: var(--texto-forte); }
+.menu-item.perigo { color: var(--erro); }
+.menu-item.perigo:hover { background: var(--erro-fraco); }
+.menu-item:focus-visible { outline: 2px solid var(--azul); outline-offset: -1px; }
+
+/* Aviso da árvore (resultado de criar/renomear/excluir). */
+.arvore-aviso {
+  margin: 0 8px 8px;
+  padding: 7px 9px;
+  border: 1px solid var(--borda);
+  border-radius: 7px;
+  background: var(--grafite-850);
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--texto);
+}
+.arvore-aviso[data-tipo='erro'] {
+  border-color: color-mix(in srgb, var(--erro) 40%, transparent);
+  color: var(--erro);
+}
+.botao-criar-grupo {
+  margin-left: auto;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  font-size: 13px;
+  line-height: 1;
+  border-radius: 4px;
+}
+.botao-criar-grupo:hover { background: var(--grafite-800); color: var(--texto-forte); }
+
+/* ========================================== chips de filtros ativos (F6-B) */
+/*
+ * O chip é a forma de tirar UM filtro sem abrir o painel.
+ *
+ * Acessibilidade: o × é um `<button>` com `aria-label` completo
+ * ("Remover filtro Canal: Alejavi Rivera"), e não um "<span> clicável" —
+ * teclado e leitor de tela alcançam a ação. O texto do chip é o rótulo
+ * legível do filtro, nunca o id interno.
+ */
+.chips-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+.chip-filtro {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 3px 4px 3px 9px;
+  border: 1px solid var(--borda-forte);
+  border-radius: 999px;
+  background: var(--grafite-850);
+  font-size: 11.5px;
+  color: var(--texto);
+}
+.chip-texto {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chip-remover {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--texto-fraco);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.chip-remover:hover { background: var(--grafite-700); color: var(--texto-forte); }
+.chip-remover:focus-visible { outline: 2px solid var(--azul); outline-offset: 1px; }
+.chip-limpar-todos {
+  padding: 3px 8px;
+  border: 1px dashed var(--borda-forte);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--texto-fraco);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.chip-limpar-todos:hover { color: var(--texto-forte); border-color: var(--texto-fraco); }
+.chip-limpar-todos:focus-visible { outline: 2px solid var(--azul); outline-offset: 1px; }

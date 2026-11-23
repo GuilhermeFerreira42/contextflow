@@ -53,6 +53,7 @@
               <svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg>
             </button>
           </div>
+          <div id="arvore-aviso" class="arvore-aviso" role="status" aria-live="polite" hidden></div>
           <div id="arvore-grupos"></div>
         </div>
 
@@ -116,6 +117,13 @@
               </button>
             </div>
           </header>
+
+          <!--
+            Chips dos filtros ativos: cada filtro aplicado aparece aqui com um
+            × que o remove sozinho, sem tocar em busca/ordenação/outros
+            filtros. "Limpar todos" só aparece com dois ou mais.
+          -->
+          <div class="chips-filtros" id="chips-filtros" role="group" aria-label="Filtros ativos" hidden></div>
 
           <!-- Filtros (painel que abre pelo botão) -->
           <div class="painel-filtros" id="painel-filtros" hidden>
@@ -625,7 +633,11 @@
 
           <label class="filtro-select">
             <span>Destino</span>
-            <select id="adicionar-colecao">
+            <!-- `id` próprio: `#adicionar-colecao` já é o botão "Adicionar" da
+                 barra de seleção da Biblioteca. Dois elementos com o mesmo id
+                 faziam `$('#adicionar-colecao')` devolver o primeiro e o
+                 vínculo de destino no diálogo ficar sempre vazio. -->
+            <select id="adicionar-colecao-destino">
               <option value="">Biblioteca principal (sem coleção)</option>
             </select>
           </label>

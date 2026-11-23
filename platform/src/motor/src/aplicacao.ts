@@ -208,6 +208,39 @@ export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}
     .obter('/api/colecoes', async () => {
       return biblioteca.listarColecoes();
     })
+    /*
+     * Ciclo de vida completo da coleção (F6-B, item 8).
+     *
+     * A distinção que a interface precisa deixar clara e o servidor garante:
+     *   PATCH  = renomear (nada sai do lugar);
+     *   DELETE = excluir a COLEÇÃO (vídeos continuam na biblioteca);
+     *   DELETE /videos/:videoId = desvincular UM vídeo;
+     *   DELETE /videos = esvaziar (desvincula todos, mantém a coleção).
+     * Nenhuma delas apaga vídeo, transcrição ou resumo.
+     */
+    .obter('/api/colecoes/:id', async ({ requisicao }) => {
+      return biblioteca.obterColecao(requisicao.caminho.split('/')[3]!);
+    })
+    .patchar('/api/colecoes/:id', async ({ requisicao }) => {
+      const id = requisicao.caminho.split('/')[3]!;
+      const corpo = requisicao.corpo as { titulo?: unknown } | undefined;
+      if (typeof corpo?.titulo !== 'string' || !corpo.titulo.trim()) {
+        throw new ErroValidacao('Título da coleção obrigatório.');
+      }
+      return biblioteca.renomearColecao(id, corpo.titulo);
+    })
+    .remover('/api/colecoes/:id', async ({ requisicao }) => {
+      const id = requisicao.caminho.split('/')[3]!;
+      const resultado = await biblioteca.excluirColecao(id);
+      registrador.info('coleção excluída', { id, desvinculados: resultado.desvinculados });
+      return resultado;
+    })
+    .remover('/api/colecoes/:id/videos', async ({ requisicao }) => {
+      const id = requisicao.caminho.split('/')[3]!;
+      const resultado = await biblioteca.esvaziarColecao(id);
+      registrador.info('coleção esvaziada', { id, removidos: resultado.removidos });
+      return resultado;
+    })
     .postar('/api/colecoes', async ({ requisicao }) => {
       const corpo = requisicao.corpo as { titulo?: unknown } | undefined;
       if (!corpo || typeof corpo.titulo !== 'string' || corpo.titulo.trim().length === 0) {

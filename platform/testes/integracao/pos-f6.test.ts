@@ -224,7 +224,9 @@ test('DELETE /api/trabalhos/historico não é capturado pela rota :id', async ()
     body: JSON.stringify({ estados: ['cancelado'] }),
   });
   assert.equal(resposta.status, 200);
-  assert.equal(resposta.status === 200 && (await resposta.json()).dados.removidos, 0);
+  // `json()` devolve `unknown` para o compilador; o helper `json` tipa o envelope.
+  const corpo = await json(resposta);
+  assert.equal(corpo.dados.removidos, 0);
 });
 
 test('histórico recusa estado não terminal em vez de apagar em silêncio', async () => {

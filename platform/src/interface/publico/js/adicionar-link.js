@@ -73,7 +73,7 @@ export function criarAdicionarLink({ api, aoEnfileirar, aoAceitar }) {
   }
 
   function preencherColecoes() {
-    const select = $('#adicionar-colecao');
+    const select = $('#adicionar-colecao-destino');
     const valor = select.value;
     const inicial = document.createElement('option');
     inicial.value = '';
@@ -161,7 +161,7 @@ export function criarAdicionarLink({ api, aoEnfileirar, aoAceitar }) {
        * Em nenhum caso há navegação automática para Importações.
        */
       $('#adicionar-url').value = '';
-      const colecaoId = $('#adicionar-colecao').value;
+      const colecaoId = $('#adicionar-colecao-destino').value;
       const jaConcluida = Boolean(video?.id);
       if (jaConcluida) fechar();
       else {

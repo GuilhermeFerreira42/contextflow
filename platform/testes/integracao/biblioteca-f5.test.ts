@@ -132,6 +132,89 @@ test('F5: coleção não recebe vínculos parciais se um vídeo não existe; rep
   const colecoes=await(await fetch(a.base+'/api/colecoes')).json() as any;assert.equal(colecoes.dados.itens[0].contagem,0);
 });
 
+/*
+ * F6-B, item 8: ciclo de vida completo da coleção.
+ *
+ * A regra que estes testes protegem, e que a interface precisa explicar sem
+ * ambiguidade: coleção é ORGANIZAÇÃO. Nenhuma das operações abaixo apaga
+ * vídeo, transcrição ou resumo.
+ */
+test('F6-B: renomear coleção preserva vínculos e valida o título', async t => {
+  const a = await ambiente(t);
+  await a.repo.inserir(video(1));
+  const criada = await a.post('/api/colecoes', { titulo: 'Nome antigo' });
+  const id = criada.corpo.dados.id;
+  await a.post(`/api/colecoes/${id}/videos`, { videoIds: ['video-1'] });
+
+  const resposta = await fetch(a.base + `/api/colecoes/${id}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ titulo: '  Nome novo  ' }),
+  });
+  assert.equal(resposta.status, 200);
+  const corpo = await resposta.json() as any;
+  // Espaços das pontas saem: o título guardado é o que a lista mostra.
+  assert.equal(corpo.dados.titulo, 'Nome novo');
+  assert.equal(corpo.dados.contagem, 1, 'renomear não mexe nos vínculos');
+
+  const vazio = await fetch(a.base + `/api/colecoes/${id}`, {
+    method: 'PATCH', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ titulo: '   ' }),
+  });
+  assert.equal(vazio.status, 422);
+  const inexistente = await fetch(a.base + '/api/colecoes/nao-existe', {
+    method: 'PATCH', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ titulo: 'x' }),
+  });
+  assert.equal(inexistente.status, 404);
+});
+
+test('F6-B: excluir coleção desvincula e mantém vídeos, resumos e transcrições', async t => {
+  const a = await ambiente(t);
+  await a.repo.inserir(video(1));
+  await a.repo.inserir(video(2));
+  a.app.banco.db.exec("INSERT INTO resumos VALUES('video-1','teste','modelo','v1','r1','Texto','pronto',NULL,'2026','2026')");
+  const criada = await a.post('/api/colecoes', { titulo: 'Para excluir' });
+  const id = criada.corpo.dados.id;
+  await a.post(`/api/colecoes/${id}/videos`, { videoIds: ['video-1', 'video-2'] });
+
+  const resposta = await fetch(a.base + `/api/colecoes/${id}`, { method: 'DELETE' });
+  assert.equal(resposta.status, 200);
+  const corpo = await resposta.json() as any;
+  assert.equal(corpo.dados.removida, true);
+  assert.equal(corpo.dados.desvinculados, 2);
+
+  // A coleção sumiu; os vídeos NÃO.
+  assert.equal((await fetch(a.base + `/api/colecoes/${id}`)).status, 404);
+  assert.ok(await a.repo.porId('video-1'));
+  assert.ok(await a.repo.porId('video-2'));
+  assert.equal(a.app.banco.db.prepare("SELECT COUNT(*) n FROM resumos WHERE video_id='video-1'").get()!.n, 1);
+  // E nenhum vínculo órfão ficou apontando para a coleção removida.
+  assert.equal(a.app.banco.db.prepare('SELECT COUNT(*) n FROM colecao_videos WHERE colecao_id=?').get(id)!.n, 0);
+});
+
+test('F6-B: esvaziar coleção mantém a coleção e remove só as associações', async t => {
+  const a = await ambiente(t);
+  await a.repo.inserir(video(1));
+  await a.repo.inserir(video(2));
+  const criada = await a.post('/api/colecoes', { titulo: 'Esvaziar' });
+  const id = criada.corpo.dados.id;
+  await a.post(`/api/colecoes/${id}/videos`, { videoIds: ['video-1', 'video-2'] });
+
+  const resposta = await fetch(a.base + `/api/colecoes/${id}/videos`, { method: 'DELETE' });
+  assert.equal(resposta.status, 200);
+  assert.equal((await resposta.json() as any).dados.removidos, 2);
+
+  const depois = await (await fetch(a.base + `/api/colecoes/${id}`)).json() as any;
+  assert.equal(depois.dados.titulo, 'Esvaziar');
+  assert.equal(depois.dados.contagem, 0);
+  assert.ok(await a.repo.porId('video-1'));
+  // Idempotente: esvaziar de novo não é erro.
+  const outra = await fetch(a.base + `/api/colecoes/${id}/videos`, { method: 'DELETE' });
+  assert.equal(outra.status, 200);
+  assert.equal((await outra.json() as any).dados.removidos, 0);
+});
+
 test('F5: reimportar com a mesma chave não duplica trabalhos e relata IDs ausentes', async t => {
   const a=await ambiente(t);await a.repo.inserir(video(1));const chaveRequisicao=randomUUID();
   const corpo={acao:'reimportar',ids:['video-1','video-1','inexistente'],chaveRequisicao};

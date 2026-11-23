@@ -156,6 +156,18 @@ const arvoreUI = criarArvore({
     bibliotecaUI.aplicarFiltro(parametro, valor);
   },
   aoLimpar: () => bibliotecaUI.limparFiltros(),
+  /**
+   * "Localizar vídeo" a partir da lateral.
+   *
+   * Quando `video` vem nulo e `selecionarListados` está preenchido, é a ação
+   * "Selecionar visíveis" da seção Todos os vídeos: marca na Biblioteca os
+   * ids listados ali. Os dois caminhos usam a MESMA fonte (a lista já
+   * carregada); nenhum cria filtro ou registro paralelo.
+   */
+  aoAbrirVideo: (video, opcoes) => {
+    if (video) bibliotecaUI.abrirVideo(video);
+    else if (opcoes?.selecionarListados) bibliotecaUI.selecionarIds(opcoes.selecionarListados);
+  },
 });
 
 /*
