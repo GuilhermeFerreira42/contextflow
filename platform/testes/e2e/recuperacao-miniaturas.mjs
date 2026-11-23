@@ -53,6 +53,12 @@ try {
   await recuperar.click(); assert.ok(await recuperar.isDisabled());
   await carregou('manual'); assert.equal(await recuperar.count(), 0);
   assert.ok(await pagina.locator('tr[data-id="manual"] input').isChecked());
+  // Motor anterior: lista usa cache, detalhe ainda oferece a URL remota404.
+  await pagina.route(`${base}/api/biblioteca/manual`, async rota => {
+    const resposta = await rota.fetch(); const json = await resposta.json();
+    json.dados.miniaturaUrl = 'https://i.ytimg.com/vi_lc/bbbbbbbbbbb/maxresdefault_en-US.jpg';
+    await rota.fulfill({ response: resposta, json });
+  });
   await pagina.locator('tr[data-id="manual"] .abrir-painel').click();
   await pagina.waitForFunction(() => { const i = document.querySelector('#painel-miniatura img'); return i?.complete && i.naturalWidth === 320; });
   await pagina.keyboard.press('Escape');

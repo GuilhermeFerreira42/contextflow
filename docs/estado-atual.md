@@ -4,7 +4,49 @@
 > `00-comece-aqui.md`. O que está abaixo da linha "Histórico" é registro, não
 > estado vigente.
 
-## Estado vigente — 22/11/2026 — recuperação de capa importada
+## Estado vigente — 22/11/2026 — comando personalizado e painel
+
+Base `bd41a13`, main limpa. Pedido: comando personalizado não permanecia e a
+capa não aparecia no painel. SPEC: `specs/f6a-prompt-persistente-painel.md`.
+Uma solicitação subsequente autoriza reformular o painel horizontal de
+Visualização, separadamente; não iniciar F7.
+
+**Diagnóstico:** a API aberta retornava prompt padrão (texto personalizado
+anterior não disponível). Era rejeitado qualquer comando sem `{transcricao}`.
+Não se presume essa como única causa do relato. A lista trazia capa local,
+mas o detalhe ainda trazia URL antiga no processo aberto.
+
+**Correção:** prompt não vazio sem marcador recebe a transcrição automaticamente
+uma única vez, no frontend e na validação do backend. Instruções não são trocadas
+pelo padrão; limites continuam valendo. Formulário mostra edição não salva e
+fica bloqueado durante carga/salvamento/teste para evitar resposta atrasada
+sobrescrever o texto. POST retornado atualiza a tela; falha preserva a edição.
+Salvamento continua explícito; nenhuma chave/prompt em armazenamento paralelo.
+
+Painel busca primeiro a capa local por ID, mesmo com resposta antiga do detalhe;
+se faltar, tenta recuperação uma vez e fonte original como último recurso.
+Respostas de outro vídeo/painel fechado não são aplicadas. Prova na aplicação
+real: painel exibiu capa local1280×720. Prompt/credenciais pessoais não foram
+alterados para testar; o texto anterior não salvo não foi recuperado.
+
+**Windows/Node v22.12.0, saída0:** `npm test`238 testes,232 aprovados,seis ignorados;
+integração resumos16/16, Playwright F6 **8/8**, capas **3/3** simulando detalhe
+antigo com URL remota404; build/typecheck e fumaça noveOK/TUDO OK.
+Prompt personalizado persistiu após reload e reabertura real do motor de teste,
+e chegou ao HTTP controlado junto da fonte. Falha de gravação preservou edição;
+carga atrasada manteve campos bloqueados até carregar. Nenhuma IA paga foi usada.
+Evidências: `../Continuidade de Projeto/prompt-painel-bd41a13/`, logs e capturas;
+`painel-real.log`/`painel-real.png` comprovam imagem do painel na aplicação aberta.
+Não executados: Linux, gravação de prompt pessoal, IA real, nova regressão CDP
+completa nesta rodada (será exercitada na reformulação de Visualização).
+
+**Próxima ação autorizada:** SPEC e implementação do painel horizontal compacto
+de Visualização, frontend apenas, reutilizando colunas/altura/fonte/modos e
+persistência. Mockup separado não veio anexado à solicitação; seguir composição
+textual de três grupos. Commit deste registro encerra somente as duas correções
+anteriores; a reformulação deverá ter commit e evidência próprios.
+
+## Estado anterior — recuperação de capa importada
 
 Base `adb6c57`, `main` limpa antes do pedido. O proprietário relatou vídeo
 importado sem imagem e autorizou conversão se necessária. SPEC anterior ao

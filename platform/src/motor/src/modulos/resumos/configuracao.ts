@@ -40,8 +40,10 @@ export function validarConfig(entrada: unknown): ConfigResumo {
   if (['openai', 'anthropic'].includes(provedor.id) && baseUrl !== provedor.baseUrl) {
     throw new ErroValidacao('Para outro endpoint, escolha OpenAI compatível.');
   }
-  const prompt = texto('prompt', PROMPT_PADRAO);
-  if (!prompt.includes('{transcricao}') || prompt.length > 20000) throw new ErroValidacao('O prompt deve conter {transcricao} e até 20.000 caracteres.');
+  let prompt = texto('prompt', PROMPT_PADRAO);
+  if (!prompt) throw new ErroValidacao('Escreva as instruções do resumo.');
+  if (!prompt.includes('{transcricao}')) prompt += '\n\nTranscrição:\n{transcricao}';
+  if (prompt.length > 20000) throw new ErroValidacao('As instruções, incluindo o campo da transcrição, devem ter até 20.000 caracteres.');
   const versaoPrompt = texto('versaoPrompt', 'v1');
   if (!/^[\w.-]{1,40}$/.test(versaoPrompt)) throw new ErroValidacao('Use uma versão de prompt com até 40 letras, números, pontos ou hífens.');
   const numero = (chave: string, padrao: number, min: number, max: number) => {

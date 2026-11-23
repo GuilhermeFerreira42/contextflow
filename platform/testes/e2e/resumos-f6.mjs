@@ -179,6 +179,36 @@ try {
     assert.match((await req('/api/biblioteca/f6-ui-1/resumo')).texto, /Compatível/);
     assert.deepEqual(erros, []);
   });
+  await teste('Prompt personalizado persiste; erro preserva edição e carga atrasada não apaga texto', async () => {
+    await nav('configuracoes');
+    const comando = 'Liste decisões e exemplos em linguagem simples, sem inventar dados.';
+    await page.locator('#ia-prompt').fill(comando);
+    assert.match(await page.locator('#ia-resultado').innerText(), /não salvas/);
+    await page.locator('#ia-salvar').click();
+    await page.waitForFunction(() => document.querySelector('#ia-resultado').textContent.includes('salva'));
+    const persistido = await page.locator('#ia-prompt').inputValue();
+    assert.ok(persistido.startsWith(comando)); assert.equal(persistido.split('{transcricao}').length - 1, 1);
+    await page.reload(); await page.waitForFunction(() => !document.querySelector('#ia-prompt').disabled);
+    assert.equal(await page.locator('#ia-prompt').inputValue(), persistido);
+    const rota = '**/api/resumos/configuracao';
+    await page.route(rota, r => r.request().method() === 'POST'
+      ? r.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ ok: false, erro: { mensagem: 'Falha controlada ao salvar.' } }) }) : r.continue());
+    const editado = comando + '\nInclua um glossário.';
+    await page.locator('#ia-prompt').fill(editado); await page.locator('#ia-salvar').click();
+    await page.waitForFunction(() => document.querySelector('#ia-resultado').textContent.includes('Falha controlada'));
+    assert.equal(await page.locator('#ia-prompt').inputValue(), editado);
+    assert.equal((await req('/api/resumos/configuracao')).configuracao.prompt, persistido);
+    await page.unroute(rota);
+    let liberar; const aguardar = new Promise(ok => { liberar = ok; });
+    await page.route(rota, async r => { await aguardar; await r.continue(); });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    assert.ok(await page.locator('#ia-prompt').isDisabled());
+    liberar(); await page.waitForFunction(() => !document.querySelector('#ia-prompt').disabled);
+    assert.equal(await page.locator('#ia-prompt').inputValue(), persistido);
+    await page.unroute(rota);
+    await page.screenshot({ path: join(evidencia, 'prompt-personalizado-persistido.png') });
+    assert.deepEqual(erros, []);
+  });
   console.log(`\n${total-falhas.length}/${total} cenários F6 Playwright aprovados. Provedor HTTP controlado; não é serviço/modelo real.`);
   process.exitCode = falhas.length ? 1 : 0;
 } finally {

@@ -8,21 +8,29 @@ export function criarResumosUI({ api, aoEnfileirar, aoSalvar }) {
     versaoPrompt: 'ia-versao', contexto: 'ia-contexto', maxSaida: 'ia-saida', concorrencia: 'ia-concorrencia',
     timeoutSegundos: 'ia-timeout', precoEntrada: 'ia-preco-entrada', precoSaida: 'ia-preco-saida' };
   const avisoConfig = texto => { $('#ia-resultado').textContent = texto; };
+  const bloquearFormulario = bloqueado => {
+    $('#formulario-ia').setAttribute('aria-busy', String(bloqueado));
+    $('#formulario-ia').querySelectorAll('input, select, textarea, button').forEach(el => { el.disabled = bloqueado; });
+  };
+  function preencherConfiguracao(atual) {
+    const c = atual.configuracao ?? { provedor: 'openai', modelo: '', baseUrl: provedores[0].baseUrl, prompt: atual.promptPadrao,
+      versaoPrompt: 'v1', contexto: 16384, maxSaida: 1024, concorrencia: 2, timeoutSegundos: 90, precoEntrada: '', precoSaida: '' };
+    for (const [nome, id] of Object.entries(campos)) $('#' + id).value = c[nome] ?? '';
+    $('#ia-chave').value = ''; $('#ia-remover-chave').checked = false;
+    $('#ia-endpoint').readOnly = ['openai', 'anthropic'].includes(c.provedor);
+    $('#ia-protecao').textContent = `${atual.temChave ? 'Chave salva para este provedor e endpoint.' : 'Nenhuma chave salva para este endpoint.'} Proteção: ${atual.protecao}.`;
+  }
 
   async function carregarConfiguracao() {
+    bloquearFormulario(true); avisoConfig('Carregando configuração…');
     try {
       const [lista, atual] = await Promise.all([api('/api/resumos/provedores'), api('/api/resumos/configuracao')]);
       provedores = lista.provedores;
       const opcoes = provedores.map(p => { const o = document.createElement('option'); o.value = p.id; o.textContent = p.nome; return o; });
       $('#ia-provedor').replaceChildren(...opcoes);
-      const c = atual.configuracao ?? { provedor: 'openai', modelo: '', baseUrl: provedores[0].baseUrl, prompt: atual.promptPadrao,
-        versaoPrompt: 'v1', contexto: 16384, maxSaida: 1024, concorrencia: 2, timeoutSegundos: 90, precoEntrada: '', precoSaida: '' };
-      for (const [nome, id] of Object.entries(campos)) $('#' + id).value = c[nome] ?? '';
-      $('#ia-chave').value = '';
-      $('#ia-remover-chave').checked = false;
-      $('#ia-endpoint').readOnly = ['openai', 'anthropic'].includes(c.provedor);
-      $('#ia-protecao').textContent = `${atual.temChave ? 'Chave salva para este provedor e endpoint.' : 'Nenhuma chave salva para este endpoint.'} Proteção: ${atual.protecao}.`;
+      preencherConfiguracao(atual); avisoConfig('Configuração carregada.');
     } catch (erro) { avisoConfig(erro.message); }
+    finally { bloquearFormulario(false); }
   }
 
   async function abrir(videoIds) {
@@ -72,18 +80,22 @@ export function criarResumosUI({ api, aoEnfileirar, aoSalvar }) {
   }
 
   async function salvarConfiguracao() {
-      if (!$('#formulario-ia').reportValidity()) return false;
-      $('#ia-salvar').disabled = true; $('#ia-testar').disabled = true; avisoConfig('Salvando…');
+      if (!$('#formulario-ia').reportValidity()) { avisoConfig('Revise os campos indicados antes de salvar.'); return false; }
+      bloquearFormulario(true); avisoConfig('Salvando…');
       const dados = Object.fromEntries(Object.entries(campos).map(([nome, id]) => [nome, $('#' + id).value]));
       dados.apiKey = $('#ia-chave').value; dados.removerChave = $('#ia-remover-chave').checked;
+      // Compatível também com motores anteriores, que exigem o marcador.
+      if (dados.prompt.trim() && !dados.prompt.includes('{transcricao}')) dados.prompt = dados.prompt.trim() + '\n\nTranscrição:\n{transcricao}';
       try {
-        await api('/api/resumos/configuracao', { method: 'POST', body: JSON.stringify(dados) });
-        await carregarConfiguracao(); avisoConfig('Configuração de IA salva.'); aoSalvar?.(); return true;
+        const salva = await api('/api/resumos/configuracao', { method: 'POST', body: JSON.stringify(dados) });
+        preencherConfiguracao(salva); avisoConfig('Configuração de IA salva.'); aoSalvar?.(); return true;
       } catch (erro) { avisoConfig(erro.message); return false; }
-      finally { $('#ia-chave').value = ''; $('#ia-salvar').disabled = false; $('#ia-testar').disabled = false; }
+      finally { $('#ia-chave').value = ''; bloquearFormulario(false); }
   }
 
   function ligar() {
+    bloquearFormulario(true);
+    $('#formulario-ia').addEventListener('input', () => avisoConfig('Alterações não salvas. Clique em Salvar configuração de IA para manter suas instruções.'));
     $('#formulario-ia').addEventListener('submit', async e => {
       e.preventDefault(); await salvarConfiguracao();
     });
@@ -97,14 +109,14 @@ export function criarResumosUI({ api, aoEnfileirar, aoSalvar }) {
     $('#ia-endpoint').addEventListener('change', () => { $('#ia-chave').value = ''; $('#ia-modelos').replaceChildren(); });
     $('#ia-testar').addEventListener('click', async () => {
       if (!await salvarConfiguracao()) return;
-      $('#ia-testar').disabled = true; avisoConfig('Testando a configuração salva…');
+      bloquearFormulario(true); avisoConfig('Testando a configuração salva…');
       try {
         const resultado = await api('/api/resumos/testar', { method: 'POST', body: '{}' });
         $('#ia-modelos').replaceChildren(...resultado.modelos.map(modelo => { const o = document.createElement('option'); o.value = modelo; return o; }));
         avisoConfig(resultado.mensagem);
       }
       catch (erro) { avisoConfig(erro.message); }
-      finally { $('#ia-testar').disabled = false; }
+      finally { bloquearFormulario(false); }
     });
     $('#resumos-fechar').addEventListener('click', () => dialogo.close());
     dialogo.addEventListener('close', () => { pedido++; estimativa = null; });

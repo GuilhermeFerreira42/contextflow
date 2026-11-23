@@ -89,18 +89,32 @@ export function criarPainel({ api, aoResumir, aoHistorico }) {
       vazio.textContent = 'sem miniatura';
       caixa.replaceChildren(vazio);
     };
-    if (video.miniaturaUrl) {
-      const img = document.createElement('img');
-      img.alt = `Miniatura de ${video.titulo}`;
-      // Mesmo tratamento da Biblioteca: falha de carregamento vira um
-      // espaço reservado com a proporção mantida, nunca o ícone nativo de
-      // imagem quebrada.
-      img.addEventListener('error', semMiniatura, { once: true });
-      img.src = video.miniaturaUrl;
-      caixa.append(img);
-    } else {
-      semMiniatura();
-    }
+    const img = document.createElement('img');
+    img.alt = `Miniatura de ${video.titulo}`; img.referrerPolicy = 'no-referrer';
+    img.decoding = 'async';
+    const local = `/api/miniaturas/${encodeURIComponent(video.id)}`;
+    let etapa = 'cache';
+    const atual = () => caixa.contains(img) && videoAtual?.id === video.id && !painel.hidden;
+    const fonteOuFallback = () => {
+      if (video.miniaturaUrl && video.miniaturaUrl !== local) {
+        etapa = 'remota'; img.src = video.miniaturaUrl;
+      } else semMiniatura();
+    };
+    img.addEventListener('error', () => {
+      if (!atual() || etapa === 'buscando') return;
+      if (etapa !== 'cache') { semMiniatura(); return; }
+      etapa = 'buscando';
+      void (async () => {
+        try {
+          const resposta = await api(`${local}/buscar`, { method: 'POST', body: '{}' });
+          if (!atual()) return;
+          if (resposta?.miniaturaUrl) { etapa = 'recuperada'; img.src = resposta.miniaturaUrl; }
+          else fonteOuFallback();
+        } catch { if (atual()) fonteOuFallback(); }
+      })();
+    });
+    // Preferir o cache por ID mesmo quando um motor antigo devolve a URL remota.
+    caixa.append(img); img.src = local;
 
     // fatos
     const fatos = $('#painel-fatos');

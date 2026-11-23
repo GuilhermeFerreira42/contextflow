@@ -315,3 +315,20 @@ test('F6 LiteLLM: reserva de entrada, limite global e chave oficial continuam va
   const c = validarConfig(a.config({ provedor: 'openai', baseUrl: 'https://api.openai.com/v1' }));
   await assert.rejects(cliente.testar(c, null), (e: any) => e.codigo === 'chave_ausente');
 });
+
+test('F6: instruções sem marcador persistem após reabertura e chegam ao provedor com a transcrição', async t => {
+  const a = await ambiente(t); await a.fonte();
+  const instrucoes = 'Explique em tópicos curtos.\nDestaque exemplos e dúvidas sem inventar fatos.';
+  const r = await a.api('/api/resumos/configuracao', a.config({ prompt: instrucoes }));
+  assert.equal(r.status, 200);
+  const salvo = r.dados.configuracao.prompt;
+  assert.ok(salvo.startsWith(instrucoes));
+  assert.equal(salvo.split('{transcricao}').length - 1, 1);
+  await a.reiniciar();
+  assert.equal((await a.api('/api/resumos/configuracao')).dados.configuracao.prompt, salvo);
+  const g = await a.gerar(); assert.equal((await a.terminal(g.resposta.dados.trabalhos[0].id)).estado, 'concluido');
+  assert.ok(a.pedidos.at(-1)!.corpo.messages[0].content.startsWith(instrucoes));
+  assert.match(a.pedidos.at(-1)!.corpo.messages[0].content, /Fonte de teste/);
+  assert.equal((await a.api('/api/resumos/configuracao', a.config({ prompt: 'x'.repeat(20001) }))).status, 422);
+  assert.equal((await a.api('/api/resumos/configuracao')).dados.configuracao.prompt, salvo);
+});
