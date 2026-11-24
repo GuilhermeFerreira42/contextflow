@@ -249,15 +249,29 @@ try {
      await detalhe.locator('.item-filho').nth(129).waitFor();
      assert.equal(await detalhe.locator('.item-filho').count(), 130);
      assert.ok(await detalhe.getByRole('button',{name:'Mais itens'}).isHidden());
+     const lista = detalhe.locator('.lista-filhos');
+     const rolagem = await lista.evaluate(e => { e.scrollTop = 600; return e.scrollTop; });
+     assert.ok(rolagem > 0);
+     for (let i = 0; i < 2; i++) await page.waitForResponse(r => r.url().includes(`/api/trabalhos/${lote.id}/itens?limite=50&cursor=`));
+     assert.equal(await lista.evaluate(e => e.scrollTop), rolagem);
      await page.setViewportSize({width:390,height:850});
      await page.locator('.caixa-tabela-trabalhos').evaluate(caixa => { caixa.scrollLeft = caixa.scrollWidth; });
+     await page.waitForFunction(id => {
+       const painel = document.querySelector(`#itens-trabalho-${id}`);
+       const caixa = painel?.closest('.caixa-tabela-trabalhos');
+       if (!caixa) return false;
+       const r = painel.getBoundingClientRect();
+       const c = caixa.getBoundingClientRect();
+       return r.left >= c.left - 2 && r.right <= c.left + caixa.clientWidth + 2;
+     }, lote.id);
      const estreita = await detalhe.locator('.painel-itens-trabalho').evaluate(painel => {
        const caixa = painel.closest('.caixa-tabela-trabalhos');
        const visivel = caixa.getBoundingClientRect();
        const retangulo = painel.getBoundingClientRect();
-       return retangulo.left >= visivel.left - 2 && retangulo.right <= visivel.left + caixa.clientWidth + 2;
+       return { inicio:retangulo.left, fim:retangulo.right, esquerda:visivel.left,
+         direita:visivel.left + caixa.clientWidth, scroll:caixa.scrollLeft };
      });
-     assert.ok(estreita);
+     assert.ok(estreita.inicio >= estreita.esquerda - 2 && estreita.fim <= estreita.direita + 2, JSON.stringify(estreita));
      await detalhe.getByRole('button',{name:'Recolher itens'}).click();
      assert.equal(await botao.getAttribute('aria-expanded'), 'false');
      await detalhe.waitFor({state:'detached'});
@@ -265,6 +279,59 @@ try {
      soltar();
      for (const id of ids) bloqueios.delete(id);
    }
+ });
+ await teste('resultado parcial mostra concluídos e a rolagem do histórico sobrevive ao polling', async () => {
+   await page.setViewportSize({width:1450,height:760});
+   const repo = app.trabalhos.repositorio;
+   let misto;
+   let antigo;
+   app.banco.executarTransacao(() => {
+     const marcar = app.banco.db.prepare('UPDATE trabalhos SET estado=?, fase=?, progresso=1, criado_em=?, atualizado_em=? WHERE id=?');
+     misto = repo.inserir('importar-lote', {urls:[]});
+     marcar.run('falhou','finalizado','2099-01-01','2099-01-01',misto);
+     for (let i=0;i<130;i++) {
+       const youtubeId = `mix${String(i).padStart(8,'0')}`;
+       const filho = repo.inserir('importar-video', {titulo:`Vídeo misto ${i}`,posicao:i}, youtubeId, misto);
+       const data = new Date(Date.UTC(2005,0,1,0,i)).toISOString();
+       marcar.run(i < 37 ? 'concluido' : 'falhou','finalizado',data,data,filho);
+     }
+     for (let i=0;i<66;i++) {
+       const raiz = repo.inserir('importar-video', {titulo:`Histórico ${i}`});
+       const data = new Date(Date.UTC(2000,0,1,0,i)).toISOString();
+       marcar.run('concluido','finalizado',data,data,raiz);
+       if (!i) antigo = raiz;
+     }
+   });
+   await page.reload();
+   const pai = page.locator(`tr.trabalho[data-id="${misto}"]`);
+   await pai.locator('[data-acao="itens"]').click();
+   assert.equal(await pai.locator('.selo').textContent(), 'Parcial');
+   const painel = page.locator(`#itens-trabalho-${misto}`);
+   await painel.locator('.item-filho').nth(49).waitFor();
+   assert.equal(await painel.locator('.item-filho .selo[data-estado="erro"]').count(), 50);
+   assert.equal(await painel.locator('.contagem-itens-trabalho .selo[data-estado="pronto"]').textContent(), '37 concluídos');
+   await painel.getByRole('combobox',{name:'Filtrar itens por estado'}).selectOption('concluido');
+   await painel.locator('.item-filho .selo[data-estado="pronto"]').nth(36).waitFor();
+   assert.equal(await painel.locator('.item-filho').count(), 37);
+   await painel.getByRole('button',{name:'Recolher itens'}).click();
+   await page.locator('#mais-trabalhos').click();
+   const raizAntiga = page.locator(`tr[data-id="${antigo}"]`);
+   await raizAntiga.waitFor();
+   const posicao = await page.evaluate(() => {
+     const tabela = document.querySelector('#lista-trabalhos');
+     const tela = document.querySelector('.conteudo');
+     tabela.scrollTop = 880;
+     tela.scrollTop = tela.scrollHeight;
+     return [tabela.scrollTop,tela.scrollTop];
+   });
+   assert.ok(posicao.every(valor => valor > 0));
+   for (let i=0;i<2;i++) {
+     await page.waitForResponse(r => r.url().includes('/api/trabalhos?raizes=1&limite=50&cursor='));
+   }
+   assert.equal(await raizAntiga.count(), 1);
+   assert.deepEqual(await page.evaluate(() => [
+     document.querySelector('#lista-trabalhos').scrollTop, document.querySelector('.conteudo').scrollTop,
+   ]), posicao);
  });
  assert.deepEqual(erros,[]);console.log(`${total}/${total} cenários de estabilização Playwright aprovados.`);
 } finally {bloqueado=false;liberar?.();liberarResumo?.();await browser?.close();await app.encerrar();}

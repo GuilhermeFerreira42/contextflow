@@ -1,4 +1,15 @@
-# Retomada vigente — layout dos itens em Importações — 24/11/2026
+# Retomada vigente — resultados mistos e rolagem em Importações — 24/11/2026
+
+Base `contextflow_node` em `440bf3d`. Lotes mistos mostram Parcial,
+contagens e filtro dos itens. O polling mantém as páginas carregadas e a
+rolagem. Build, 257 testes (seis ignorados no Windows), CDP 57/57 e
+Playwright 15/15 com lote controlado de 130 itens. Reabrir o motor.
+[Estado canônico](../../docs/estado-atual.md) e
+[SPEC](../../docs/specs/f4-lote-resultado-e-rolagem.md).
+
+---
+
+# Histórico — layout dos itens em Importações — 24/11/2026
 
 Base `contextflow_node` em `95f7bd9`. **Itens** abre uma linha de largura
 total abaixo do lote ou da playlist. Paginação e rolagem da lista foram

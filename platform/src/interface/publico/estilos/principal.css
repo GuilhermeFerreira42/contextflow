@@ -3116,13 +3116,30 @@ dialog p {
 .painel-itens-trabalho {
   position: sticky;
   left: 10px;
-  max-width: calc(100cqw - 20px);
+  width: calc(100cqw - 20px);
+  max-width: 100%;
+}
+@media (max-width: 740px) {
+  .painel-itens-trabalho {
+    width: min(calc(100cqw - 20px), calc(100vw - 78px));
+  }
 }
 .acoes-itens-trabalho {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 10px;
+}
+.topo-itens-trabalho,
+.contagem-itens-trabalho {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.topo-itens-trabalho {
+  justify-content: space-between;
+  margin-bottom: 8px;
 }
 .tabela-trabalhos .lista-filhos {
   display: grid;
@@ -3185,7 +3202,8 @@ dialog p {
   font-size: 13px;
   pointer-events: none;
 }
-.barra-trabalhos select {
+.barra-trabalhos select,
+.topo-itens-trabalho select {
   padding: 7px 9px;
   border: 1px solid var(--borda);
   border-radius: 7px;
@@ -3210,6 +3228,7 @@ dialog p {
    Sem isso, um histórico de 200 linhas empurraria o rodapé para fora da tela. */
 .caixa-tabela-trabalhos {
   container-type: inline-size;
+  overflow-anchor: none;
   border: 1px solid var(--borda);
   border-radius: var(--raio);
   background: var(--grafite-900);

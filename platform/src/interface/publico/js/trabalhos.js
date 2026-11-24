@@ -67,6 +67,8 @@ const SELO = {
 };
 
 const TERMINAIS = ['concluido', 'falhou', 'cancelado'];
+const loteParcial = t => t.estado === 'falhou' && t.contadores?.concluidos > 0 && t.contadores?.falhos > 0;
+const rotuloEstado = t => loteParcial(t) ? 'Parcial' : ESTADOS[t.estado] ?? t.estado;
 
 const ICONES = {
   cancelar: { glifo: '⏹', rotulo: 'Cancelar importação' },
@@ -151,6 +153,8 @@ export function criarTrabalhos({ api, $, aoConcluir, aoMudarAtivos, idsAcompanha
     pesquisa: '',
     ordem: 'recentes',
     cursor: null,
+    paginas: 1,
+    maisPendente: false,
     carregando: false,
     carregandoMais: false,
     raiz: null,
@@ -160,17 +164,36 @@ export function criarTrabalhos({ api, $, aoConcluir, aoMudarAtivos, idsAcompanha
 
   /* --------------------------------------------------------------- dados */
 
+  async function carregarRaizes(mais) {
+    let cursor = mais ? estado.cursor : null;
+    const itens = [];
+    let paginas = 0;
+    do {
+      const pagina = await api(`/api/trabalhos?raizes=1&limite=50${cursor ? '&cursor=' + encodeURIComponent(cursor) : ''}`);
+      itens.push(...pagina.itens);
+      cursor = pagina.proximoCursor ?? null;
+      paginas++;
+    } while (!mais && cursor && paginas < estado.paginas);
+    return { itens, cursor, paginas };
+  }
+
   async function carregar({ mais = false } = {}) {
-    if (estado.carregandoMais || estado.carregando) return;
+    if (estado.carregandoMais || estado.carregando) {
+      if (mais && estado.carregando) estado.maisPendente = true;
+      return;
+    }
+    if (mais && !estado.cursor) return;
     if (mais) estado.carregandoMais = true; else estado.carregando = true;
     try {
-      const cursor = mais ? estado.cursor : null;
       const [pagina, ativosPagina] = await Promise.all([
-        api(`/api/trabalhos?raizes=1&limite=50${cursor ? '&cursor=' + encodeURIComponent(cursor) : ''}`),
+        carregarRaizes(mais),
         api('/api/trabalhos?raizes=1&ativos=1&limite=100'),
       ]);
-      estado.cursor = pagina.proximoCursor ?? null;
-      if (mais) estado.itens.push(...pagina.itens);
+      estado.cursor = pagina.cursor;
+      if (mais) {
+        estado.itens.push(...pagina.itens);
+        estado.paginas += pagina.paginas;
+      }
       else estado.itens = pagina.itens;
 
       estado.porId = new Map(estado.itens.map((t) => [t.id, t]));
@@ -215,6 +238,10 @@ export function criarTrabalhos({ api, $, aoConcluir, aoMudarAtivos, idsAcompanha
     } finally {
       estado.carregando = false;
       estado.carregandoMais = false;
+      if (estado.maisPendente) {
+        estado.maisPendente = false;
+        void carregar({ mais: true });
+      }
     }
   }
 
@@ -242,6 +269,25 @@ export function criarTrabalhos({ api, $, aoConcluir, aoMudarAtivos, idsAcompanha
 
   /* ----------------------------------------------------------- desenho */
 
+  const assinaturas = new WeakMap();
+  function reaproveitar(anterior, dados, renderizar) {
+    const assinatura = JSON.stringify(dados);
+    if (anterior && assinaturas.get(anterior) === assinatura) return anterior;
+    const novo = renderizar(dados);
+    assinaturas.set(novo, assinatura);
+    return novo;
+  }
+
+  function sincronizarNos(pai, nos) {
+    const desejados = new Set(nos);
+    for (const filho of [...pai.children]) if (!desejados.has(filho)) filho.remove();
+    let atual = pai.firstElementChild;
+    for (const no of nos) {
+      if (no === atual) atual = atual.nextElementSibling;
+      else pai.insertBefore(no, atual);
+    }
+  }
+
   const el = (tag, props = {}, ...filhos) => {
     const n = document.createElement(tag);
     for (const [k, v] of Object.entries(props)) {
@@ -256,8 +302,8 @@ export function criarTrabalhos({ api, $, aoConcluir, aoMudarAtivos, idsAcompanha
   };
 
   function selo(trabalho) {
-    const s = el('span', { classe: 'selo', dataset: { estado: SELO[trabalho.estado] ?? 'pendente' } });
-    s.textContent = ESTADOS[trabalho.estado] ?? trabalho.estado;
+    const s = el('span', { classe: 'selo', dataset: { estado: loteParcial(trabalho) ? 'parcial' : SELO[trabalho.estado] ?? 'pendente' } });
+    s.textContent = rotuloEstado(trabalho);
     return s;
   }
 
@@ -288,6 +334,15 @@ export function criarTrabalhos({ api, $, aoConcluir, aoMudarAtivos, idsAcompanha
     const preenchimento = el('span');
     preenchimento.style.width = `${info.percentual ?? (info.cheia ? 100 : 0)}%`;
     trilho.append(preenchimento);
+    if (loteParcial(trabalho)) {
+      const { concluidos, falhos, total } = trabalho.contadores;
+      trilho.dataset.resultado = 'parcial';
+      trilho.setAttribute('aria-valuetext', `${concluidos} concluídos, ${falhos} falhas`);
+      const sucesso = 100 * concluidos / total;
+      const fimFalhas = 100 * (concluidos + falhos) / total;
+      preenchimento.style.background = `linear-gradient(to right, var(--sucesso) ${sucesso}%, var(--erro) ${sucesso}% ${fimFalhas}%, var(--trilho) ${fimFalhas}%)`;
+      preenchimento.style.width = '100%';
+    }
     caixa.append(trilho);
 
     if (info.percentual !== null) {
@@ -340,7 +395,7 @@ export function criarTrabalhos({ api, $, aoConcluir, aoMudarAtivos, idsAcompanha
     // A sub-linha começa pelo ESTADO em texto. Duplica o selo de propósito:
     // é o que garante que a informação exista sem depender de cor/posição, e
     // mantém o contrato `.trabalho-meta` lido pelos testes existentes.
-    const sub = [ESTADOS[trabalho.estado] ?? trabalho.estado];
+    const sub = [rotuloEstado(trabalho)];
     // A fase vai SEMPRE (não só em execução): a tabela é a tela de detalhe da
     // fila, e "Concluído · Finalizado · tentativa 2" é informação útil. O
     // texto é o rótulo legível E a fase crua quando diferem — testes e
@@ -411,11 +466,32 @@ export function criarTrabalhos({ api, $, aoConcluir, aoMudarAtivos, idsAcompanha
     const aviso = el('p', { classe: 'painel-nota', role: 'status', texto: 'Carregando itens…' });
     const mais = el('button', { type: 'button', classe: 'botao-secundario', hidden: true, texto: 'Mais itens' });
     const recolher = el('button', { type: 'button', classe: 'botao-secundario', texto: 'Recolher itens' });
+    const contagem = el('div', { classe: 'contagem-itens-trabalho' });
+    const filtro = el('select', { 'aria-label': 'Filtrar itens por estado' },
+      el('option', { value: '', texto: 'Todos os itens' }),
+      el('option', { value: 'concluido', texto: 'Concluídos' }),
+      el('option', { value: 'falhou', texto: 'Falhas' }));
     const painel = el('section', {
       id: `itens-trabalho-${id}`, classe: 'painel-itens-trabalho', 'aria-label': 'Itens da importação',
-    }, aviso, lista, el('div', { classe: 'acoes-itens-trabalho' }, mais, recolher));
+    }, el('div', { classe: 'topo-itens-trabalho' }, contagem, filtro),
+    aviso, lista, el('div', { classe: 'acoes-itens-trabalho' }, mais, recolher));
     const linha = el('tr', { classe: 'linha-detalhe' }, el('td', { colspan: '7' }, painel));
-    const detalhe = { linha, aviso, lista, mais, paginas: 0, cursor: null, carregando: false, maisPendente: false, instantaneo: null };
+    const detalhe = { linha, aviso, lista, mais, filtro, contagem, paginas: 0, cursor: null, carregando: false,
+      maisPendente: false, filtroPendente: false, revisao: 0, instantaneo: null };
+    filtro.addEventListener('change', () => {
+      const trabalho = estado.porId.get(id);
+      if (!trabalho) return;
+      detalhe.revisao++;
+      detalhe.paginas = 0;
+      detalhe.cursor = null;
+      detalhe.maisPendente = false;
+      mais.hidden = true;
+      lista.replaceChildren();
+      aviso.textContent = 'Carregando itens…';
+      aviso.hidden = false;
+      if (detalhe.carregando) detalhe.filtroPendente = true;
+      else void carregarFilhos(trabalho, detalhe);
+    });
     mais.addEventListener('click', () => {
       const trabalho = estado.porId.get(id);
       if (trabalho) void carregarFilhos(trabalho, detalhe, true);
@@ -430,9 +506,23 @@ export function criarTrabalhos({ api, $, aoConcluir, aoMudarAtivos, idsAcompanha
     return detalhe;
   }
 
+  function desenharContagem(trabalho, detalhe) {
+    const c = trabalho.contadores;
+    if (!c) return;
+    const texto = `${c.concluidos} concluído(s) · ${c.falhos} falha(s) · ${c.cancelados} cancelado(s)`;
+    if (detalhe.contagem.dataset.resumo === texto) return;
+    detalhe.contagem.dataset.resumo = texto;
+    detalhe.contagem.replaceChildren(...[
+      el('span', { classe: 'selo', dataset: { estado: 'pronto' }, texto: c.concluidos === 1 ? '1 concluído' : `${c.concluidos} concluídos` }),
+      el('span', { classe: 'selo', dataset: { estado: 'falhou' }, texto: c.falhos === 1 ? '1 falha' : `${c.falhos} falhas` }),
+      c.cancelados ? el('span', { classe: 'selo', dataset: { estado: 'cancelado' }, texto: `${c.cancelados} cancelado(s)` }) : null,
+    ].filter(Boolean));
+  }
+
   function itemFilho(filho) {
     const nome = nomeTrabalho(filho).texto;
-    const meta = [FASES[filho.fase] ?? filho.fase, filho.erro].filter(Boolean).join(' · ');
+    const semLegenda = filho.estado === 'concluido' && filho.resultado?.transcricao?.estado === 'indisponivel';
+    const meta = [FASES[filho.fase] ?? filho.fase, semLegenda ? 'Sem legenda' : null, filho.erro].filter(Boolean).join(' · ');
     return el('div', { classe: 'item-filho', dataset: { id: filho.id } },
       el('div', {},
         el('strong', { classe: 'trabalho-titulo', texto: nome }),
@@ -447,6 +537,8 @@ export function criarTrabalhos({ api, $, aoConcluir, aoMudarAtivos, idsAcompanha
     }
     if (acrescentar && !detalhe.cursor) return;
     detalhe.carregando = true;
+    const revisao = detalhe.revisao;
+    const filtro = detalhe.filtro.value;
     // Mantém as páginas visíveis durante o polling e evita perder o cursor.
     const limitePaginas = acrescentar ? 1 : Math.max(1, detalhe.paginas);
     let cursor = acrescentar ? detalhe.cursor : null;
@@ -454,19 +546,24 @@ export function criarTrabalhos({ api, $, aoConcluir, aoMudarAtivos, idsAcompanha
     const filhos = [];
     try {
       do {
-        const pagina = await api(`/api/trabalhos/${trabalho.id}/itens?limite=50${cursor ? '&cursor=' + encodeURIComponent(cursor) : ''}`);
+        const consulta = new URLSearchParams({ limite: '50' });
+        if (cursor) consulta.set('cursor', cursor);
+        if (filtro) consulta.set('estado', filtro);
+        const pagina = await api(`/api/trabalhos/${trabalho.id}/itens?${consulta}`);
+        if (estado.detalhes.get(trabalho.id) !== detalhe || revisao !== detalhe.revisao) return;
         filhos.push(...pagina.itens);
         cursor = pagina.proximoCursor;
         paginas++;
       } while (cursor && paginas < limitePaginas);
       if (estado.detalhes.get(trabalho.id) !== detalhe) return;
       if (acrescentar) {
-        detalhe.lista.append(...filhos.map(itemFilho));
+        detalhe.lista.append(...filhos.map(filho => reaproveitar(null, filho, itemFilho)));
         detalhe.paginas += paginas;
       } else {
         const rolagem = detalhe.lista.scrollTop;
-        detalhe.lista.replaceChildren(...filhos.map(itemFilho));
-        detalhe.lista.scrollTop = rolagem;
+        const anteriores = new Map([...detalhe.lista.children].map(no => [no.dataset.id, no]));
+        sincronizarNos(detalhe.lista, filhos.map(filho => reaproveitar(anteriores.get(filho.id), filho, itemFilho)));
+        if (detalhe.lista.scrollTop !== rolagem) detalhe.lista.scrollTop = rolagem;
         detalhe.paginas = paginas;
         detalhe.instantaneo = trabalho;
       }
@@ -475,11 +572,16 @@ export function criarTrabalhos({ api, $, aoConcluir, aoMudarAtivos, idsAcompanha
       detalhe.aviso.textContent = detalhe.lista.childElementCount ? '' : 'Nenhum item disponível.';
       detalhe.aviso.hidden = !detalhe.aviso.textContent;
     } catch (erro) {
-      detalhe.aviso.textContent = erro.message;
-      detalhe.aviso.hidden = false;
+      if (revisao === detalhe.revisao) {
+        detalhe.aviso.textContent = erro.message;
+        detalhe.aviso.hidden = false;
+      }
     } finally {
       detalhe.carregando = false;
-      if (detalhe.maisPendente && estado.detalhes.get(trabalho.id) === detalhe) {
+      if (detalhe.filtroPendente && estado.detalhes.get(trabalho.id) === detalhe) {
+        detalhe.filtroPendente = false;
+        void carregarFilhos(estado.porId.get(trabalho.id) ?? trabalho, detalhe);
+      } else if (detalhe.maisPendente && estado.detalhes.get(trabalho.id) === detalhe) {
         detalhe.maisPendente = false;
         void carregarFilhos(trabalho, detalhe, true);
       }
@@ -498,6 +600,7 @@ export function criarTrabalhos({ api, $, aoConcluir, aoMudarAtivos, idsAcompanha
     estado.detalhes.set(trabalho.id, detalhe);
     botao.closest('tr').after(detalhe.linha);
     botao.setAttribute('aria-expanded', 'true');
+    desenharContagem(trabalho, detalhe);
     void carregarFilhos(trabalho, detalhe);
   }
 
@@ -630,21 +733,23 @@ export function criarTrabalhos({ api, $, aoConcluir, aoMudarAtivos, idsAcompanha
     const foco = document.activeElement;
     const temFoco = corpo.contains(foco);
     const idFoco = temFoco && foco.dataset.acao === 'itens' ? foco.closest('tr').dataset.id : null;
-    corpo.replaceChildren();
+    const anteriores = new Map([...corpo.children].filter(no => no.dataset.id).map(no => [no.dataset.id, no]));
+    const linhas = [];
 
     if (!estado.itens.length) {
-      corpo.append(el('tr', {}, el('td', { colspan: '7', classe: 'linha-vazia-trabalhos' },
+      linhas.push(el('tr', {}, el('td', { colspan: '7', classe: 'linha-vazia-trabalhos' },
         el('p', { texto: 'Nenhuma importação no histórico.' }),
         el('p', { classe: 'painel-nota', texto: 'Use o formulário acima para adicionar vídeos ou playlists.' }))));
     } else if (!visiveis.length) {
-      corpo.append(el('tr', {}, el('td', { colspan: '7', classe: 'linha-vazia-trabalhos' },
+      linhas.push(el('tr', {}, el('td', { colspan: '7', classe: 'linha-vazia-trabalhos' },
         el('p', { texto: 'Nenhum trabalho corresponde aos filtros.' }))));
     } else {
       for (const t of visiveis) {
-        corpo.append(linha(t));
+        linhas.push(reaproveitar(anteriores.get(t.id), t, linha));
         const detalhe = estado.detalhes.get(t.id);
         if (!detalhe) continue;
-        corpo.append(detalhe.linha);
+        linhas.push(detalhe.linha);
+        desenharContagem(t, detalhe);
         const anterior = detalhe.instantaneo;
         if (anterior !== t && (!anterior || !TERMINAIS.includes(t.estado)
           || t.estado !== anterior.estado || t.atualizadoEm !== anterior.atualizadoEm)) {
@@ -652,8 +757,16 @@ export function criarTrabalhos({ api, $, aoConcluir, aoMudarAtivos, idsAcompanha
         }
       }
     }
-    if (idFoco) corpo.querySelector(`tr[data-id="${CSS.escape(idFoco)}"] [data-acao="itens"]`)?.focus({ preventScroll: true });
-    else if (temFoco && corpo.contains(foco)) foco.focus({ preventScroll: true });
+    const caixa = estado.raiz;
+    const rolagem = caixa.scrollTop;
+    const horizontal = caixa.scrollLeft;
+    sincronizarNos(corpo, linhas);
+    if (caixa.scrollTop !== rolagem) caixa.scrollTop = rolagem;
+    if (caixa.scrollLeft !== horizontal) caixa.scrollLeft = horizontal;
+    if (temFoco && foco !== document.activeElement) {
+      if (corpo.contains(foco)) foco.focus({ preventScroll: true });
+      else if (idFoco) corpo.querySelector(`tr[data-id="${CSS.escape(idFoco)}"] [data-acao="itens"]`)?.focus({ preventScroll: true });
+    }
 
     const mais = $('#mais-trabalhos');
     if (mais) mais.hidden = !estado.cursor;

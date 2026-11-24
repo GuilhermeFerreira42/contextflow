@@ -4,7 +4,28 @@
 > `00-comece-aqui.md`. O que está abaixo da linha "Histórico" é registro, não
 > estado vigente.
 
-## Estado vigente — 24/11/2026 — layout dos itens em Importações
+## Estado vigente — 24/11/2026 — resultados mistos e rolagem em Importações
+
+Base `contextflow_node` em `440bf3d`. A consulta local confirmou que o
+lote tinha 37 concluídos, dos quais três sem legenda, e 93 falhas. Os
+primeiros 50 itens eram falhas. A tela agora mostra **Parcial**, com barra
+em verde e vermelho, contagens no detalhe e filtro por resultado. O estado
+gravado e as regras de repetição foram preservados.
+
+O polling mantém as páginas carregadas e reaproveita as linhas do histórico
+e dos detalhes. A posição da lista e da tabela permanece ao atualizar.
+A API de itens ganhou filtro opcional por estado, sem migração.
+[SPEC](specs/f4-lote-resultado-e-rolagem.md).
+
+Windows: 257 testes aprovados, seis ignorados, 57/57 no CDP e 15/15 na
+estabilização Playwright. As primeiras execuções apontaram ajuste de largura
+ao reduzir a janela e uma asserção que usava o nome errado do selo individual.
+A prova final abrangeu 130 itens, 37 selos verdes pelo filtro e rolagem da
+página, da tabela e da lista durante o polling, com dados controlados.
+
+Reabrir o motor e recarregar a página para usar o filtro novo.
+
+## Histórico — 24/11/2026 — layout dos itens em Importações
 
 Base `contextflow_node` em `95f7bd9`. O botão **Itens** dos lotes e
 playlists abre uma linha que ocupa a tabela abaixo do trabalho.

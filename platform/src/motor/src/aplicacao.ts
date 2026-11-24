@@ -420,6 +420,7 @@ export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}
     .obter('/api/trabalhos/:id', ({ requisicao }) => repositorioTrabalhos.detalhe(requisicao.caminho.split('/')[3]!))
     .obter('/api/trabalhos/:id/itens', ({ requisicao }) => repositorioTrabalhos.pagina({
       paiId: requisicao.caminho.split('/')[3]!, cursor: requisicao.consulta.get('cursor') ?? undefined,
+      estado: requisicao.consulta.get('estado') ?? undefined,
       limite: Number(requisicao.consulta.get('limite') ?? 50),
     }))
     .postar('/api/trabalhos/:id/cancelar', async ({ requisicao }) => {
