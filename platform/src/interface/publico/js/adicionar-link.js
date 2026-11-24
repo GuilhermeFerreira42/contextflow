@@ -1,5 +1,7 @@
+import { enfileirarTexto, lembrarExpansao } from './importar-lote.js';
+
 /** Adiciona à fila persistente existente; o diálogo espera apenas o aceite. */
-export function criarAdicionarLink({ api, aoEnfileirar, aoAceitar }) {
+export function criarAdicionarLink({ api, aoAceitar, aoAceitarLote }) {
   const $ = seletor => document.querySelector(seletor);
   const fundo = $('#dialogo-adicionar');
   let focoAnterior = null;
@@ -62,6 +64,8 @@ export function criarAdicionarLink({ api, aoEnfileirar, aoAceitar }) {
     $('#adicionar-tipo').value = 'importar-video';
     $('#adicionar-resumir').checked = false;
     atualizarResumo();
+    $('#formulario-lote-biblioteca button').disabled = false;
+    $('#resultado-lote-biblioteca').textContent = '';
     $('#adicionar-url').focus();
   }
 
@@ -165,7 +169,36 @@ export function criarAdicionarLink({ api, aoEnfileirar, aoAceitar }) {
     }
   }
 
+  async function enviarLote(evento) {
+    evento.preventDefault();
+    const botao = evento.currentTarget.querySelector('button');
+    if (botao.disabled) return;
+    const campo = $('#urls-lote-biblioteca');
+    const saida = $('#resultado-lote-biblioteca');
+    const envio = sessao;
+    const texto = campo.value;
+    botao.disabled = true;
+    saida.dataset.tipo = 'pendente';
+    saida.textContent = 'Enviando para a fila…';
+    try {
+      const trabalho = await enfileirarTexto(api, texto);
+      if (sessao === envio) {
+        if (campo.value === texto) campo.value = '';
+        fechar();
+      }
+      aoAceitarLote?.(trabalho);
+    } catch (erro) {
+      if (sessao !== envio) return;
+      saida.dataset.tipo = 'erro';
+      saida.textContent = erro.message;
+    } finally {
+      if (sessao === envio) botao.disabled = false;
+    }
+  }
+
   function ligar() {
+    lembrarExpansao($('#painel-lote-biblioteca'), 'biblioteca');
+    $('#formulario-lote-biblioteca').addEventListener('submit', enviarLote);
     $('#abrir-adicionar-link').addEventListener('click', async () => {
       await atualizarColecoes();
       abrir();

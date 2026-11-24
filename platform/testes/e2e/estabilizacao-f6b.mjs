@@ -180,5 +180,44 @@ try {
    }
    assert.equal(pedidosIA.length, 1);
  });
+ await teste('Biblioteca importa texto misto, preserva texto inválido e lembra expansão após F5', async () => {
+   await page.locator('#abrir-adicionar-link').click();
+   const painel = page.locator('#painel-lote-biblioteca');
+   await painel.locator('summary').click();
+   const campo = painel.locator('textarea');
+   await campo.fill('Só texto e https://example.org');
+   await painel.getByRole('button', {name:'Adicionar à fila'}).click();
+   await painel.getByText('Nenhum link de vídeo do YouTube').waitFor();
+   assert.equal(await campo.inputValue(), 'Só texto e https://example.org');
+   await campo.fill('https://youtu.be/lote0000001 | Primeiro\nhttps://example.org\n[Segundo](https://youtu.be/lote0000002)\nhttps://youtu.be/lote0000001?t=10');
+   await painel.getByRole('button', {name:'Adicionar à fila'}).click();
+   await page.locator('#dialogo-adicionar').waitFor({state:'hidden'});
+   const mensagem = await page.locator('#resultado-biblioteca').textContent();
+   assert.match(mensagem, /2 vídeos adicionados.*1 linha.*1 link repetido/);
+   await page.reload();
+   await page.locator('#abrir-adicionar-link').click();
+   await campo.waitFor();
+   await painel.locator('summary').click();
+   await campo.waitFor({state:'hidden'});
+   await page.reload();
+   await page.locator('#abrir-adicionar-link').click();
+   assert.ok(await campo.isHidden());
+   await page.locator('#cancelar-adicionar').click();
+ });
+ await teste('Importações usa a mesma limpeza de texto e lembra expansão', async () => {
+   await page.locator('[data-aba="importacoes"]').click();
+   const painel = page.locator('#painel-lote-importacoes');
+   await painel.locator('summary').click();
+   await painel.locator('textarea').fill('Título antes do link https://youtu.be/lote0000003.\nhttps://www.youtube.com/@outro');
+   const aceite = page.waitForResponse(r => r.url().endsWith('/api/ingestao/lote') && r.request().method() === 'POST');
+   await painel.getByRole('button', {name:'Adicionar à fila'}).click();
+   const resposta = await aceite;
+   assert.equal(resposta.status(), 202);
+   const {dados} = await resposta.json();
+   assert.deepEqual(dados.lote, {videos:1, linhasIgnoradas:1, duplicatas:0});
+   assert.equal((await api('/api/trabalhos/'+dados.id)).contadores.total, 1);
+   await page.reload();
+   await painel.locator('textarea').waitFor();
+ });
  assert.deepEqual(erros,[]);console.log(`${total}/${total} cenários de estabilização Playwright aprovados.`);
 } finally {bloqueado=false;liberar?.();liberarResumo?.();await browser?.close();await app.encerrar();}

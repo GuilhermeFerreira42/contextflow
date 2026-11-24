@@ -4,7 +4,29 @@
 > `00-comece-aqui.md`. O que está abaixo da linha "Histórico" é registro, não
 > estado vigente.
 
-## Estado vigente — 24/11/2026 — resumo ao importar e acompanhamento após F5
+## Estado vigente — 24/11/2026 — importação em lote de texto colado
+
+Base `contextflow_node` em `961cb25`. **Adicionar link** na Biblioteca
+oferece **Importar vários vídeos** com preferência própria de expansão.
+O mesmo campo em Importações passa a aceitar texto misto. O motor normaliza
+links de vídeos e elimina duplicatas. As interfaces informam quantos vídeos
+entraram na fila, linhas sem vídeo e links repetidos. Em erro, o texto
+permanece no formulário. A entrada legada por array continua estrita.
+[SPEC](specs/f4-lote-texto-colado.md).
+
+O extrator novo reconheceu 130 vídeos únicos e 40 linhas sem vídeo no anexo
+do proprietário. Nenhuma importação pessoal foi acionada. Build aprovado;
+257 testes aprovados, seis ignorados por scripts de shell no Windows.
+Navegador: 57/57 CDP e 13/13 Playwright na estabilização, incluindo as duas entradas, texto inválido
+e restauração de expansão. A primeira execução da suíte do motor revelou
+uma asserção que supunha ordem de execução em caso de empate no agendamento.
+A validação final verifica a ordem dos links gravados e o conjunto executado.
+
+Reiniciar o motor e recarregar a interface para usar a mudança.
+Vídeos do lote chegam à Biblioteca principal. Geração automática e destino
+por coleção seguem disponíveis nos modos anteriores. Sem migração.
+
+## Histórico — 24/11/2026 — resumo ao importar e acompanhamento após F5
 
 Base `main` em `a8d6aad`, árvore inicialmente limpa. O proprietário confirmou
 que os resumos voltaram a funcionar após recarregar a página. O adaptador

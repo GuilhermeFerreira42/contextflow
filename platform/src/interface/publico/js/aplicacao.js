@@ -2,6 +2,7 @@ import { criarBiblioteca } from './biblioteca.js';
 import { criarPainel } from './painel-leitura.js';
 import { criarArvore } from './arvore-organizacao.js';
 import { criarAdicionarLink } from './adicionar-link.js';
+import { enfileirarTexto, lembrarExpansao, mensagemLote } from './importar-lote.js';
 import { criarResumosUI } from './resumos.js';
 import { criarTrabalhos } from './trabalhos.js';
 import { criarAcompanhamento } from './acompanhamento.js';
@@ -202,6 +203,14 @@ function seguirImportacao(item) {
 
 const adicionarLinkUI = criarAdicionarLink({
   api,
+  aoAceitarLote: trabalho => {
+    estado.pendentes.add(trabalho.id);
+    acompanhamentoUI.acompanhar([trabalho.id]);
+    const saida = $('#resultado-biblioteca');
+    saida.dataset.tipo = 'pendente';
+    saida.textContent = mensagemLote(trabalho.lote);
+    void carregarTrabalhos();
+  },
   aoAceitar: async ({ trabalhoId, tipo, url, colecaoId, titulo, videoId, video }) => {
     /*
      * Dois desfechos possíveis, e a interface não mente sobre nenhum:
@@ -339,7 +348,9 @@ function acompanharTrabalho(trabalho) {
   estado.ultimoTrabalho = trabalho.id;
   estado.pendentes.add(trabalho.id);
   $('#resultado-validacao').dataset.tipo = 'pendente';
-  $('#resultado-validacao').textContent = 'Adicionado à fila. Você pode continuar usando a biblioteca.';
+  $('#resultado-validacao').textContent = trabalho.lote
+    ? mensagemLote(trabalho.lote)
+    : 'Adicionado à fila. Você pode continuar usando a biblioteca.';
 }
 
 function mostrarResultadoTrabalho(trabalho) {
@@ -943,18 +954,13 @@ function ligarEventos() {
       : 'Importar vídeo';
   });
 
+  lembrarExpansao($('#painel-lote-importacoes'), 'importacoes');
   $('#formulario-lote').addEventListener('submit', async evento => {
     evento.preventDefault();
     const botao = evento.target.querySelector('button');
     botao.disabled = true;
     try {
-      const trabalho = await api('/api/ingestao/lote', {
-        method: 'POST',
-        body: JSON.stringify({
-          urls: $('#urls-lote').value.split(/\r?\n/).map(u => u.trim()).filter(Boolean),
-          chaveRequisicao: crypto.randomUUID(),
-        }),
-      });
+      const trabalho = await enfileirarTexto(api, $('#urls-lote').value);
       acompanharTrabalho(trabalho);
       $('#urls-lote').value = '';
       await carregarTrabalhos();

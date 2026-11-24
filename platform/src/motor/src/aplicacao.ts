@@ -19,6 +19,7 @@ import { ServicoBiblioteca } from './modulos/biblioteca/servico.ts';
 import { RepositorioBibliotecaSqlite } from './modulos/biblioteca/repositorio-sqlite.ts';
 import { Banco } from './persistencia/banco.ts';
 import { ServicoIngestaoReal, normalizarUrlVideo } from './modulos/ingestao/servico.ts';
+import { extrairVideos } from './modulos/ingestao/extrair-videos.ts';
 import { RepositorioTranscricoesSqlite } from './persistencia/repositorio-transcricoes.ts';
 import { Ytdlp, type ExecutorYtdlp } from './integracoes/ytdlp.ts';
 import { FilaTrabalhos, validarIdiomas } from './modulos/trabalhos/servico.ts';
@@ -370,8 +371,12 @@ export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}
     .postar('/api/ingestao/lote', async ({ requisicao }) => {
       const corpo = requisicao.corpo;
       if (!corpo || typeof corpo !== 'object' || Array.isArray(corpo)) throw new ErroValidacao('Informe URLs e chaveRequisicao.');
-      const trabalho = await trabalhos.criar('importar-lote', corpo as Record<string, unknown>);
-      return new ResultadoHttp(trabalho, 202, { location: `/api/trabalhos/${trabalho.id}` });
+      const entrada = corpo as Record<string, unknown>;
+      const { texto, ...escopo } = entrada;
+      if ('texto' in entrada && 'urls' in entrada) throw new ErroValidacao('Envie texto ou URLs, uma opção por vez.');
+      const extraido = 'texto' in entrada ? extrairVideos(texto) : null;
+      const trabalho = await trabalhos.criar('importar-lote', extraido ? { ...escopo, urls: extraido.urls } : escopo);
+      return new ResultadoHttp(extraido ? { ...trabalho, lote: extraido.lote } : trabalho, 202, { location: `/api/trabalhos/${trabalho.id}` });
     })
     /*
      * Histórico de importações: contagens por categoria e limpeza.

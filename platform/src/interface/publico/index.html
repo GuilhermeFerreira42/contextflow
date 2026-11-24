@@ -385,11 +385,11 @@
             </form>
             <p class="resultado-validacao" id="resultado-validacao" role="status" aria-live="polite"></p>
 
-            <details class="importar-lote">
+            <details class="importar-lote" id="painel-lote-importacoes">
               <summary>Importar vários vídeos</summary>
               <form id="formulario-lote">
                 <label class="campo-url">
-                  <span>Uma URL de vídeo por linha</span>
+                  <span>Lista ou texto com links de vídeos do YouTube</span>
                   <textarea id="urls-lote" rows="4" required placeholder="https://www.youtube.com/watch?v=…"></textarea>
                 </label>
                 <button type="submit" class="botao-secundario">Adicionar à fila</button>
@@ -670,6 +670,18 @@
             <button type="submit" class="botao-primario" id="confirmar-adicionar">Adicionar</button>
           </div>
         </form>
+        <details class="importar-lote" id="painel-lote-biblioteca">
+          <summary>Importar vários vídeos</summary>
+          <form id="formulario-lote-biblioteca">
+            <label class="campo-url">
+              <span>Lista ou texto com links de vídeos do YouTube</span>
+              <textarea id="urls-lote-biblioteca" rows="4" required placeholder="Cole aqui os links, com ou sem títulos"></textarea>
+            </label>
+            <p class="painel-nota">Os vídeos entram na Biblioteca principal.</p>
+            <p class="resultado-validacao" id="resultado-lote-biblioteca" role="status" aria-live="polite"></p>
+            <button type="submit" class="botao-secundario">Adicionar à fila</button>
+          </form>
+        </details>
       </div>
     </div>
 

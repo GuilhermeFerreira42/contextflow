@@ -1,4 +1,17 @@
-# Retomada vigente — resumo após importar e acompanhamento após F5 — 24/11/2026
+# Retomada vigente — importação em lote de texto colado — 24/11/2026
+
+Base `contextflow_node` em `961cb25`. Biblioteca e Importações aceitam
+texto misto no lote, normalizam vídeos e descartam links repetidos.
+A seção recolhível guarda a preferência em cada tela. O anexo conferido
+localmente rendeu 130 vídeos e 40 linhas sem vídeo. Nenhum lote pessoal
+foi enviado. Build aprovado, 257 testes aprovados e seis ignorados no
+Windows, Playwright 13/13. Reiniciar o motor para carregar a entrega.
+Estado e SPEC em [docs/estado-atual.md](../../docs/estado-atual.md)
+e [SPEC de lote](../../docs/specs/f4-lote-texto-colado.md).
+
+---
+
+# Histórico — resumo após importar e acompanhamento após F5 — 24/11/2026
 
 Base `main` em `a8d6aad`. Importação de vídeo pode agendar resumo depois da
 transcrição. A Biblioteca restaura os trabalhos seguidos após F5 e conserva

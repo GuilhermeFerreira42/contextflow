@@ -239,6 +239,38 @@ test('lote valida todas as linhas e não grava grupo parcialmente', async (t) =>
     assert.match(r.corpo.erro!.mensagem, /Linha 2/);
     assert.equal(a.app.banco.db.prepare('SELECT COUNT(*) n FROM trabalhos').get()!.n, 0);
 });
+test('lote de texto extrai vídeos em ordem, ignora sujeira e não persiste texto bruto', async (t) => {
+    const a = await ambiente(t, 1);
+    const texto = [
+        `${url()} | Título não enviado ao executor`,
+        'Notas de contexto',
+        '[Segundo](https://youtu.be/bbbbbbbbbbb?t=3), https://m.youtube.com/shorts/ccccccccccc.',
+        'https://www.youtube.com/@canal',
+        'https://www.youtube.com.evil.example/watch?v=ddddddddddd',
+        'https://youtu.be/aaaaaaaaaaa',
+    ].join('\r\n');
+    const r = await a.post('/api/ingestao/lote', { texto, chaveRequisicao: randomUUID() });
+    assert.equal(r.resposta.status, 202);
+    assert.deepEqual((r.corpo.dados as TrabalhoDetalhado & { lote: unknown }).lote,
+        { videos: 3, linhasIgnoradas: 3, duplicatas: 1 });
+    const fim = await a.terminal(r.corpo.dados.id);
+    assert.equal(fim.contadores.concluidos, 3);
+    const esperadas = ['aaaaaaaaaaa', 'bbbbbbbbbbb', 'ccccccccccc'].map(url);
+    assert.deepEqual([...a.executor.chamadas].sort(), esperadas);
+    const escopo = a.app.trabalhos.repositorio.registro(fim.id).escopo;
+    assert.deepEqual(JSON.parse(escopo).urls, esperadas);
+    assert.doesNotMatch(escopo, /Título|Notas|evil/);
+});
+test('lote sem vídeo no texto rejeita sem gravar trabalho', async (t) => {
+    const a = await ambiente(t);
+    const r = await a.post('/api/ingestao/lote', {
+        texto: 'Notas\nhttps://youtube.com/playlist?list=PLteste\nhttps://example.org',
+        chaveRequisicao: randomUUID(),
+    });
+    assert.equal(r.resposta.status, 422);
+    assert.match(r.corpo.erro!.mensagem, /Nenhum link de vídeo/);
+    assert.equal(a.app.banco.db.prepare('SELECT COUNT(*) n FROM trabalhos').get()!.n, 0);
+});
 test('lote deduplica filhos, termina com concorrência 1 e agrega ausência de legenda', async (t) => {
     const a = await ambiente(t, 1);
     a.executor.semLegenda.add('bbbbbbbbbbb');

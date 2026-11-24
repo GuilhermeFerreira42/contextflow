@@ -2474,6 +2474,11 @@ dialog p {
   gap: 12px;
   margin-bottom: 6px;
 }
+
+#dialogo-adicionar .dialogo {
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+}
 .dialogo-topo h2 {
   margin: 0;
   font-size: 16px;
