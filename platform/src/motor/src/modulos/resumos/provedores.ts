@@ -5,6 +5,14 @@ import type { ConfigResumo } from './configuracao.ts';
 export interface UsoIA { entrada: number; saida: number; chamadas: number; aproximado: boolean }
 export const tokensConservadores = (texto: string) => Buffer.byteLength(texto, 'utf8');
 
+function textoDosBlocos(conteudo: unknown): string | null {
+  if (!Array.isArray(conteudo)) return null;
+  const textos = conteudo
+    .filter(bloco => bloco?.type === 'text' && typeof bloco.text === 'string')
+    .map(bloco => bloco.text as string);
+  return textos.length ? textos.join('\n') : null;
+}
+
 async function lerJson(resposta: Response): Promise<any> {
   const leitor = resposta.body?.getReader();
   if (!leitor) throw new ErroDominio('resposta_invalida', 'O provedor devolveu uma resposta vazia.', 502);
@@ -31,14 +39,15 @@ export class ClienteProvedor {
   readonly http: typeof fetch;
   constructor(http: typeof fetch = fetch) { this.http = http; }
 
-  async #pedir(c: ConfigResumo, chave: string | null, caminho: string, corpo: unknown, sinal: AbortSignal, fase: (f: string) => void, retentar: boolean) {
+  async #pedir<T>(c: ConfigResumo, chave: string | null, caminho: string, corpo: unknown, sinal: AbortSignal,
+    fase: (f: string) => void, interpretar: (json: any) => T): Promise<T> {
     if (['openai', 'anthropic'].includes(c.provedor) && !chave) throw new ErroDominio('chave_ausente', 'Configure a chave deste provedor e endpoint em Configurações.', 412);
     const cabecalhos: Record<string, string> = { 'content-type': 'application/json' };
     if (c.provedor === 'anthropic') {
       cabecalhos['x-api-key'] = chave!;
       cabecalhos['anthropic-version'] = '2023-06-01';
     } else if (chave) cabecalhos.authorization = `Bearer ${chave}`;
-    const maximo = retentar ? 3 : 1;
+    const maximo = corpo === undefined ? 1 : 3;
     for (let tentativa = 1; tentativa <= maximo; tentativa++) {
       if (sinal.aborted) throw new ErroDominio('trabalho_cancelado', 'Geração cancelada.', 409);
       let retryAfter = 0;
@@ -60,14 +69,16 @@ export class ClienteProvedor {
           if (status >= 500) throw new ErroDominio('provedor_indisponivel', 'O provedor está indisponível. Tente novamente mais tarde.', 502);
           throw new ErroDominio('requisicao_provedor_invalida', 'O provedor recusou o pedido. Confira modelo, contexto e limites de saída.', 422);
         }
-        return await lerJson(resposta);
+        const json = await lerJson(resposta);
+        if (sinal.aborted) throw new ErroDominio('trabalho_cancelado', 'Geração cancelada.', 409);
+        return interpretar(json);
       } catch (erro) {
         if (sinal.aborted) throw new ErroDominio('trabalho_cancelado', 'Geração cancelada.', 409);
         const falha = erro instanceof ErroDominio ? erro
           : erro instanceof Error && ['TimeoutError', 'AbortError'].includes(erro.name)
             ? new ErroDominio('timeout_provedor', 'O provedor excedeu o tempo limite.', 504)
             : new ErroDominio('rede_provedor', 'Não foi possível conectar ao provedor. Confira endpoint e conexão.', 503);
-        if (!['rate_limit', 'provedor_indisponivel', 'timeout_provedor', 'rede_provedor'].includes(falha.codigo) || tentativa === maximo) throw falha;
+        if (!['rate_limit', 'provedor_indisponivel', 'timeout_provedor', 'rede_provedor', 'resumo_vazio'].includes(falha.codigo) || tentativa === maximo) throw falha;
         fase(`Aguardando nova tentativa do provedor (${tentativa + 1}/${maximo})`);
         try { await esperar(Math.max(retryAfter, 250 * 2 ** (tentativa - 1)), undefined, { signal: sinal }); }
         catch { throw new ErroDominio('trabalho_cancelado', 'Geração cancelada.', 409); }
@@ -78,7 +89,7 @@ export class ClienteProvedor {
 
   async testar(c: ConfigResumo, chave: string | null) {
     const caminho = c.provedor === 'ollama' ? '/api/tags' : '/models';
-    const resposta = await this.#pedir(c, chave, caminho, undefined, AbortSignal.timeout(15000), () => {}, false);
+    const resposta = await this.#pedir(c, chave, caminho, undefined, AbortSignal.timeout(15000), () => {}, json => json);
     const lista = c.provedor === 'ollama' ? resposta?.models : resposta?.data;
     const modelos: string[] = Array.isArray(lista) ? [...new Set<string>(lista.map(m => m?.id ?? m?.name).filter((m): m is string => typeof m === 'string' && m.length > 0 && m.length <= 200))].slice(0, 200) : [];
     const encontrado = modelos.includes(c.modelo);
@@ -94,14 +105,32 @@ export class ClienteProvedor {
         ? { model: c.modelo, max_tokens: c.maxSaida, messages }
         : { model: c.modelo, messages, stream: false, [c.provedor === 'openai' ? 'max_completion_tokens' : 'max_tokens']: c.maxSaida };
     const caminho = c.provedor === 'ollama' ? '/api/chat' : c.provedor === 'anthropic' ? '/messages' : '/chat/completions';
-    const resposta = await this.#pedir(c, chave, caminho, corpo, sinal, fase, true);
-    if (!resposta || typeof resposta !== 'object') throw new ErroDominio('resposta_invalida', 'O provedor não devolveu um objeto de resumo.', 502);
+    return this.#pedir(c, chave, caminho, corpo, sinal, fase, json => this.#interpretarResumo(c, json, prompt));
+  }
+
+  #interpretarResumo(c: ConfigResumo, resposta: any, prompt: string): { texto: string; uso: UsoIA } {
+    if (!resposta || typeof resposta !== 'object' || Array.isArray(resposta)) throw new ErroDominio('resposta_invalida', 'O provedor não devolveu um objeto de resumo.', 502);
+    if (resposta.error) throw new ErroDominio('resposta_invalida', 'O provedor informou um erro no corpo da resposta HTTP bem-sucedida.', 502);
     const escolha = resposta?.choices?.[0];
+    const mensagem = escolha?.message;
     const final = c.provedor === 'ollama' ? resposta.done_reason : c.provedor === 'anthropic' ? resposta.stop_reason : escolha?.finish_reason;
     if (['length', 'max_tokens'].includes(final)) throw new ErroDominio('saida_incompleta', 'O limite de saída interrompeu o resumo. Aumente esse limite e confirme uma nova estimativa.', 422);
-    const texto = c.provedor === 'ollama' ? resposta?.message?.content
-      : c.provedor === 'anthropic' ? (Array.isArray(resposta.content) ? resposta.content.filter((b: any) => b?.type === 'text' && typeof b.text === 'string').map((b: any) => b.text).join('\n') : null)
-        : escolha?.message?.content;
+    if (['content_filter', 'refusal'].includes(final) || mensagem?.refusal) {
+      throw new ErroDominio('resumo_recusado', 'O provedor recusou ou filtrou a geração do resumo.', 422);
+    }
+    if (['tool_calls', 'function_call', 'tool_use'].includes(final) || mensagem?.tool_calls?.length || mensagem?.function_call) {
+      throw new ErroDominio('resposta_invalida', 'O provedor solicitou uma ferramenta durante a geração do resumo.', 502);
+    }
+    const conteudo = mensagem?.content;
+    const texto = c.provedor === 'ollama' ? resposta.message?.content
+      : c.provedor === 'anthropic' ? textoDosBlocos(resposta.content)
+        : typeof conteudo === 'string' ? conteudo : textoDosBlocos(conteudo);
+    const semTexto = conteudo == null || (typeof conteudo === 'string' && !conteudo.trim())
+      || (Array.isArray(conteudo) && (conteudo.length === 0 || (typeof texto === 'string' && !texto.trim())));
+    if (c.provedor === 'compativel' && mensagem && typeof mensagem === 'object' && !Array.isArray(mensagem)
+      && (final == null || final === 'stop' || final === 'end_turn') && semTexto) {
+      throw new ErroDominio('resumo_vazio', 'O provedor respondeu com sucesso HTTP, mas não devolveu texto final para o resumo.', 502);
+    }
     if (typeof texto !== 'string' || !texto.trim()) throw new ErroDominio('resposta_invalida', 'O provedor não devolveu texto de resumo.', 502);
     const entrada = c.provedor === 'ollama' ? resposta.prompt_eval_count : c.provedor === 'anthropic' ? resposta.usage?.input_tokens : resposta.usage?.prompt_tokens;
     const saida = c.provedor === 'ollama' ? resposta.eval_count : c.provedor === 'anthropic' ? resposta.usage?.output_tokens : resposta.usage?.completion_tokens;

@@ -18,6 +18,7 @@ const esperar = (ms: number) => new Promise(ok => setTimeout(ok, ms));
 async function ambiente(t: { after: (fn: () => Promise<void>) => void }) {
   const pasta = mkdtempSync(join(tmp, 'f6-'));
   const pedidos: Array<{ url: string; corpo: any; auth: string | undefined }> = [];
+  const respostasChat: unknown[] = [];
   const modo = { status: 200, falharAte: 0, bloquear: false, fechadas: 0, texto: 'Resumo controlado do servidor de teste.' };
   const mock = createServer(async (req, res) => {
     const partes: Buffer[] = []; for await (const p of req) partes.push(Buffer.from(p));
@@ -28,6 +29,10 @@ async function ambiente(t: { after: (fn: () => Promise<void>) => void }) {
     const status = corpo && modo.falharAte > 0 && pedidos.filter(p => p.corpo).length <= modo.falharAte ? 429 : modo.status;
     res.writeHead(status, { 'content-type': 'application/json' });
     if (status !== 200) { res.end(JSON.stringify({ error: { message: 'Não propagar corpo privado do provedor.' } })); return; }
+    if (req.url?.endsWith('/chat/completions') && respostasChat.length) {
+      res.end(JSON.stringify(respostasChat.shift()));
+      return;
+    }
     const texto = `${modo.texto} Chamada ${pedidos.length}.`;
     res.end(JSON.stringify(req.url?.endsWith('/models') ? { data: [{ id: 'fixture' }] }
       : req.url?.endsWith('/api/tags') ? { models: [{ name: 'fixture' }] }
@@ -80,8 +85,67 @@ async function ambiente(t: { after: (fn: () => Promise<void>) => void }) {
     }
     throw new Error('Trabalho não terminou no prazo do teste.');
   };
-  return { app, pasta, base, urlMock, api, config, fonte, gerar, terminal, pedidos, modo, reiniciar };
+  return { app, pasta, base, urlMock, api, config, fonte, gerar, terminal, pedidos, modo, reiniciar, respostasChat };
 }
+
+const respostaChat = (content: unknown, finish_reason = 'stop', extras = {}) => ({
+  choices: [{ message: { content, ...extras }, finish_reason }],
+});
+
+test('F6 LiteLLM: resposta 200 vazia repete o mesmo pedido e persiste texto em blocos', async t => {
+  const a = await ambiente(t);
+  await a.fonte();
+  await a.api('/api/resumos/configuracao', a.config({ provedor: 'compativel' }));
+  a.respostasChat.push(
+    respostaChat(null, 'stop', { reasoning_content: 'Raciocínio separado' }),
+    respostaChat([{ type: 'thinking', thinking: 'Privado' }, { type: 'text', text: 'Resumo final' }]),
+  );
+  const g = await a.gerar();
+  assert.equal(g.estimativa.itens[0].chamadasMaximas, 3);
+  const fim = await a.terminal(g.resposta.dados.trabalhos[0].id);
+  assert.equal(fim.estado, 'concluido');
+  assert.equal(a.pedidos.length, 2);
+  assert.deepEqual(a.pedidos[1]!.corpo, a.pedidos[0]!.corpo);
+  assert.equal((await a.api('/api/biblioteca/v1/resumo')).dados.texto, 'Resumo final');
+});
+
+test('F6 LiteLLM: 429 e vazios compartilham o teto de três pedidos e não salvam resumo', async t => {
+  const a = await ambiente(t);
+  await a.fonte();
+  await a.api('/api/resumos/configuracao', a.config({ provedor: 'compativel' }));
+  a.modo.falharAte = 1;
+  a.respostasChat.push(respostaChat('   '), respostaChat([]));
+  const g = await a.gerar();
+  const fim = await a.terminal(g.resposta.dados.trabalhos[0].id);
+  assert.equal(fim.estado, 'falhou');
+  assert.equal(fim.erroCodigo, 'resumo_vazio');
+  assert.equal(a.pedidos.length, 3);
+  assert.equal((await a.api('/api/biblioteca/v1')).dados.temResumo, false);
+});
+
+test('F6 LiteLLM: falhas definitivas não repetem e a espera após resposta vazia é cancelável', async () => {
+  const c = validarConfig({ provedor: 'compativel', modelo: 'fixture', baseUrl: 'http://127.0.0.1:4000' });
+  for (const [corpo, codigo] of [
+    [respostaChat(null, 'length'), 'saida_incompleta'],
+    [respostaChat(null, 'content_filter'), 'resumo_recusado'],
+    [respostaChat(null, 'stop', { refusal: 'Texto privado' }), 'resumo_recusado'],
+    [respostaChat(null, 'tool_calls'), 'resposta_invalida'],
+    [respostaChat({ text: 'Formato desconhecido' }), 'resposta_invalida'],
+    [{ error: { message: 'Texto privado' } }, 'resposta_invalida'],
+  ] as const) {
+    let pedidos = 0;
+    const cliente = new ClienteProvedor(async () => { pedidos++; return Response.json(corpo); });
+    await assert.rejects(cliente.completar(c, null, 'Fonte', AbortSignal.timeout(2000), () => {}), { codigo });
+    assert.equal(pedidos, 1);
+  }
+  const cancelar = new AbortController();
+  let pedidos = 0;
+  const cliente = new ClienteProvedor(async () => { pedidos++; return Response.json(respostaChat(null)); });
+  await assert.rejects(cliente.completar(c, null, 'Fonte', cancelar.signal, fase => {
+    if (fase.startsWith('Aguardando')) cancelar.abort();
+  }), { codigo: 'trabalho_cancelado' });
+  assert.equal(pedidos, 1);
+});
 
 test('F6: configuração persiste, DPAPI/POSIX protege chave e banco/backup/API não a expõem', async t => {
   const a = await ambiente(t);

@@ -4,7 +4,31 @@
 > `00-comece-aqui.md`. O que está abaixo da linha "Histórico" é registro, não
 > estado vigente.
 
-## Estado vigente — 23/11/2026 — estabilização F6-B validada no Windows
+## Estado vigente — 24/11/2026 — respostas HTTP 200 do LiteLLM
+
+Base `main` em `d74e3a9`, árvore inicialmente limpa. A captura do usuário
+mostra HTTP 200 no LiteLLM e falha de extração no ContextFlow. O corpo da
+resposta original não foi capturado. A SPEC
+[Respostas sem texto no LiteLLM](specs/f6-resposta-lite-llm.md) registra o escopo.
+
+O adaptador compatível aceita texto em blocos e repete a chamada que
+volta com conteúdo vazio, dentro do teto existente de três tentativas
+por chamada. Recusa, filtro, limite de saída, ferramenta e estrutura
+inválida encerram sem repetição. Resposta vazia persistente tem erro específico.
+Sem migração ou reinício do serviço pessoal.
+
+Windows, Node 24.16.0: `npm test` com 255 aprovados, seis ignorados porque
+os testes usam scripts de shell que não rodam no Windows, zero falhas.
+`npm run build` aprovado após corrigir duas verificações de tipo na nova
+asserção. `npm run test:e2e:resumos`: 8/8 Playwright com provedor controlado.
+Integração cobre recuperação e persistência, teto conjunto com 429,
+vazio persistente, falhas definitivas e cancelamento.
+
+Próximo passo operacional: reabrir o ContextFlow e repetir o trabalho escolhido
+na interface. Geração no LiteLLM real e confirmação da causa original
+continuam pendentes. Coleções preservadas e F7 fora do escopo.
+
+## Histórico — 23/11/2026 — estabilização F6-B validada no Windows
 
 Base real: `main`, `6c7fdef`, árvore inicialmente limpa. Entrega da Arena
 A/B/C/D-1/D-2 incorporada e preservada, incluindo a paleta neutra e a árvore.
