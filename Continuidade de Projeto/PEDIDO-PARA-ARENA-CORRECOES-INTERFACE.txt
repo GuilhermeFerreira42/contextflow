@@ -1,0 +1,181 @@
+ARENA — CORREÇÕES PONTUAIS DA INTERFACE DO CONTEXTFLOW
+
+Quero que você implemente, teste e entregue as correções abaixo. Não quero
+apenas uma avaliação nem um novo redesign. Preserve a identidade visual atual.
+
+1. PASTA DE TRABALHO, SKILLS E CONTEXTO
+
+Vou entregar a pasta "projeto" inteira. Trabalhe dentro dela e mantenha nela
+o código, documentação, evidências e materiais desta tarefa. Na máquina atual,
+ela está em C:\Users\Usuario\Desktop\projeto. Em outro ambiente, adapte apenas
+o prefixo do caminho, preservando a organização:
+
+- projeto/contextflow2/: repositório Git; código executável em platform/.
+- projeto/contextflow2/docs/: documentação canônica e SPECs.
+- projeto/Continuidade de Projeto/: logs, capturas, vídeos e relatórios fora do Git.
+
+Leia e siga as skills que já estão na raiz da pasta entregue:
+- SKILL-investigar-especificar-entregar.md
+- SKILL-execucao-autonoma-por-fatias.md
+- SKILL-memoria-de-projeto.md
+
+Depois, leia docs/00-comece-aqui.md, docs/01-escopo-canonico.md,
+docs/estado-atual.md e docs/07-protocolo-continuidade.md. Consulte também a
+SPEC F5-UI, a arquitetura da interface e a continuidade relevante. Confira
+branch, HEAD e alterações locais antes de agir; preserve mudanças de terceiros.
+
+O estado vigente desta árvore está em contextflow2/docs/estado-atual.md.
+O LEIA-ME.md avulso na raiz de contextflow2 contém um redirecionamento antigo:
+não use esse texto para trocar de repositório ou procurar o produto no original
+Python. Se o pacote entregue divergir das notas, investigue e registre os fatos.
+
+O original Python chamado contextflow é somente leitura: nunca alterar, mover
+ou apagar. Não copiar credenciais, cookies, bancos pessoais, tokens ou chaves.
+
+As imagens de referência desta solicitação estão em:
+Continuidade de Projeto/pedido-correcao-ui-2026-11-21/.
+Elas mostram problemas relatados pelo proprietário, não validações de correção.
+
+2. PRIORIDADE: BARRA LATERAL QUE RECOLHE, MAS NÃO REABRE
+
+Quando recolho a barra lateral, não consigo expandi-la novamente. Ela fica com
+textos cortados e aparência quebrada. Investigue e corrija a causa real.
+
+- O controle deve permanecer visível, dentro da área clicável e acessível nos
+  dois estados, com indicação clara de recolher ou expandir.
+- Recolhida: mostrar ícones centralizados, sem nomes cortados. Identificar as
+  telas por tooltip e nome acessível; manter a navegação funcionando.
+- Expandida: restaurar a apresentação completa sem sobreposições.
+- Funcionar por ponteiro e teclado, em ciclos repetidos e após recarregar.
+- A Biblioteca deve ocupar o espaço liberado e se reajustar ao expandir a barra.
+- Refinar a aparência do mecanismo sem redesenhar toda a aplicação.
+
+3. RESPONSIVIDADE E APROVEITAMENTO DA LARGURA
+
+A captura mostra uma faixa vazia excessiva à direita. Corrija o dimensionamento
+do aplicativo e da Biblioteca para aproveitar a largura disponível, com margens
+consistentes, tanto com a barra aberta quanto recolhida.
+
+Confira o comportamento ao redimensionar a janela. Busca, ações, filtros,
+colunas e controles devem continuar alcançáveis. Evite sobreposições, cortes e
+rolagem horizontal da página causada pelo layout. Quando a tabela precisar de
+rolagem horizontal por causa das colunas, mantenha-a dentro de sua própria área.
+
+4. TAMANHO AJUSTÁVEL DAS LINHAS NO MODO AMPLIADO
+
+Quero decidir quanto espaço cada vídeo ocupa no modo Ampliado, aumentando ou
+diminuindo a altura das linhas por um controle simples e acessível.
+
+- Exibir o tamanho escolhido e uma opção para restaurar o padrão atual.
+- Definir limites coerentes para preservar a legibilidade.
+- O ajuste vale para as linhas do modo Ampliado, não para o zoom do navegador.
+- Preservar o modo Compacto e o funcionamento das colunas.
+- Manter uma fonte única para a altura: virtualização e CSS devem concordar.
+  Não introduzir alturas arbitrárias por linha que quebrem a janela virtual.
+- Ao mudar o tamanho, preservar a identidade dos vídeos e a seleção; evitar
+  sobreposição, lacunas e saltos indevidos de rolagem.
+
+5. COLUNAS OCULTAS E DISTRIBUIÇÃO DA TABELA
+
+Na captura, mesmo com opções desmarcadas, "Resumo" ainda aparece e há um grande
+espaço vazio entre a seleção e o vídeo. Confira os controles e seus vínculos.
+
+- Cada opção deve controlar seu cabeçalho e suas células de forma consistente.
+- Distinguir conteúdo do resumo de situação do resumo; respeitar a opção de cada
+  uma, sem confundir com o estado da transcrição/vídeo.
+- Ao ocultar e restaurar colunas, redistribuir o espaço de maneira coerente,
+  evitando larguras residuais, desalinhamentos e vazios excessivos.
+- Preservar ordenação, filtros, seleção e virtualização.
+
+6. TRANSCRIÇÃO: TEMPOS OPCIONAIS E TEXTO CORRIDO
+
+No painel de leitura, a transcrição ocupa uma faixa estreita e cada trecho fica
+em uma linha. Quero duas caixas de seleção independentes:
+
+- "Mostrar tempos": marcada inicialmente. Desmarcar oculta os horários, mantendo
+  o texto da transcrição.
+- "Texto corrido": desmarcada inicialmente. Marcar apresenta os trechos em prosa
+  contínua, com espaços naturais entre eles, sem uma linha obrigatória por trecho.
+
+As quatro combinações devem funcionar. Com Texto corrido marcado e Mostrar
+tempos desmarcado, quero uma leitura contínua confortável, aproveitando melhor
+a largura do painel, sem esticar as linhas a ponto de prejudicar a leitura.
+Com tempos visíveis em texto corrido, mostre-os discretamente junto dos trechos
+correspondentes, preservando as ações existentes quando aplicáveis.
+
+Isso altera apenas a apresentação. Não usar IA para reescrever, não resumir,
+não inventar pontuação ou parágrafos como se fossem conteúdo original e não
+alterar os segmentos, a ordem, o texto ou os tempos persistidos no banco.
+Preservar o contexto da Biblioteca ao abrir e fechar o painel.
+
+7. MINIATURAS QUEBRADAS
+
+A miniatura de um dos vídeos falha tanto na Biblioteca quanto no painel.
+Investigue o carregamento e corrija o que estiver errado.
+
+Quando a imagem estiver ausente ou realmente falhar, apresente um fallback
+adequado, com proporção e alinhamento preservados. Não deixar o ícone nativo
+de imagem quebrada nem texto alternativo espalhado pelo espaço da miniatura.
+Não esconder uma falha de carregamento corrigível apenas colocando um placeholder.
+
+8. EXECUÇÃO E VALIDAÇÃO OBRIGATÓRIA COM PLAYWRIGHT
+
+Escreva uma SPEC curta antes de implementar: problemas, limites, arquivos
+afetados, critérios e plano de validação. Trabalhe autonomamente no ciclo
+investigar → corrigir → executar → testar → avaliar → ajustar.
+
+Use Playwright em navegador real para validar as correções. Essa ferramenta foi
+solicitada explicitamente pelo proprietário para esta tarefa. A suíte CDP já
+existente deve ser preservada; o Playwright pode complementar a validação sem
+reescrever a suíte nem adicionar dependências de produção desnecessárias.
+
+Não considere um botão funcional apenas porque element.click() executado dentro
+de evaluate() dispara seu evento. Use cliques reais do Playwright, com verificação
+de visibilidade, posição e alcance pelo ponteiro, além de teclado.
+
+Teste e registre pelo menos:
+- Recolher/expandir a lateral em pelo menos dez ciclos, nos dois sentidos.
+- Recarregar com a lateral recolhida e conseguir expandi-la novamente.
+- Navegar entre Biblioteca, Importações e Configurações nos dois estados.
+- Redimensionar a janela com a barra aberta/recolhida, incluindo uma janela
+  estreita e as larguras das capturas, conferindo cortes e sobreposições.
+- Aumentar/diminuir/restaurar a altura ampliada e alternar Ampliado/Compacto.
+- Rolar uma biblioteca grande após ajustes de altura, verificando identidade,
+  alinhamento e seleção, sem renderizar milhares de linhas no DOM.
+- Ocultar/restaurar as colunas individualmente e em conjunto.
+- As quatro combinações de Mostrar tempos e Texto corrido, com texto longo.
+- Confirmar que alternar a apresentação não altera o conteúdo persistido.
+- Miniaturas válidas, ausentes e com falha de carregamento.
+- Pesquisa, filtros, ordenação, seleção, árvore, abertura/fechamento do painel e
+  da janela Adicionar link, verificando regressões nos fluxos existentes.
+- Foco visível, navegação por teclado e ausência de novas exceções no console.
+
+Use dados descartáveis, sem modificar o banco pessoal do proprietário. Fixtures
+ou dublês de serviços externos devem ser declarados; não chamá-los de prova
+contra YouTube real. Guarde capturas antes/depois e resultados completos em
+Continuidade de Projeto, fora do Git, com referência à revisão testada.
+
+Execute em platform/: npm test, npm run test:e2e, npm run verificar e npm run
+build, além da validação Playwright desta tarefa. Registre saída real, contagens,
+falhas, testes ignorados e o que não foi executado. Corrija falhas pertinentes e
+repita as provas afetadas. Números antigos não comprovam a nova implementação.
+
+Se Playwright não executar, investigue a limitação, declare o impedimento e não
+apresente esse critério como aprovado nem substitua a ferramenta silenciosamente.
+
+9. LIMITES E ENTREGA
+
+Não iniciar F6, geração de resumos, chat/RAG, novo redesign, migração de banco
+ou outras funcionalidades futuras. Preserve arquitetura modular, contratos,
+serviços, dados e funcionalidades existentes. Sem frameworks desnecessários.
+
+Faça commits com alterações próprias e escopo conferido, indicando o que foi
+validado. Não incluir segredos, bancos, logs volumosos ou capturas operacionais
+no Git. Não enviar mensagens, publicar ou implantar sem autorização específica.
+
+Ao concluir, atualize docs/estado-atual.md, a SPEC e a continuidade dentro da
+pasta entregue. Informe revisão/commits, causas dos defeitos, correções,
+resultados reais e limitações. Deixe a próxima ação clara para outra sessão.
+
+Quero as correções implementadas e tecnicamente validadas, deixando a
+homologação humana para mim. Não encerrar apenas com um relatório de problemas.

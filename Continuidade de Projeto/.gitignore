@@ -1,0 +1,7 @@
+# A cópia local também contém evidências e dados de execução.
+*
+!*/
+!.gitignore
+!*.md
+!PEDIDO-PARA-ARENA-CORRECOES-INTERFACE.txt
+!revisoes.txt

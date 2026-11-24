@@ -1,0 +1,2 @@
+35a757b F4: especifica fila e recuperacao; contratos e aceites revisados, sem implementacao
+c6b7db5 F3: valida Windows e 3 videos reais; 120 testes, 17 E2E e fumaca OK
