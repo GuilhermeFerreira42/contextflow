@@ -17,11 +17,24 @@ const executor = {
     if (bloqueado) await espera;
     const id = new URL(url).searchParams.get('v');
     if (bloqueios.has(id)) await bloqueios.get(id);
-    return {id:new URL(url).searchParams.get('v'), titulo:'Título longo para verificar o acompanhamento sem rolagem horizontal. '.repeat(7), canalId:'fixture',canalNome:'Canal',duracaoSegundos:12,miniaturaUrl:null,publicadoEm:null,legendasManuais:['es'],legendasAutomaticas:[]};
+    return {id, titulo:'Título longo para verificar o acompanhamento sem rolagem horizontal. '.repeat(7), canalId:'fixture',canalNome:'Canal',duracaoSegundos:12,miniaturaUrl:null,publicadoEm:null,legendasManuais:id === 'semlegenda1' ? [] : ['es'],legendasAutomaticas:[]};
   },
-  async baixarLegenda() { return {idioma:'es',origem:'manual',segmentos:[{inicioMs:0,fimMs:2000,texto:'Fuente controlada.'}]}; },
+  async baixarLegenda(url) {
+    if (new URL(url).searchParams.get('v') === 'semlegenda1') return null;
+    return {idioma:'es',origem:'manual',segmentos:[{inicioMs:0,fimMs:2000,texto:'Fuente controlada.'}]};
+  },
 };
-const app = criarAplicacao(carregarConfig({...process.env,CONTEXTFLOW_DADOS:pasta,CONTEXTFLOW_PORTA:'0',CONTEXTFLOW_AMBIENTE:'teste'}),{executorYtdlp:executor});
+let liberarResumo;
+let esperaResumo;
+const pedidosIA = [];
+const app = criarAplicacao(carregarConfig({...process.env,CONTEXTFLOW_DADOS:pasta,CONTEXTFLOW_PORTA:'0',CONTEXTFLOW_AMBIENTE:'teste'}),{
+  executorYtdlp:executor,
+  async httpIA(_url, opcoes) {
+    pedidosIA.push(JSON.parse(opcoes.body));
+    await esperaResumo;
+    return Response.json({choices:[{message:{content:'Resumo automático controlado.'},finish_reason:'stop'}]});
+  },
+});
 let browser, page, total=0; const erros=[];
 try {
  app.iniciarPersistencia(); await new Promise(ok=>app.servidor.listen(0,'127.0.0.1',ok));
@@ -67,10 +80,14 @@ try {
    await page.locator('#confirmar-adicionar').click();await page.locator('#dialogo-adicionar').waitFor({state:'hidden'});
    const jobs=(await api('/api/trabalhos')).itens;id=jobs[0].id;assert.ok(!['concluido','falhou'].includes(jobs[0].estado));
    await page.locator('#cartao-acompanhamento').waitFor();assert.equal(new URL(page.url()).hash,'#biblioteca');
+   await page.reload();
+   await page.locator(`.acompanhamento-item[data-id="${id}"]`).waitFor();
  });
  await teste('ocultar remove todo cartão e polling não reabre; não cancela trabalho',async()=>{
    await page.locator('#acompanhamento-recolher').click();await page.locator('#cartao-acompanhamento').waitFor({state:'hidden'});
-   await page.waitForTimeout(1400);assert.ok(await page.locator('#cartao-acompanhamento').isHidden());
+   await page.reload();
+   await page.locator('#atividade-biblioteca').waitFor();
+   assert.ok(await page.locator('#cartao-acompanhamento').isHidden());
    assert.ok(!['cancelado','falhou','concluido'].includes((await api('/api/trabalhos/'+id)).estado));
    bloqueado=false;liberar();
    await page.waitForFunction(async id=>(await (await fetch('/api/trabalhos/'+id)).json()).dados.estado==='concluido',id);
@@ -125,5 +142,43 @@ try {
      await page.locator('#cancelar-adicionar').click();
    } finally {soltar();await page.unroute('**/api/trabalhos');}
  });
+ await teste('importar e resumir com consentimento, mantendo o mesmo trabalho após F5', async () => {
+   await page.locator('#acompanhamento-fechar').click();
+   esperaResumo = new Promise(ok => liberarResumo = ok);
+   await page.locator('#abrir-adicionar-link').click();
+   await page.locator('#adicionar-url').fill('https://youtu.be/resumoauto1');
+   assert.equal(await page.locator('#adicionar-resumir').isChecked(), false);
+   await page.locator('#adicionar-resumir').check();
+   await page.locator('#confirmar-adicionar').click();
+   await page.locator('#dialogo-adicionar').waitFor({state:'hidden'});
+   const resumo = page.locator('.acompanhamento-item[data-estado="executando"]').filter({hasText:'Resumo:'});
+   await resumo.waitFor();
+   const resumoId = await resumo.getAttribute('data-id');
+   await page.reload();
+   await page.locator('#atividade-biblioteca').waitFor();
+   await page.locator(`.acompanhamento-item[data-id="${resumoId}"][data-estado="executando"]`).waitFor();
+   assert.equal(pedidosIA.length, 1);
+   assert.match(pedidosIA[0].messages[0].content, /Comando mais recente/);
+   liberarResumo();
+   await page.locator(`.acompanhamento-item[data-id="${resumoId}"][data-estado="concluido"]`).waitFor();
+   const trabalho = await api('/api/trabalhos/'+resumoId);
+   const salvo = await api('/api/biblioteca/'+trabalho.videoId+'/resumo');
+   assert.equal(salvo.texto,'Resumo automático controlado.');
+   assert.equal(pedidosIA.length, 1);
+ });
+ await teste('importação sem legenda ou com resumo pronto dispensa nova chamada de IA', async () => {
+   for (const [youtubeId, mensagem] of [['semlegenda1', /sem transcrição/], ['resumoauto1', /já está pronto/]]) {
+     await page.locator('#abrir-adicionar-link').click();
+     await page.locator('#adicionar-url').fill('https://youtu.be/'+youtubeId);
+     await page.locator('#adicionar-resumir').check();
+     const aceito = page.waitForResponse(r => r.url().endsWith('/api/trabalhos') && r.request().method() === 'POST');
+     await page.locator('#confirmar-adicionar').click();
+     const {dados} = await (await aceito).json();
+     const item = page.locator(`.acompanhamento-item[data-id="${dados.id}"][data-estado="concluido"]`);
+     await item.waitFor();
+     assert.match(await item.textContent(), mensagem);
+   }
+   assert.equal(pedidosIA.length, 1);
+ });
  assert.deepEqual(erros,[]);console.log(`${total}/${total} cenários de estabilização Playwright aprovados.`);
-} finally {bloqueado=false;liberar?.();await browser?.close();await app.encerrar();}
+} finally {bloqueado=false;liberar?.();liberarResumo?.();await browser?.close();await app.encerrar();}

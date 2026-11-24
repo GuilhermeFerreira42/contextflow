@@ -5,6 +5,14 @@ export function criarAdicionarLink({ api, aoEnfileirar, aoAceitar }) {
   let focoAnterior = null;
   let colecoes = [];
   let sessao = 0;
+  function atualizarResumo() {
+    const opcao = $('#adicionar-resumir');
+    opcao.disabled = $('#adicionar-tipo').value !== 'importar-video';
+    if (opcao.disabled) opcao.checked = false;
+    $('#adicionar-resumir-nota').textContent = opcao.disabled
+      ? 'Disponível para um vídeo por vez.'
+      : 'A IA é chamada após obter a transcrição e pode gerar cobrança.';
+  }
 
   const PADRAO_VIDEO = /^https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)[\w-]{6,}/i;
   const PADRAO_PLAYLIST = /^https?:\/\/(www\.)?youtube\.com\/playlist\?list=[\w-]{6,}/i;
@@ -52,6 +60,8 @@ export function criarAdicionarLink({ api, aoEnfileirar, aoAceitar }) {
     $('#confirmar-adicionar').disabled = false;
     $('#adicionar-url').value = '';
     $('#adicionar-tipo').value = 'importar-video';
+    $('#adicionar-resumir').checked = false;
+    atualizarResumo();
     $('#adicionar-url').focus();
   }
 
@@ -117,6 +127,7 @@ export function criarAdicionarLink({ api, aoEnfileirar, aoAceitar }) {
     if (botao.dataset.estado === 'enviando') return;
     const envio = sessao;
     const colecaoId = $('#adicionar-colecao-destino').value;
+    const resumirAoImportar = tipo === 'importar-video' && $('#adicionar-resumir').checked;
     botao.disabled = true;
     estadoBotao('enviando', 'Enviando…');
     avisar('Enviando para a fila…', 'pendente');
@@ -124,7 +135,7 @@ export function criarAdicionarLink({ api, aoEnfileirar, aoAceitar }) {
     try {
       const resposta = await api('/api/trabalhos', {
         method: 'POST',
-        body: JSON.stringify({ tipo, escopo: { url, chaveRequisicao: crypto.randomUUID() } }),
+        body: JSON.stringify({ tipo, escopo: { url, chaveRequisicao: crypto.randomUUID(), ...(resumirAoImportar ? { resumirAoImportar } : {}) } }),
       });
       const id = resposta?.id;
       if (!id) throw new Error('A fila não confirmou o trabalho.');
@@ -176,11 +187,13 @@ export function criarAdicionarLink({ api, aoEnfileirar, aoAceitar }) {
     $('#adicionar-url').addEventListener('input', () => {
       const tipo = detectarTipo($('#adicionar-url').value.trim());
       if (tipo) $('#adicionar-tipo').value = tipo;
+      atualizarResumo();
     });
 
     // Espelha a opção no formulário clássico de Importações.
     $('#adicionar-tipo').addEventListener('change', () => {
       const tipo = $('#adicionar-tipo').value;
+      atualizarResumo();
       const texto = tipo === 'importar-playlist' ? 'Adicionar playlist' : 'Adicionar vídeo';
       $('#confirmar-adicionar').textContent = texto;
     });

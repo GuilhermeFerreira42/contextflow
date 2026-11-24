@@ -122,27 +122,43 @@ export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}
     registrarErro: () => registrador.erro('Falha ao processar a fila.'),
     processarResumo: (r, sinal) => resumos.processar(r, sinal),
     falharResumo: (r, erro) => resumos.marcarErro(r, erro),
+    configurarResumoAoImportar: () => resumos.configurarAoImportar(),
     criarResumo: async entrada => {
       const lote = await resumos.gerar({ ...entrada, videoIds: entrada.videoIds ?? [entrada.videoId] });
       if (!lote.trabalhos[0]) throw new ErroDominio('resumo_existente', 'Este resumo já está pronto e foi preservado.', 409);
       return repositorioTrabalhos.detalhe(lote.trabalhos[0].id);
     },
-    processar: (r, escopo, sinal) => ingestao.importar(escopo.url!, escopo.idiomas, {
-      sinal, retomar: true,
-      verificar: () => repositorioTrabalhos.conferir(r),
-      fase: fase => repositorioTrabalhos.fase(r, fase),
-      // A URL já está durável no trabalho; não criar vídeo Importando sem conteúdo.
-      provisionar: () => repositorioTrabalhos.conferir(r),
-      marcarErro: video => repositorioTrabalhos.conferirEGravar(r, () => {
-        if (repositorioBiblioteca.porYoutubeIdSincrono(video.youtubeId)?.id === video.id) repositorioBiblioteca.atualizarSincrono(video);
-      }),
-      persistirResultado: (video, transcricao, resultado) => repositorioTrabalhos.concluir(r, resultado,
-        () => {
+    processar: async (r, escopo, sinal) => {
+      const concluirImportacao = (resultado: import('./modulos/ingestao/servico.ts').ResultadoIngestao, gravar?: () => void) => {
+        const t = resultado.transcricao;
+        repositorioTrabalhos.concluir(r, resultado, () => {
+          gravar?.();
+          if (escopo.resumoAutomatico) {
+            const transcricao = repositorioTranscricoes.porVideoSincrono(resultado.video.id);
+            resultado.resumoAutomatico = resumos.enfileirarAoImportar(escopo.resumoAutomatico, resultado.video, transcricao);
+          }
+        }, t.erroCodigo ? { codigo: t.erroCodigo, mensagem: t.motivo!, status: t.erroHttp } : undefined);
+      };
+      const resultado = await ingestao.importar(escopo.url!, escopo.idiomas, {
+        sinal, retomar: true,
+        verificar: () => repositorioTrabalhos.conferir(r),
+        fase: fase => repositorioTrabalhos.fase(r, fase),
+        // A URL já está durável no trabalho; não criar vídeo Importando sem conteúdo.
+        provisionar: () => repositorioTrabalhos.conferir(r),
+        marcarErro: video => repositorioTrabalhos.conferirEGravar(r, () => {
+          if (repositorioBiblioteca.porYoutubeIdSincrono(video.youtubeId)?.id === video.id) repositorioBiblioteca.atualizarSincrono(video);
+        }),
+        persistirResultado: (video, transcricao, resultado) => concluirImportacao(resultado, () => {
           if (!repositorioBiblioteca.porYoutubeIdSincrono(video.youtubeId)) repositorioBiblioteca.inserirSincrono(video);
           escreverResultadoIngestao(banco, video, transcricao);
-        },
-        resultado.transcricao.erroCodigo ? { codigo: resultado.transcricao.erroCodigo, mensagem: resultado.transcricao.motivo!, status: resultado.transcricao.erroHttp } : undefined),
-    }),
+        }),
+      });
+      // Para um vídeo já importado, a ingestão pode reutilizar a transcrição sem gravar novamente.
+      if (escopo.resumoAutomatico && repositorioTrabalhos.registro(r.id).estado === 'executando') {
+        concluirImportacao(resultado);
+      }
+      return resultado;
+    },
   });
   const configuracao = null as ServicoConfiguracao | null;
 
@@ -392,6 +408,7 @@ export function criarAplicacao(config: ConfigMotor, opcoes: OpcoesAplicacao = {}
       return resultado;
     })
     .obter('/api/trabalhos', ({ requisicao }) => repositorioTrabalhos.pagina({
+      ativos: requisicao.consulta.get('ativos') === '1',
       raizes: requisicao.consulta.get('raizes') === '1', estado: requisicao.consulta.get('estado') ?? undefined, cursor: requisicao.consulta.get('cursor') ?? undefined,
       limite: Number(requisicao.consulta.get('limite') ?? 50),
     }))

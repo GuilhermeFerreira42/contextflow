@@ -103,6 +103,10 @@ export class RepositorioTranscricoesSqlite implements RepositorioTranscricoes {
   }
 
   async porVideo(videoId: string, idioma?: string): Promise<Transcricao | null> {
+    return this.porVideoSincrono(videoId, idioma);
+  }
+
+  porVideoSincrono(videoId: string, idioma?: string): Transcricao | null {
     const linha = (
       idioma
         ? this.#db

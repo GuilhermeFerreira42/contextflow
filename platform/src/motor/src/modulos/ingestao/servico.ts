@@ -39,6 +39,7 @@ export interface ResultadoIngestao {
   transcricao: TranscricaoResumo;
   /** Falso quando o vídeo já existia: a importação foi uma reapresentação. */
   criado: boolean;
+  resumoAutomatico?: { trabalhoId?: string; mensagem?: string };
 }
 
 export interface ExecucaoIngestao {

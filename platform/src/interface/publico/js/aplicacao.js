@@ -90,6 +90,7 @@ function mostrarTela(nome) {
   if (!TELAS.includes(nome)) nome = 'biblioteca';
 
   estado.tela = nome;
+  document.body.dataset.telaAtual = nome;
   $$('.nav-item').forEach((botao) => {
     const ativo = botao.dataset.aba === nome;
     botao.classList.toggle('ativo', ativo);
@@ -141,6 +142,7 @@ const acompanhamentoUI = criarAcompanhamento({
   aoIrParaImportacoes: () => mostrarTela('importacoes'),
   aoMudar: () => carregarTrabalhos(),
 });
+let restaurarAcompanhamento = true;
 
 const painelUIReal = criarPainel({ api, aoResumir: id => resumosUI.abrir([id]), aoHistorico: id => resumosUI.abrirHistorico(id) });
 painelUI = painelUIReal;
@@ -182,7 +184,21 @@ const arvoreUI = criarArvore({
  *      lugar dela (reconciliação por `videoId`, sem duplicar);
  *   5. em falha, a provisória sai e o aviso aponta Importações.
  */
-const acompanhamentoProvisorio = new Map(); // trabalhoId -> { chave, colecaoId }
+const acompanhamentoProvisorio = new Map();
+const CHAVE_IMPORTACOES = 'contextflow.importacoes-acompanhadas';
+
+function guardarProvisorias() {
+  try {
+    sessionStorage.setItem(CHAVE_IMPORTACOES,
+      JSON.stringify([...acompanhamentoProvisorio.values()].map(({ chave, ...item }) => item)));
+  } catch { /* A importação segue no motor. */ }
+}
+
+function seguirImportacao(item) {
+  const chave = bibliotecaUI.adicionarProvisoria({ ...item, estado: 'na-fila' });
+  acompanhamentoProvisorio.set(item.trabalhoId, { ...item, chave });
+  guardarProvisorias();
+}
 
 const adicionarLinkUI = criarAdicionarLink({
   api,
@@ -230,11 +246,7 @@ const adicionarLinkUI = criarAdicionarLink({
 
     estado.pendentes.add(trabalhoId);
     acompanhamentoUI.acompanhar([trabalhoId]);
-    const chave = bibliotecaUI.adicionarProvisoria({
-      trabalhoId, tipo, url, titulo, videoId, colecaoId,
-      estado: 'na-fila',
-    });
-    acompanhamentoProvisorio.set(trabalhoId, { chave, colecaoId });
+    seguirImportacao({ trabalhoId, tipo, url, titulo, videoId, colecaoId });
     $('#resultado-biblioteca').dataset.tipo = 'pendente';
     $('#resultado-biblioteca').textContent = 'Importação na fila. A linha provisória está no topo da Biblioteca.';
     if (estado.tela !== 'biblioteca') mostrarTela('biblioteca');
@@ -656,21 +668,31 @@ function desenharAtividadeBiblioteca(ativos) {
 const trabalhosUI = criarTrabalhos({
   api,
   $,
+  idsAcompanhados: () => [...acompanhamentoUI.ids, ...acompanhamentoProvisorio.keys()],
+  aoRemoverAcompanhado: id => {
+    acompanhamentoUI.remover(id);
+    estado.pendentes.delete(id);
+    const provisoria = acompanhamentoProvisorio.get(id);
+    if (provisoria) bibliotecaUI.removerProvisoria(provisoria.chave);
+    acompanhamentoProvisorio.delete(id);
+    guardarProvisorias();
+  },
   // Um trabalho terminou: atualiza Biblioteca, árvore e o cartão de resumo.
   aoConcluir: async (t) => {
     estado.pendentes.delete(t.id);
     if (t.tipo === 'gerar-resumo' && t.videoId) bibliotecaUI.invalidarResumos([t.videoId]);
     if (t.id === estado.ultimoTrabalho) mostrarResultadoTrabalho(t);
     await reconciliarProvisoria(t);
-    // O cartão precisa ver o estado terminal mesmo que o trabalho já tenha
-    // saído da primeira página; `absorver` recebe a lista completa dela.
-    acompanhamentoUI.absorver(trabalhosUI.itens);
     await carregarBiblioteca();
     void arvoreUI.carregar();
   },
-  aoMudarAtivos: (ativos) => {
+  aoMudarAtivos: (ativos, acompanhados) => {
+    if (restaurarAcompanhamento) {
+      restaurarAcompanhamento = false;
+      acompanhamentoUI.restaurarAtivos(ativos);
+    }
     desenharAtividadeBiblioteca(ativos);
-    acompanhamentoUI.absorver(trabalhosUI.itens);
+    acompanhamentoUI.absorver(acompanhados);
     void sincronizarProvisorias(ativos);
     // Reconciliação de segurança: se o vídeo já entrou na API por outro
     // caminho (reload, outra aba), a provisória equivalente sai.
@@ -706,6 +728,7 @@ async function reconciliarProvisoria(t) {
   const acompanhamento = acompanhamentoProvisorio.get(t.id);
   if (!acompanhamento) return;
   acompanhamentoProvisorio.delete(t.id);
+  guardarProvisorias();
 
   const videoId = t.videoId ?? t.resultado?.video?.id ?? null;
   if (t.estado === 'concluido' && videoId) {
@@ -958,10 +981,16 @@ function ligarEventos() {
 
 async function iniciar() {
   ligarEventos();
+  try {
+    const itens = JSON.parse(sessionStorage.getItem(CHAVE_IMPORTACOES) ?? '[]');
+    if (Array.isArray(itens)) {
+      for (const item of itens) if (typeof item?.trabalhoId === 'string') seguirImportacao(item);
+    }
+  } catch { /* Estado da aba indisponível. */ }
   mostrarTela(telaDaUrl());
 
   await verificarMotor();
-  await Promise.all([carregarBiblioteca(), carregarConfiguracoes(), carregarDiagnostico(), resumosUI.carregarConfiguracao()]);
+  await Promise.all([carregarBiblioteca(), carregarTrabalhos(), carregarConfiguracoes(), carregarDiagnostico(), resumosUI.carregarConfiguracao()]);
 
   // Atividade global discreta: o status do motor se atualiza sem recarregar a tela.
   setInterval(verificarMotor, 15000);
@@ -971,7 +1000,7 @@ async function iniciar() {
     // trabalho pela tabela não marcava nada em `pendentes`, então o
     // acompanhamento parava e a linha nunca saía de "Na fila".
     const temAtivo = trabalhosUI.possuiAtivo();
-    if (!document.hidden && (estado.tela === 'importacoes' || estado.pendentes.size || temAtivo)) {
+    if (!document.hidden && (restaurarAcompanhamento || estado.tela === 'importacoes' || estado.pendentes.size || temAtivo)) {
       void carregarTrabalhos();
     }
   }, 1000);

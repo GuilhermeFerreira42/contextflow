@@ -46,6 +46,7 @@ const FASES = {
 };
 
 const TERMINAIS = ['concluido', 'falhou', 'cancelado'];
+const CHAVE_SESSAO = 'contextflow.acompanhamento';
 
 export function criarAcompanhamento({ api, $, aoIrParaImportacoes, aoMudar }) {
   const estado = {
@@ -53,11 +54,17 @@ export function criarAcompanhamento({ api, $, aoIrParaImportacoes, aoMudar }) {
     cancelando: new Set(),
     repetindo: new Set(),
     recolhido: false,
+    ocultado: false,
     /** Ids que já existiam quando o cartão abriu: só eles "terminam". */
     vistos: new Set(),
   };
 
   const cartao = () => $('#cartao-acompanhamento');
+  function guardar() {
+    try {
+      sessionStorage.setItem(CHAVE_SESSAO, JSON.stringify({ ids: [...estado.trabalhos.keys()], ocultado: estado.ocultado }));
+    } catch { /* O cartão continua funcionando sem armazenamento da aba. */ }
+  }
 
   function aberto() {
     return Boolean(cartao() && !cartao().hidden);
@@ -73,18 +80,25 @@ export function criarAcompanhamento({ api, $, aoIrParaImportacoes, aoMudar }) {
   function acompanhar(ids) {
     const alvo = cartao();
     if (!alvo || !ids?.length) return;
+    estado.ocultado = false;
     alvo.hidden = false;
     alvo.dataset.recolhido = String(estado.recolhido);
     for (const id of ids) {
       estado.vistos.add(id);
       if (!estado.trabalhos.has(id)) estado.trabalhos.set(id, { id, estado: 'na-fila' });
     }
+    guardar();
     desenhar();
   }
 
   /** Incorpora o snapshot da fila. Não abre o cartão por conta própria. */
   function absorver(trabalhos) {
     if (!aberto()) return;
+    const derivados = trabalhos
+      .filter(t => estado.trabalhos.has(t.id))
+      .map(t => t.resultado?.resumoAutomatico?.trabalhoId)
+      .filter(id => id && !estado.vistos.has(id));
+    if (derivados.length) acompanhar(derivados);
     let mudou = false;
     for (const id of [...estado.trabalhos.keys()]) {
       const atual = trabalhos.find((t) => t.id === id);
@@ -98,6 +112,7 @@ export function criarAcompanhamento({ api, $, aoIrParaImportacoes, aoMudar }) {
         && anterior.tentativas === atual.tentativas
         && anterior.titulo === (atual.titulo ?? atual.resultado?.video?.titulo ?? anterior.titulo)
         && anterior.erro === (atual.erro ?? null)
+        && anterior.aviso === (atual.resultado?.resumoAutomatico?.mensagem ?? null)
         && Boolean(anterior.cancelamentoSolicitado) === Boolean(atual.cancelamentoSolicitado);
       if (!igual) {
         estado.trabalhos.set(id, {
@@ -108,6 +123,7 @@ export function criarAcompanhamento({ api, $, aoIrParaImportacoes, aoMudar }) {
           fase: atual.fase,
           progresso: typeof atual.progresso === 'number' ? atual.progresso : null,
           erro: atual.erro ?? null,
+          aviso: atual.resultado?.resumoAutomatico?.mensagem ?? null,
           tentativas: atual.tentativas,
           cancelamentoSolicitado: Boolean(atual.cancelamentoSolicitado),
         });
@@ -189,6 +205,11 @@ export function criarAcompanhamento({ api, $, aoIrParaImportacoes, aoMudar }) {
         erro.textContent = t.erro;
         caixa.append(erro);
       }
+      if (t.aviso) {
+        const aviso = document.createElement('p');
+        aviso.textContent = t.aviso;
+        caixa.append(aviso);
+      }
 
       // Ações por item: cancelar (ativo) ou repetir (falhou/cancelado).
       if (['na-fila', 'executando'].includes(t.estado) || ['falhou', 'cancelado'].includes(t.estado)) {
@@ -261,6 +282,7 @@ export function criarAcompanhamento({ api, $, aoIrParaImportacoes, aoMudar }) {
       const id = novo?.id ?? t.id;
       estado.trabalhos.set(id, { id, tipo: t.tipo, titulo: t.titulo, estado: 'na-fila' });
       if (id !== t.id) estado.vistos.add(id);
+      guardar();
       await aoMudar?.();
     } catch (erro) {
       estado.trabalhos.set(t.id, { ...t, erro: erro.message });
@@ -272,19 +294,26 @@ export function criarAcompanhamento({ api, $, aoIrParaImportacoes, aoMudar }) {
 
   function ocultar() {
     if (cartao()) cartao().hidden = true;
+    estado.ocultado = true;
     estado.trabalhos.clear(); estado.vistos.clear();
+    guardar();
   }
 
   function ligar() {
+    try {
+      const salvo = JSON.parse(sessionStorage.getItem(CHAVE_SESSAO) ?? 'null');
+      estado.ocultado = salvo?.ocultado === true;
+      if (!estado.ocultado && Array.isArray(salvo?.ids)) acompanhar(salvo.ids.filter(id => typeof id === 'string'));
+    } catch { /* Estado da aba indisponível. */ }
     $('#acompanhamento-recolher')?.addEventListener('click', ocultar);
     $('#acompanhamento-ir')?.addEventListener('click', () => aoIrParaImportacoes?.());
     $('#acompanhamento-fechar')?.addEventListener('click', ocultar);
     $('#acompanhamento-limpar')?.addEventListener('click', () => {
       for (const [id, t] of estado.trabalhos) {
         if (!TERMINAIS.includes(t.estado)) continue;
-        estado.trabalhos.delete(id); estado.vistos.delete(id);
+        estado.trabalhos.delete(id);
       }
-      if (!estado.trabalhos.size) ocultar(); else desenhar();
+      if (!estado.trabalhos.size) ocultar(); else { guardar(); desenhar(); }
     });
   }
 
@@ -292,6 +321,15 @@ export function criarAcompanhamento({ api, $, aoIrParaImportacoes, aoMudar }) {
     ligar,
     acompanhar,
     absorver,
+    restaurarAtivos(ativos) {
+      if (!estado.ocultado) acompanhar(ativos.map(t => t.id));
+    },
+    remover(id) {
+      estado.trabalhos.delete(id);
+      if (!estado.trabalhos.size && cartao()) cartao().hidden = true;
+      guardar();
+      desenhar();
+    },
     get aberto() { return aberto(); },
     get ids() { return [...estado.trabalhos.keys()]; },
   };

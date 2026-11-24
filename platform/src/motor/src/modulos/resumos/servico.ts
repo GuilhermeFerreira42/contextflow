@@ -50,6 +50,43 @@ export class ServicoResumos {
   #existente(s: Snapshot) {
     return this.#banco.db.prepare(`SELECT 1 FROM resumos WHERE video_id=? AND provedor=? AND modelo=? AND versao_prompt=? AND revisao_transcricao=? AND estado='pronto'`).get(...chaveResumo(s));
   }
+  #snapshotDaFonte(c: ConfigResumo, video: Video, t: Transcricao) {
+    const revisao = revisaoTranscricao(t);
+    const metadados = { id: video.id, titulo: video.titulo, canalNome: video.canalNome, duracaoSegundos: video.duracaoSegundos };
+    const versao = `${c.versaoPrompt}:${hash({ provedor: c.provedor, modelo: c.modelo, baseUrl: c.baseUrl, prompt: c.prompt, contexto: c.contexto, maxSaida: c.maxSaida, metadados }).slice(0, 16)}`;
+    const snapshot: Snapshot = { config: c, video: metadados, transcricao: t, revisao, versao,
+      assinatura: hash({ id: video.id, revisao, versao }), limiteChamadas: 1 };
+    const partes = dividirTexto(fonte(snapshot), limiteParte(snapshot));
+    snapshot.limiteChamadas = partes.length === 1 ? 1 : Math.min(100, partes.length * 2 + 4);
+    return { snapshot, partes };
+  }
+  #enfileirar(s: Snapshot, youtubeId: string): string {
+    const ativo = this.#banco.db.prepare("SELECT id FROM trabalhos WHERE tipo='gerar-resumo' AND estado IN ('na-fila','executando') AND json_extract(escopo,'$.assinatura')=? LIMIT 1").get(s.assinatura) as { id: string } | undefined;
+    if (ativo) return ativo.id;
+    const id = this.#trabalhos.inserir('gerar-resumo', { videoId: s.video.id, titulo: `Resumo: ${s.video.titulo}`, assinatura: s.assinatura }, youtubeId);
+    this.#banco.db.prepare('INSERT INTO resumos_execucoes VALUES(?,?,?,NULL,?)').run(id, s.video.id, JSON.stringify(s), new Date().toISOString());
+    return id;
+  }
+  async configurarAoImportar(): Promise<ConfigResumo> {
+    const c = await this.#config();
+    if (['openai', 'anthropic'].includes(c.provedor) && !await this.configuracao.chave(c)) {
+      throw new ErroDominio('chave_ausente', 'Configure a chave do provedor ou desmarque a geração ao importar.', 412);
+    }
+    return c;
+  }
+  /** Chamado dentro da transação que conclui a importação. */
+  enfileirarAoImportar(c: ConfigResumo, video: Video, t: Transcricao | null): { trabalhoId?: string; mensagem?: string } {
+    if (!t || t.estado !== 'pronta' || !t.segmentos.length) return { mensagem: 'Resumo não gerado: vídeo sem transcrição disponível.' };
+    let s: Snapshot;
+    try {
+      s = this.#snapshotDaFonte(c, video, t).snapshot;
+    } catch (e) {
+      if (!(e instanceof ErroDominio)) throw e;
+      return { mensagem: e.message };
+    }
+    if (this.#existente(s)) return { mensagem: 'O resumo desta versão já está pronto.' };
+    return { trabalhoId: this.#enfileirar(s, video.youtubeId) };
+  }
   async #preparar(entrada: unknown) {
     if (!entrada || typeof entrada !== 'object') throw new ErroValidacao('Informe videoIds.');
     const ids = (entrada as { videoIds?: unknown }).videoIds;
@@ -66,20 +103,15 @@ export class ServicoResumos {
         identidades.push({ id, motivo: item.motivo }); itens.push(item); continue;
       }
       const revisao = revisaoTranscricao(t);
-      const metadados = { id: video.id, titulo: video.titulo, canalNome: video.canalNome, duracaoSegundos: video.duracaoSegundos };
-      const versao = `${c.versaoPrompt}:${hash({ provedor: c.provedor, modelo: c.modelo, baseUrl: c.baseUrl, prompt: c.prompt, contexto: c.contexto, maxSaida: c.maxSaida, metadados }).slice(0, 16)}`;
-      const s: Snapshot = { config: c, video: metadados, transcricao: t, revisao, versao,
-        assinatura: hash({ id, revisao, versao }), limiteChamadas: 1 };
       try {
-        const partes = dividirTexto(fonte(s), limiteParte(s));
-        s.limiteChamadas = partes.length === 1 ? 1 : Math.min(100, partes.length * 2 + 4);
+        const { snapshot: s, partes } = this.#snapshotDaFonte(c, video, t);
         item.elegivel = true; item.existente = Boolean(this.#existente(s)); item.partes = partes.length;
         item.chamadasMaximas = item.existente ? 0 : s.limiteChamadas * 3;
         item.tokensEntrada = item.existente ? 0 : 3 * (partes.length === 1 ? tokensConservadores(prompt(s, partes[0]!)) + 256 : c.contexto * s.limiteChamadas);
         item.tokensSaida = item.existente ? 0 : 3 * c.maxSaida * s.limiteChamadas;
         item.custoEstimado = item.existente ? 0 : c.precoEntrada === null || c.precoSaida === null ? null
           : (item.tokensEntrada * c.precoEntrada + item.tokensSaida * c.precoSaida) / 1_000_000;
-        snapshots.push(s); identidades.push({ id, revisao, versao, existente: item.existente });
+        snapshots.push(s); identidades.push({ id, revisao, versao: s.versao, existente: item.existente });
       } catch (e) {
         if (!(e instanceof ErroDominio)) throw e;
         item.motivo = e.message; identidades.push({ id, revisao, erro: e.codigo });
@@ -109,12 +141,8 @@ export class ServicoResumos {
       const jaSolicitado = this.#banco.db.prepare('SELECT 1 FROM requisicoes_trabalho WHERE chave=?').get(chaveItem);
       if (this.#existente(s) && !jaSolicitado) { reutilizados.push(s.video.id); continue; }
       const id = this.#trabalhos.requisicao(chaveItem, 'gerar-resumo', { assinatura: s.assinatura }, () => {
-        const ativo = this.#banco.db.prepare("SELECT id FROM trabalhos WHERE tipo='gerar-resumo' AND estado IN ('na-fila','executando') AND json_extract(escopo,'$.assinatura')=? LIMIT 1").get(s.assinatura) as { id: string } | undefined;
-        if (ativo) return ativo.id;
         const video = this.#banco.db.prepare('SELECT youtube_id FROM videos WHERE id=?').get(s.video.id) as { youtube_id: string };
-        const idTrabalho = this.#trabalhos.inserir('gerar-resumo', { videoId: s.video.id, titulo: `Resumo: ${s.video.titulo}`, assinatura: s.assinatura }, video.youtube_id);
-        this.#banco.db.prepare('INSERT INTO resumos_execucoes VALUES(?,?,?,NULL,?)').run(idTrabalho, s.video.id, JSON.stringify(s), new Date().toISOString());
-        return idTrabalho;
+        return this.#enfileirar(s, video.youtube_id);
       });
       trabalhos.push({ id, videoId: s.video.id });
     }

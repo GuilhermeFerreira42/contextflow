@@ -62,6 +62,7 @@ export class RepositorioTrabalhos {
     }
     pagina(op: {
         estado?: string;
+        ativos?: boolean;
         cursor?: string;
         limite?: number;
         paiId?: string;
@@ -72,6 +73,8 @@ export class RepositorioTrabalhos {
             throw new ErroValidacao('Limite deve estar entre 1 e 100.');
         const clausulas: string[] = [];
         const args: (string | number)[] = [];
+        if (op.ativos)
+            clausulas.push("estado IN ('na-fila','executando')");
         if (op.estado) {
             if (!['na-fila', 'executando', 'concluido', 'falhou', 'cancelado'].includes(op.estado))
                 throw new ErroValidacao('Estado de trabalho inválido.');

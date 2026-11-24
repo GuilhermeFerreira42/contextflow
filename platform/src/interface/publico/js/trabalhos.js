@@ -141,7 +141,7 @@ function nomeTrabalho(trabalho) {
  * `aoConcluir` é o gancho que a Biblioteca usa para se atualizar sozinha
  * quando um trabalho termina (item 4 do pedido: sem sair da tela).
  */
-export function criarTrabalhos({ api, $, aoConcluir, aoMudarAtivos } = {}) {
+export function criarTrabalhos({ api, $, aoConcluir, aoMudarAtivos, idsAcompanhados, aoRemoverAcompanhado } = {}) {
   const estado = {
     itens: [],
     porId: new Map(),
@@ -162,35 +162,54 @@ export function criarTrabalhos({ api, $, aoConcluir, aoMudarAtivos } = {}) {
   /* --------------------------------------------------------------- dados */
 
   async function carregar({ mais = false } = {}) {
-    if (mais ? estado.carregandoMais : estado.carregando) return;
+    if (estado.carregandoMais || estado.carregando) return;
     if (mais) estado.carregandoMais = true; else estado.carregando = true;
     try {
       const cursor = mais ? estado.cursor : null;
-      const pagina = await api(`/api/trabalhos?raizes=1&limite=50${cursor ? '&cursor=' + encodeURIComponent(cursor) : ''}`);
+      const [pagina, ativosPagina] = await Promise.all([
+        api(`/api/trabalhos?raizes=1&limite=50${cursor ? '&cursor=' + encodeURIComponent(cursor) : ''}`),
+        api('/api/trabalhos?raizes=1&ativos=1&limite=100'),
+      ]);
       estado.cursor = pagina.proximoCursor ?? null;
       if (mais) estado.itens.push(...pagina.itens);
       else estado.itens = pagina.itens;
 
-      const antes = new Set(estado.porId.keys());
       estado.porId = new Map(estado.itens.map((t) => [t.id, t]));
+      const acompanhados = new Map(estado.porId);
+      for (const t of ativosPagina.itens) if (!acompanhados.has(t.id)) acompanhados.set(t.id, t);
+      const anteriores = estado.porIdAnterior ?? new Map();
+      const seguidos = new Set(idsAcompanhados?.() ?? []);
+      const consultar = new Set([
+        ...seguidos,
+        ...[...anteriores.values()].filter(t => ['na-fila', 'executando'].includes(t.estado)).map(t => t.id),
+      ]);
+      await Promise.all([...consultar].filter(id => !acompanhados.has(id)).map(async id => {
+        try {
+          acompanhados.set(id, await api(`/api/trabalhos/${encodeURIComponent(id)}`));
+        } catch (erro) {
+          if (erro.codigo === 'nao_encontrado') aoRemoverAcompanhado?.(id);
+          else if (anteriores.has(id)) acompanhados.set(id, anteriores.get(id));
+        }
+      }));
 
       // Reconciliar conclusões: um trabalho que saiu de ativo para terminal
       // precisa avisar quem depende dele (Biblioteca, árvore, painel de resumo).
       const concluidosAgora = [];
-      for (const t of estado.itens) {
-        const anterior = antes.has(t.id) ? estado.porIdAnterior?.get(t.id) : null;
-        if (anterior && ['na-fila', 'executando'].includes(anterior.estado) && TERMINAIS.includes(t.estado)) {
+      for (const t of acompanhados.values()) {
+        const anterior = anteriores.get(t.id);
+        if ((anterior ? ['na-fila', 'executando'].includes(anterior.estado) : seguidos.has(t.id)) && TERMINAIS.includes(t.estado)) {
           concluidosAgora.push(t);
         }
       }
-      estado.porIdAnterior = new Map(estado.porId);
+      estado.porIdAnterior = acompanhados;
       // Seleção não pode apontar para linha que sumiu (removida em outra aba).
       for (const id of [...estado.selecionados]) if (!estado.porId.has(id)) estado.selecionados.delete(id);
 
       desenhar();
       for (const t of concluidosAgora) await aoConcluir?.(t);
-      const ativos = estado.itens.filter((t) => ['na-fila', 'executando'].includes(t.estado));
-      aoMudarAtivos?.(ativos);
+      const todos = [...acompanhados.values()];
+      const ativos = todos.filter((t) => ['na-fila', 'executando'].includes(t.estado));
+      aoMudarAtivos?.(ativos, todos);
     } catch (erro) {
       const aviso = $('#erro-trabalhos');
       if (aviso) aviso.textContent = erro.message;
@@ -703,6 +722,6 @@ export function criarTrabalhos({ api, $, aoConcluir, aoMudarAtivos } = {}) {
     },
     get itens() { return estado.itens; },
     /** Há trabalho em andamento? O polling da aplicação usa isto. */
-    possuiAtivo() { return estado.itens.some((t) => ['na-fila', 'executando'].includes(t.estado)); },
+    possuiAtivo() { return [...(estado.porIdAnterior?.values() ?? [])].some(t => ['na-fila', 'executando'].includes(t.estado)); },
   };
 }

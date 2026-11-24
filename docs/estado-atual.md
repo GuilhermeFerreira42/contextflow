@@ -4,7 +4,35 @@
 > `00-comece-aqui.md`. O que está abaixo da linha "Histórico" é registro, não
 > estado vigente.
 
-## Estado vigente — 24/11/2026 — respostas HTTP 200 do LiteLLM
+## Estado vigente — 24/11/2026 — resumo ao importar e acompanhamento após F5
+
+Base `main` em `a8d6aad`, árvore inicialmente limpa. O proprietário confirmou
+que os resumos voltaram a funcionar após recarregar a página. O adaptador
+LiteLLM permanece como nessa revisão.
+
+Em **Adicionar link**, a opção por vídeo autoriza o resumo ao concluir a
+importação e avisa sobre cobrança. A fila guarda a configuração sem chave
+ao aceitar e cria ou reutiliza o trabalho de resumo na mesma transação que
+conclui a importação. Vídeo sem transcrição exibe o motivo. Playlists e
+geração manual conservam seus fluxos.
+
+Após F5, a Biblioteca restaura a faixa de atividade, o cartão e os trabalhos
+seguidos a partir da fila. Também reconcilia o destino de coleção das
+importações em andamento. Ocultar permanece uma escolha da aba.
+[SPEC da entrega](specs/f6-resumo-apos-importacao.md).
+
+Windows/Node 24.16.0: 255 testes aprovados, seis ignorados por scripts de
+shell, zero falhas. Build aprovado. Navegador: 57/57 CDP, Playwright
+11/11 estabilização, 8/8 resumos e 13/13 pós-F6, com provedores controlados.
+O navegador confirmou o mesmo ID
+após F5, uma chamada à IA, a persistência do resumo, a ausência de chamada
+sem legenda ou com resumo pronto e a preservação da coleção após recarga.
+
+Próximo passo: reabrir o motor pessoal para disponibilizar a mudança.
+YouTube, LiteLLM pessoal e aceite humano desta entrega permanecem pendentes.
+Sem migração. Coleções preservadas. F7 não iniciada.
+
+## Histórico — 24/11/2026 — respostas HTTP 200 do LiteLLM
 
 Base `main` em `d74e3a9`, árvore inicialmente limpa. A captura do usuário
 mostra HTTP 200 no LiteLLM e falha de extração no ContextFlow. O corpo da

@@ -10,6 +10,7 @@ import { setTimeout as esperar } from 'node:timers/promises';
 import { ErroDominio, ErroValidacao } from '../../nucleo/erros.ts';
 import { normalizarUrlVideo, type ResultadoIngestao } from '../ingestao/servico.ts';
 import type { ExecutorYtdlp } from '../../integracoes/ytdlp.ts';
+import type { ConfigResumo } from '../resumos/configuracao.ts';
 import { RepositorioTrabalhos, type RegistroTrabalho } from '../../persistencia/repositorio-trabalhos.ts';
 export interface ServicoTrabalhos {
     criar(tipo: TipoTrabalho, escopo: Record<string, unknown>): Promise<Trabalho>;
@@ -19,6 +20,7 @@ export interface ServicoTrabalhos {
     repetir(id: string, chaveRequisicao: string): Promise<Trabalho>;
 }
 export interface EscopoImportacao {
+    resumoAutomatico?: ConfigResumo;
     url?: string;
     urls?: string[];
     idiomas?: string[];
@@ -57,6 +59,7 @@ export class FilaTrabalhos implements ServicoTrabalhos {
     readonly #criarResumo?: (entrada: Record<string, unknown>) => Promise<Trabalho>;
     readonly #processarResumo?: (r: RegistroTrabalho, sinal: AbortSignal) => Promise<void>;
     readonly #falharResumo?: (r: RegistroTrabalho, erro: unknown) => void;
+    readonly #configurarResumoAoImportar?: () => Promise<ConfigResumo>;
     readonly #dono = randomUUID();
     readonly #ativos = new Map<string, {
         controle: AbortController;
@@ -73,6 +76,7 @@ export class FilaTrabalhos implements ServicoTrabalhos {
         criarResumo?: (entrada: Record<string, unknown>) => Promise<Trabalho>;
         processarResumo?: (r: RegistroTrabalho, sinal: AbortSignal) => Promise<void>;
         falharResumo?: (r: RegistroTrabalho, erro: unknown) => void;
+        configurarResumoAoImportar?: () => Promise<ConfigResumo>;
         registrarErro?: (erro: unknown) => void;
     }) {
         this.repositorio = op.repositorio;
@@ -83,6 +87,7 @@ export class FilaTrabalhos implements ServicoTrabalhos {
         this.#criarResumo = op.criarResumo;
         this.#processarResumo = op.processarResumo;
         this.#falharResumo = op.falharResumo;
+        this.#configurarResumoAoImportar = op.configurarResumoAoImportar;
         if (!Number.isInteger(this.#concorrencia) || this.#concorrencia < 1)
             throw new ErroValidacao('Concorrência deve ser um inteiro positivo.');
     }
@@ -119,8 +124,15 @@ export class FilaTrabalhos implements ServicoTrabalhos {
             else
                 escopo.url = normalizarUrlPlaylist(entrada.url);
         }
-        const id = this.repositorio.requisicao(String(entrada.chaveRequisicao ?? ''), 'criar', { tipo, escopo }, () => {
-            const pai = this.repositorio.inserir(tipo, escopo as Record<string, unknown>, youtubeId);
+        if (entrada.resumirAoImportar !== undefined && typeof entrada.resumirAoImportar !== 'boolean')
+            throw new ErroValidacao('Informe se deseja gerar resumo ao importar.');
+        const resumir = entrada.resumirAoImportar === true;
+        if (resumir && (tipo !== 'importar-video' || !this.#configurarResumoAoImportar))
+            throw new ErroValidacao('O resumo automático está disponível para um vídeo por importação.');
+        const configResumo = resumir ? await this.#configurarResumoAoImportar!() : undefined;
+        const identidade = resumir ? { tipo, escopo, resumirAoImportar: true } : { tipo, escopo };
+        const id = this.repositorio.requisicao(String(entrada.chaveRequisicao ?? ''), 'criar', identidade, () => {
+            const pai = this.repositorio.inserir(tipo, { ...escopo, resumoAutomatico: configResumo }, youtubeId);
             if (tipo === 'importar-lote')
                 for (const [posicao, url] of escopo.urls!.entries())
                     this.repositorio.inserir('importar-video', { url, idiomas, posicao }, normalizarUrlVideo(url).youtubeId, pai);

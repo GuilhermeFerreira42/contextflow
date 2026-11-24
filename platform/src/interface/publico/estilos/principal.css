@@ -3299,6 +3299,10 @@ tr.linha-provisoria.provisoria-falhou > td:first-child {
  * Em janelas estreitas ele ocupa a largura toda e sobe acima do rodapé, para
  * não competir com a navegação inferior.
  */
+body[data-tela-atual='configuracoes'] .cartao-acompanhamento {
+  display: none;
+}
+
 .cartao-acompanhamento {
   position: fixed;
   right: 18px;
