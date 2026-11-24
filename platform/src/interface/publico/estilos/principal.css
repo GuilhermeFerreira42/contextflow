@@ -1860,7 +1860,7 @@ input[type='checkbox'] {
 .aplicativo[data-coluna-canal='oculta'] [data-coluna='canal'],
 .aplicativo[data-coluna-duracao='oculta'] [data-coluna='duracao'],
 .aplicativo[data-coluna-adicionado='oculta'] [data-coluna='adicionado'],
-.aplicativo[data-coluna-estado='oculta'] [data-coluna='estado'],
+.aplicativo[data-coluna-estado='oculta'] [data-tela-nome='biblioteca'] [data-coluna='estado'],
 .aplicativo[data-coluna-resumo='oculta'] [data-coluna='resumo'],
 .aplicativo[data-coluna-resumo-estado='oculta'] [data-coluna='resumo-estado'] {
   display: none;
@@ -3096,24 +3096,55 @@ dialog p {
 }
 
 /* Linha de detalhe (filhos de uma playlist/lote): ocupa a tabela toda. */
+.tabela-trabalhos .botao-itens-trabalho {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  width: auto;
+  flex: none;
+  padding: 0 5px;
+  font-size: 11px;
+}
+.botao-itens-trabalho[aria-expanded='true'] .seta-itens-trabalho {
+  rotate: 90deg;
+}
 .tabela-trabalhos tr.linha-detalhe > td {
-  padding: 0 10px 10px 44px;
+  padding: 8px 10px 12px;
   background: color-mix(in srgb, var(--grafite-850) 45%, transparent);
+}
+.painel-itens-trabalho {
+  position: sticky;
+  left: 10px;
+  max-width: calc(100cqw - 20px);
+}
+.acoes-itens-trabalho {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
 }
 .tabela-trabalhos .lista-filhos {
   display: grid;
   gap: 2px;
-  margin-top: 6px;
+  max-height: min(35vh, 360px);
+  overflow: auto;
 }
 .tabela-trabalhos .lista-filhos .item-filho {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 8px;
   padding: 6px 10px;
   background: transparent;
   border: 0;
   border-left: 2px solid var(--borda);
   border-radius: 0 6px 6px 0;
   font-size: 12px;
+}
+.item-filho .trabalho-titulo,
+.item-filho .trabalho-meta {
+  overflow-wrap: anywhere;
 }
 
 /* Barra de ferramentas da tabela: pesquisa, filtros e ações em lote. */
@@ -3178,6 +3209,7 @@ dialog p {
 /* Rolagem da tabela: cabeçalho fixo e corpo com altura máxima própria.
    Sem isso, um histórico de 200 linhas empurraria o rodapé para fora da tela. */
 .caixa-tabela-trabalhos {
+  container-type: inline-size;
   border: 1px solid var(--borda);
   border-radius: var(--raio);
   background: var(--grafite-900);
@@ -3304,7 +3336,8 @@ tr.linha-provisoria.provisoria-falhou > td:first-child {
  * Em janelas estreitas ele ocupa a largura toda e sobe acima do rodapé, para
  * não competir com a navegação inferior.
  */
-body[data-tela-atual='configuracoes'] .cartao-acompanhamento {
+body[data-tela-atual='configuracoes'] .cartao-acompanhamento,
+body[data-tela-atual='importacoes'] .cartao-acompanhamento {
   display: none;
 }
 

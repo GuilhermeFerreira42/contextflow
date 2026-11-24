@@ -429,11 +429,11 @@ try {
   await esperar(`document.querySelector('#resultado-validacao').textContent.includes('Importação concluída: 2 itens')`);
   const playlistId = await avaliar(`fetch('/api/trabalhos?raizes=1&limite=1').then(r=>r.json()).then(r=>r.dados.itens[0].id)`);
   const contou = await esperar(`document.querySelector('.trabalho[data-id="${playlistId}"]')?.textContent.includes('1 sem legenda')`);
-  await avaliar(`document.querySelector('.trabalho[data-id="${playlistId}"] details').open=true`);
-  const filhos = await esperar(`document.querySelectorAll('.trabalho[data-id="${playlistId}"] .trabalho').length===2`);
+  await avaliar(`document.querySelector('.trabalho[data-id="${playlistId}"] [data-acao="itens"]').click()`);
+  const filhos = await esperar(`document.querySelectorAll('#itens-trabalho-${playlistId} .item-filho').length===2`);
   registrar('playlist exibe filhos e ausência explícita de legenda', contou && filhos,
     JSON.stringify({ contou, filhos, texto: await avaliar(`document.querySelector('.trabalho[data-id="${playlistId}"]')?.textContent?.slice(0,200)`),
-      filhosDom: await avaliar(`document.querySelectorAll('.trabalho[data-id="${playlistId}"] .trabalho').length`),
+      filhosDom: await avaliar(`document.querySelectorAll('#itens-trabalho-${playlistId} .item-filho').length`),
       detalhe: await avaliar(`document.querySelectorAll('.linha-detalhe').length`),
       expandidos: await avaliar(`document.querySelectorAll('tr[data-expandido]').length`) }));
 

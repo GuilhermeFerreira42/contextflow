@@ -72,7 +72,6 @@ const ICONES = {
   cancelar: { glifo: '⏹', rotulo: 'Cancelar importação' },
   repetir: { glifo: '↻', rotulo: 'Repetir importação' },
   remover: { glifo: '✕', rotulo: 'Remover do histórico' },
-  itens: { glifo: '▸', rotulo: 'Ver itens' },
 };
 
 const formatarData = (iso) => {
@@ -146,7 +145,7 @@ export function criarTrabalhos({ api, $, aoConcluir, aoMudarAtivos, idsAcompanha
     itens: [],
     porId: new Map(),
     selecionados: new Set(),
-    expandidos: new Set(),
+    detalhes: new Map(),
     filtroTipo: 'todos',
     filtroEstado: 'todos',
     pesquisa: '',
@@ -387,7 +386,13 @@ export function criarTrabalhos({ api, $, aoConcluir, aoMudarAtivos, idsAcompanha
     const acoes = el('div', { classe: 'celula-acoes trabalho-acoes' });
     const temFilhos = ['importar-playlist', 'importar-lote'].includes(trabalho.tipo);
     if (temFilhos) {
-      acoes.append(botaoAcao('itens', trabalho, () => alternarDetalhe(trabalho)));
+      const aberto = estado.detalhes.has(trabalho.id);
+      acoes.append(el('button', {
+        type: 'button', classe: 'botao-icone botao-itens-trabalho',
+        'data-acao': 'itens', 'aria-expanded': String(aberto),
+        'aria-controls': `itens-trabalho-${trabalho.id}`,
+        onclick: ev => alternarDetalhe(trabalho, ev.currentTarget),
+      }, el('span', { 'aria-hidden': 'true', classe: 'seta-itens-trabalho', texto: '▸' }), 'Itens'));
     }
     if (['na-fila', 'executando'].includes(trabalho.estado)) {
       acoes.append(botaoAcao('cancelar', trabalho, (ev) => cancelar(trabalho, ev.currentTarget)));
@@ -397,82 +402,103 @@ export function criarTrabalhos({ api, $, aoConcluir, aoMudarAtivos, idsAcompanha
     if (TERMINAIS.includes(trabalho.estado)) {
       acoes.append(botaoAcao('remover', trabalho, (ev) => remover(trabalho, ev.currentTarget)));
     }
-    const tdAcoes = el('td', { dataset: { coluna: 'acoes' } }, acoes);
-
-    /*
-     * Itens de playlist/lote: `<details>` DENTRO da `<td>` de ações.
-     *
-     * Contrato (E2E do proprietário): `document.querySelector(
-     * '.trabalho[data-id=X] details').open = true` precisa revelar os itens.
-     * Por isso o detalhe é descendente da linha do trabalho — uma linha extra
-     * separada atenderia o usuário, mas quebraria esse contrato.
-     *
-     * Custo aceito: a célula cresce em altura quando aberta. `estado.expandidos`
-     * é a ÚNICA fonte de verdade, compartilhada pelo botão ▸ e pelo `<summary>`.
-     */
-    if (temFilhos) {
-      const lista = el('div', { classe: 'lista-filhos', dataset: { pai: trabalho.id } });
-      const mais = el('button', {
-        type: 'button',
-        classe: 'botao-secundario',
-        hidden: true,
-        texto: 'Mais itens',
-      });
-      mais.addEventListener('click', () => void carregarFilhos(trabalho, lista, mais, lista.dataset.cursor));
-      const detalhes = el('details', { open: estado.expandidos.has(trabalho.id) },
-        el('summary', { texto: 'Itens' }), lista, mais);
-      detalhes.addEventListener('toggle', () => {
-        if (detalhes.open) {
-          estado.expandidos.add(trabalho.id);
-          void carregarFilhos(trabalho, lista, mais);
-        } else {
-          estado.expandidos.delete(trabalho.id);
-        }
-      });
-      if (detalhes.open) void carregarFilhos(trabalho, lista, mais);
-      tdAcoes.append(detalhes);
-    }
-
-    tr.append(tdAcoes);
+    tr.append(el('td', { dataset: { coluna: 'acoes' } }, acoes));
     return tr;
   }
 
-  async function carregarFilhos(trabalho, lista, mais, cursor) {
+  function criarDetalhe(id) {
+    const lista = el('div', { classe: 'lista-filhos', dataset: { pai: id }, tabindex: '0', role: 'region', 'aria-label': 'Lista de itens' });
+    const aviso = el('p', { classe: 'painel-nota', role: 'status', texto: 'Carregando itens…' });
+    const mais = el('button', { type: 'button', classe: 'botao-secundario', hidden: true, texto: 'Mais itens' });
+    const recolher = el('button', { type: 'button', classe: 'botao-secundario', texto: 'Recolher itens' });
+    const painel = el('section', {
+      id: `itens-trabalho-${id}`, classe: 'painel-itens-trabalho', 'aria-label': 'Itens da importação',
+    }, aviso, lista, el('div', { classe: 'acoes-itens-trabalho' }, mais, recolher));
+    const linha = el('tr', { classe: 'linha-detalhe' }, el('td', { colspan: '7' }, painel));
+    const detalhe = { linha, aviso, lista, mais, paginas: 0, cursor: null, carregando: false, maisPendente: false, instantaneo: null };
+    mais.addEventListener('click', () => {
+      const trabalho = estado.porId.get(id);
+      if (trabalho) void carregarFilhos(trabalho, detalhe, true);
+    });
+    recolher.addEventListener('click', () => {
+      const botao = linha.previousElementSibling?.querySelector('[data-acao="itens"]');
+      const trabalho = estado.porId.get(id);
+      if (!botao || !trabalho) return;
+      alternarDetalhe(trabalho, botao);
+      botao.focus({ preventScroll: true });
+    });
+    return detalhe;
+  }
+
+  function itemFilho(filho) {
+    const nome = nomeTrabalho(filho).texto;
+    const meta = [FASES[filho.fase] ?? filho.fase, filho.erro].filter(Boolean).join(' · ');
+    return el('div', { classe: 'item-filho', dataset: { id: filho.id } },
+      el('div', {},
+        el('strong', { classe: 'trabalho-titulo', texto: nome }),
+        el('p', { classe: 'trabalho-meta', texto: meta })),
+      selo(filho));
+  }
+
+  async function carregarFilhos(trabalho, detalhe, acrescentar = false) {
+    if (detalhe.carregando) {
+      if (acrescentar) detalhe.maisPendente = true;
+      return;
+    }
+    if (acrescentar && !detalhe.cursor) return;
+    detalhe.carregando = true;
+    // Mantém as páginas visíveis durante o polling e evita perder o cursor.
+    const limitePaginas = acrescentar ? 1 : Math.max(1, detalhe.paginas);
+    let cursor = acrescentar ? detalhe.cursor : null;
+    let paginas = 0;
+    const filhos = [];
     try {
-      const pagina = await api(`/api/trabalhos/${trabalho.id}/itens?limite=50${cursor ? '&cursor=' + encodeURIComponent(cursor) : ''}`);
-      if (!cursor) lista.replaceChildren();
-      for (const filho of pagina.itens) {
-        // Filhos usam a mesma linha compacta, numa variante sem colunas:
-        // reaproveitar evita uma segunda marcação para o mesmo conceito.
-        // `trabalho` fica junto de `item-filho` de propósito: é o seletor que
-        // os E2E do proprietário contam (`.trabalho[data-id=X] .trabalho`).
-        // Não é grid (a regra antiga virou `.item-filho` no CSS), então a
-        // classe não reintroduz o defeito de células sobrepostas.
-        const item = el('div', { classe: 'item-filho trabalho', dataset: { id: filho.id } });
-        const nome = nomeTrabalho(filho);
-        item.append(
-          el('div', {},
-            el('strong', { classe: 'trabalho-titulo', texto: nome.texto }),
-            el('p', { classe: 'trabalho-meta', texto: `${ESTADOS[filho.estado]} · ${FASES[filho.fase] ?? filho.fase}` })),
-          selo(filho),
-        );
-        lista.append(item);
+      do {
+        const pagina = await api(`/api/trabalhos/${trabalho.id}/itens?limite=50${cursor ? '&cursor=' + encodeURIComponent(cursor) : ''}`);
+        filhos.push(...pagina.itens);
+        cursor = pagina.proximoCursor;
+        paginas++;
+      } while (cursor && paginas < limitePaginas);
+      if (estado.detalhes.get(trabalho.id) !== detalhe) return;
+      if (acrescentar) {
+        detalhe.lista.append(...filhos.map(itemFilho));
+        detalhe.paginas += paginas;
+      } else {
+        const rolagem = detalhe.lista.scrollTop;
+        detalhe.lista.replaceChildren(...filhos.map(itemFilho));
+        detalhe.lista.scrollTop = rolagem;
+        detalhe.paginas = paginas;
+        detalhe.instantaneo = trabalho;
       }
-      lista.dataset.cursor = pagina.proximoCursor ?? '';
-      mais.hidden = !pagina.proximoCursor;
+      detalhe.cursor = cursor;
+      detalhe.mais.hidden = !cursor;
+      detalhe.aviso.textContent = detalhe.lista.childElementCount ? '' : 'Nenhum item disponível.';
+      detalhe.aviso.hidden = !detalhe.aviso.textContent;
     } catch (erro) {
-      lista.textContent = erro.message;
+      detalhe.aviso.textContent = erro.message;
+      detalhe.aviso.hidden = false;
+    } finally {
+      detalhe.carregando = false;
+      if (detalhe.maisPendente && estado.detalhes.get(trabalho.id) === detalhe) {
+        detalhe.maisPendente = false;
+        void carregarFilhos(trabalho, detalhe, true);
+      }
     }
   }
 
-  /**
-   * O botão ▸ da coluna de ações alterna o MESMO estado do `<summary>`.
-   * Re-desenhar é aceitável aqui: acontece no clique, não no polling.
-   */
-  function alternarDetalhe(trabalho) {
-    if (estado.expandidos.has(trabalho.id)) estado.expandidos.delete(trabalho.id);
-    else estado.expandidos.add(trabalho.id);
-    desenhar();
+  function alternarDetalhe(trabalho, botao) {
+    const existente = estado.detalhes.get(trabalho.id);
+    if (existente) {
+      existente.linha.remove();
+      estado.detalhes.delete(trabalho.id);
+      botao.setAttribute('aria-expanded', 'false');
+      return;
+    }
+    const detalhe = criarDetalhe(trabalho.id);
+    estado.detalhes.set(trabalho.id, detalhe);
+    botao.closest('tr').after(detalhe.linha);
+    botao.setAttribute('aria-expanded', 'true');
+    void carregarFilhos(trabalho, detalhe);
   }
 
   /* ------------------------------------------------------------ ações */
@@ -601,6 +627,9 @@ export function criarTrabalhos({ api, $, aoConcluir, aoMudarAtivos, idsAcompanha
     const corpo = $('#lista-trabalhos tbody');
     if (!corpo) return;
     const visiveis = ordenados(aplicaFiltros());
+    const foco = document.activeElement;
+    const temFoco = corpo.contains(foco);
+    const idFoco = temFoco && foco.dataset.acao === 'itens' ? foco.closest('tr').dataset.id : null;
     corpo.replaceChildren();
 
     if (!estado.itens.length) {
@@ -611,8 +640,20 @@ export function criarTrabalhos({ api, $, aoConcluir, aoMudarAtivos, idsAcompanha
       corpo.append(el('tr', {}, el('td', { colspan: '7', classe: 'linha-vazia-trabalhos' },
         el('p', { texto: 'Nenhum trabalho corresponde aos filtros.' }))));
     } else {
-      for (const t of visiveis) corpo.append(linha(t));
+      for (const t of visiveis) {
+        corpo.append(linha(t));
+        const detalhe = estado.detalhes.get(t.id);
+        if (!detalhe) continue;
+        corpo.append(detalhe.linha);
+        const anterior = detalhe.instantaneo;
+        if (anterior !== t && (!anterior || !TERMINAIS.includes(t.estado)
+          || t.estado !== anterior.estado || t.atualizadoEm !== anterior.atualizadoEm)) {
+          void carregarFilhos(t, detalhe);
+        }
+      }
     }
+    if (idFoco) corpo.querySelector(`tr[data-id="${CSS.escape(idFoco)}"] [data-acao="itens"]`)?.focus({ preventScroll: true });
+    else if (temFoco && corpo.contains(foco)) foco.focus({ preventScroll: true });
 
     const mais = $('#mais-trabalhos');
     if (mais) mais.hidden = !estado.cursor;

@@ -4,7 +4,25 @@
 > `00-comece-aqui.md`. O que está abaixo da linha "Histórico" é registro, não
 > estado vigente.
 
-## Estado vigente — 24/11/2026 — importação em lote de texto colado
+## Estado vigente — 24/11/2026 — layout dos itens em Importações
+
+Base `contextflow_node` em `95f7bd9`. O botão **Itens** dos lotes e
+playlists abre uma linha que ocupa a tabela abaixo do trabalho.
+Ela tem rolagem própria, exibe falhas por item e mantém páginas carregadas
+quando a fila é atualizada. Em largura estreita o painel acompanha a parte
+visível da tabela. O cartão flutuante fica na Biblioteca e deixa de cobrir
+as ações em Importações. A preferência de Estado da Biblioteca não interfere
+em Importações. [SPEC](specs/f4-layout-itens-importacoes.md).
+
+Playwright no Windows reproduziu a falha antes da correção. A primeira
+versão do ajuste também mostrou sobreposição do cartão em largura estreita.
+Na versão final, 14/14 cenários de estabilização e 8/8 de resumos passaram,
+incluindo expansão, três páginas de um lote de 130 itens, atualização e
+recolhimento a 390 px. Os 57 cenários CDP, incluindo playlist, e o build
+também passaram. Serviços e dados controlados.
+Sem migração ou mudança na fila. Recarregar a interface para usar a revisão.
+
+## Histórico — 24/11/2026 — importação em lote de texto colado
 
 Base `contextflow_node` em `961cb25`. **Adicionar link** na Biblioteca
 oferece **Importar vários vídeos** com preferência própria de expansão.

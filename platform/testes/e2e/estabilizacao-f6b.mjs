@@ -199,6 +199,7 @@ try {
    await campo.waitFor();
    await painel.locator('summary').click();
    await campo.waitFor({state:'hidden'});
+   await page.waitForFunction(() => localStorage.getItem('contextflow.importar-lote.biblioteca') === 'fechado');
    await page.reload();
    await page.locator('#abrir-adicionar-link').click();
    assert.ok(await campo.isHidden());
@@ -218,6 +219,52 @@ try {
    assert.equal((await api('/api/trabalhos/'+dados.id)).contadores.total, 1);
    await page.reload();
    await painel.locator('textarea').waitFor();
+ });
+ await teste('Itens de lote com 130 vídeos ocupam toda a tabela e preservam paginação', async () => {
+   const ids = Array.from({length:130}, (_, i) => `big${String(i).padStart(8, '0')}`);
+   let soltar;
+   const esperaItens = new Promise(ok => soltar = ok);
+   for (const id of ids) bloqueios.set(id, esperaItens);
+   try {
+     const lote = await api('/api/ingestao/lote', {
+       urls:ids.map(id => 'https://youtu.be/'+id), chaveRequisicao:'layout-lote-grande',
+     });
+     const pai = page.locator(`tr.trabalho[data-id="${lote.id}"]`);
+     const botao = pai.locator('[data-acao="itens"]');
+     const detalhe = pai.locator('xpath=following-sibling::tr[1][contains(@class, "linha-detalhe")]');
+     await botao.click();
+     assert.equal(await botao.getAttribute('aria-expanded'), 'true');
+     await detalhe.locator('.item-filho').nth(49).waitFor();
+     const dimensoes = await detalhe.evaluate(tr => ({
+       detalhe:tr.getBoundingClientRect().width,
+       tabela:tr.closest('table').getBoundingClientRect().width,
+       pai:tr.previousElementSibling.getBoundingClientRect().height,
+     }));
+     assert.ok(dimensoes.detalhe >= dimensoes.tabela - 2);
+     assert.ok(dimensoes.pai < 80);
+     await detalhe.getByRole('button',{name:'Mais itens'}).click();
+     await detalhe.locator('.item-filho').nth(99).waitFor();
+     await page.waitForResponse(r => r.url().includes('/api/trabalhos?raizes=1&limite=50'));
+     await detalhe.getByRole('button',{name:'Mais itens'}).click();
+     await detalhe.locator('.item-filho').nth(129).waitFor();
+     assert.equal(await detalhe.locator('.item-filho').count(), 130);
+     assert.ok(await detalhe.getByRole('button',{name:'Mais itens'}).isHidden());
+     await page.setViewportSize({width:390,height:850});
+     await page.locator('.caixa-tabela-trabalhos').evaluate(caixa => { caixa.scrollLeft = caixa.scrollWidth; });
+     const estreita = await detalhe.locator('.painel-itens-trabalho').evaluate(painel => {
+       const caixa = painel.closest('.caixa-tabela-trabalhos');
+       const visivel = caixa.getBoundingClientRect();
+       const retangulo = painel.getBoundingClientRect();
+       return retangulo.left >= visivel.left - 2 && retangulo.right <= visivel.left + caixa.clientWidth + 2;
+     });
+     assert.ok(estreita);
+     await detalhe.getByRole('button',{name:'Recolher itens'}).click();
+     assert.equal(await botao.getAttribute('aria-expanded'), 'false');
+     await detalhe.waitFor({state:'detached'});
+   } finally {
+     soltar();
+     for (const id of ids) bloqueios.delete(id);
+   }
  });
  assert.deepEqual(erros,[]);console.log(`${total}/${total} cenários de estabilização Playwright aprovados.`);
 } finally {bloqueado=false;liberar?.();liberarResumo?.();await browser?.close();await app.encerrar();}

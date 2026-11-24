@@ -1,4 +1,15 @@
-# Retomada vigente — importação em lote de texto colado — 24/11/2026
+# Retomada vigente — layout dos itens em Importações — 24/11/2026
+
+Base `contextflow_node` em `95f7bd9`. **Itens** abre uma linha de largura
+total abaixo do lote ou da playlist. Paginação e rolagem da lista foram
+verificadas no navegador com um lote controlado de 130 itens, inclusive em
+390 px. Playwright 14/14 estabilização, 8/8 resumos e build aprovados.
+Recarregar a interface. [Estado canônico](../../docs/estado-atual.md)
+e [SPEC](../../docs/specs/f4-layout-itens-importacoes.md).
+
+---
+
+# Histórico — importação em lote de texto colado — 24/11/2026
 
 Base `contextflow_node` em `961cb25`. Biblioteca e Importações aceitam
 texto misto no lote, normalizam vídeos e descartam links repetidos.
