@@ -293,7 +293,7 @@ try {
        const youtubeId = `mix${String(i).padStart(8,'0')}`;
        const filho = repo.inserir('importar-video', {titulo:`Vídeo misto ${i}`,posicao:i}, youtubeId, misto);
        const data = new Date(Date.UTC(2005,0,1,0,i)).toISOString();
-       marcar.run(i < 37 ? 'concluido' : 'falhou','finalizado',data,data,filho);
+       marcar.run(i < 67 ? 'concluido' : 'falhou','finalizado',data,data,filho);
      }
      for (let i=0;i<66;i++) {
        const raiz = repo.inserir('importar-video', {titulo:`Histórico ${i}`});
@@ -309,10 +309,32 @@ try {
    const painel = page.locator(`#itens-trabalho-${misto}`);
    await painel.locator('.item-filho').nth(49).waitFor();
    assert.equal(await painel.locator('.item-filho .selo[data-estado="erro"]').count(), 50);
-   assert.equal(await painel.locator('.contagem-itens-trabalho .selo[data-estado="pronto"]').textContent(), '37 concluídos');
-   await painel.getByRole('combobox',{name:'Filtrar itens por estado'}).selectOption('concluido');
-   await painel.locator('.item-filho .selo[data-estado="pronto"]').nth(36).waitFor();
-   assert.equal(await painel.locator('.item-filho').count(), 37);
+   assert.equal(await painel.locator('.contagem-itens-trabalho .selo[data-estado="pronto"]').textContent(), '67 concluídos');
+   const filtro = painel.getByRole('combobox',{name:'Filtrar itens por estado'});
+   await filtro.selectOption('concluido');
+   await painel.locator('.item-filho .selo[data-estado="pronto"]').nth(49).waitFor();
+   assert.equal(await painel.locator('.item-filho').count(), 50);
+   const rota = `**/api/trabalhos/${misto}/itens?*`;
+   await page.route(rota, r => {
+     const endereco = new URL(r.request().url());
+     endereco.searchParams.delete('estado');
+     return r.continue({ url: endereco.href });
+   });
+   try {
+     await filtro.selectOption('');
+     await painel.locator('.item-filho .selo[data-estado="erro"]').nth(49).waitFor();
+     await filtro.selectOption('concluido');
+     await painel.locator('.item-filho .selo[data-estado="pronto"]').nth(49).waitFor();
+     assert.equal(await painel.locator('.item-filho').count(), 50);
+     await painel.getByRole('button',{name:'Mais itens'}).click();
+     await painel.locator('.item-filho .selo[data-estado="pronto"]').nth(66).waitFor();
+     const ids = await painel.locator('.item-filho').evaluateAll(itens => itens.map(item => item.dataset.id));
+     assert.equal(new Set(ids).size, 67);
+     assert.equal(ids.length, 67);
+     assert.equal(await painel.locator('.item-filho .selo[data-estado="erro"]').count(), 0);
+   } finally {
+     await page.unroute(rota);
+   }
    await painel.getByRole('button',{name:'Recolher itens'}).click();
    await page.locator('#mais-trabalhos').click();
    const raizAntiga = page.locator(`tr[data-id="${antigo}"]`);

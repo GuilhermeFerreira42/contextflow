@@ -67,6 +67,7 @@ const SELO = {
 };
 
 const TERMINAIS = ['concluido', 'falhou', 'cancelado'];
+const ITENS_POR_PAGINA = 50;
 const loteParcial = t => t.estado === 'falhou' && t.contadores?.concluidos > 0 && t.contadores?.falhos > 0;
 const rotuloEstado = t => loteParcial(t) ? 'Parcial' : ESTADOS[t.estado] ?? t.estado;
 
@@ -546,13 +547,21 @@ export function criarTrabalhos({ api, $, aoConcluir, aoMudarAtivos, idsAcompanha
     const filhos = [];
     try {
       do {
-        const consulta = new URLSearchParams({ limite: '50' });
-        if (cursor) consulta.set('cursor', cursor);
-        if (filtro) consulta.set('estado', filtro);
-        const pagina = await api(`/api/trabalhos/${trabalho.id}/itens?${consulta}`);
-        if (estado.detalhes.get(trabalho.id) !== detalhe || revisao !== detalhe.revisao) return;
-        filhos.push(...pagina.itens);
-        cursor = pagina.proximoCursor;
+        const itens = [];
+        do {
+          const consulta = new URLSearchParams({ limite: String(ITENS_POR_PAGINA) });
+          if (cursor) consulta.set('cursor', cursor);
+          if (filtro) consulta.set('estado', filtro);
+          const pagina = await api(`/api/trabalhos/${trabalho.id}/itens?${consulta}`);
+          if (estado.detalhes.get(trabalho.id) !== detalhe || revisao !== detalhe.revisao) return;
+          // Um motor carregado antes da atualização pode ignorar "estado".
+          itens.push(...pagina.itens.filter(filho => !filtro || filho.estado === filtro));
+          cursor = pagina.proximoCursor;
+        } while (cursor && itens.length < ITENS_POR_PAGINA);
+        const exibidos = itens.slice(0, ITENS_POR_PAGINA);
+        filhos.push(...exibidos);
+        // A próxima consulta deve alcançar os itens da página que ainda não foram exibidos.
+        if (itens.length > ITENS_POR_PAGINA) cursor = exibidos.at(-1).id;
         paginas++;
       } while (cursor && paginas < limitePaginas);
       if (estado.detalhes.get(trabalho.id) !== detalhe) return;

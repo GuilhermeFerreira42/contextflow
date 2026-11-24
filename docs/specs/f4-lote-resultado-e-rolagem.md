@@ -9,6 +9,10 @@ deixar claro que houve sucessos e manter as falhas disponíveis para repetir.
 - Detalhe apresenta contagens por resultado e permite consultar todos,
   concluídos ou falhas pela paginação existente. Filtrar começa na primeira
   página. O estado opcional da API só restringe a consulta dos filhos.
+- Se o motor em execução ignorar o parâmetro, a interface confirma o
+  estado de cada item e percorre as páginas até reunir os resultados.
+  O cursor aponta para o último item exibido quando a página de origem
+  ainda contém resultados. Validar também com uma API sem filtro.
 - Atualizações periódicas preservam páginas do histórico já carregadas,
   o painel expandido e as posições de rolagem.
 - Sem mudança nos estados gravados, políticas de retry ou banco.

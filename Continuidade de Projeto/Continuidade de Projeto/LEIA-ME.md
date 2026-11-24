@@ -1,4 +1,14 @@
-# Retomada vigente — resultados mistos e rolagem em Importações — 24/11/2026
+# Retomada vigente — filtro de itens com motor em execução — 24/11/2026
+
+Base `contextflow_node` em `f0f3bc6`. O motor antigo ignorava o filtro,
+mesmo com a interface atualizada. A interface confere os estados e
+completa as páginas. Chrome no lote real mostrou 67 concluídos únicos
+e zero falhas sob o filtro, com o motor antigo, em leitura.
+[Estado canônico](../../docs/estado-atual.md).
+
+---
+
+# Histórico — resultados mistos e rolagem em Importações — 24/11/2026
 
 Base `contextflow_node` em `440bf3d`. Lotes mistos mostram Parcial,
 contagens e filtro dos itens. O polling mantém as páginas carregadas e a

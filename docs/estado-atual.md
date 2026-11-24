@@ -4,7 +4,26 @@
 > `00-comece-aqui.md`. O que está abaixo da linha "Histórico" é registro, não
 > estado vigente.
 
-## Estado vigente — 24/11/2026 — resultados mistos e rolagem em Importações
+## Estado vigente — 24/11/2026 — filtro de itens com o motor em execução
+
+Base `contextflow_node` em `f0f3bc6`. O navegador já servia o JavaScript
+novo, mas o motor havia sido iniciado antes do filtro da API. A consulta
+com `estado=concluido` devolvia os mesmos 50 itens com falha.
+
+A interface agora confirma o estado de cada item e preenche a página
+com resultados das páginas seguintes quando o motor ignora o parâmetro.
+O cursor conserva a parte ainda não exibida, sem perder nem duplicar
+itens. O motor atualizado continua filtrando normalmente.
+[SPEC](specs/f4-lote-resultado-e-rolagem.md).
+
+Chrome no Windows confirmou no lote real, com o processo antigo ainda
+em execução, 67 concluídos únicos (50 + 17), zero falhas no filtro.
+Consulta em leitura, sem repetir importações ou reiniciar o serviço.
+Build aprovado e 15/15 cenários Playwright de estabilização aprovados,
+incluindo paginação com o filtro ignorado pela API controlada.
+Recarregar a página para carregar a revisão.
+
+## Histórico — 24/11/2026 — resultados mistos e rolagem em Importações
 
 Base `contextflow_node` em `440bf3d`. A consulta local confirmou que o
 lote tinha 37 concluídos, dos quais três sem legenda, e 93 falhas. Os
